@@ -16,7 +16,7 @@ import {
   Switch,
   Table,
   Tag,
-  notification,
+  message,
   Tooltip,
   Modal,
   Popconfirm,
@@ -440,6 +440,7 @@ const ProjectDetail: React.FC = () => {
       
       showNotification('error', '以下字段信息不完整', invalidDetails.join('\n'));
       return;
+    }
     
     // 验证字段名重复
     const columnNames = selectedTable.columns.map(col => col.name.trim().toLowerCase());
@@ -600,4 +601,299 @@ const ProjectDetail: React.FC = () => {
             checked={record.autoIncrement}
             onChange={(checked) => handleSaveColumn(record.id, 'autoIncrement', checked)}
             size="small"
-            checked
+            checkedChildren="自增"
+            unCheckedChildren="非自增"
+          />
+        </Space>
+      ),
+    },
+    {
+      title: '默认值',
+      dataIndex: 'defaultValue',
+      key: 'defaultValue',
+      render: (text: string, record: ColumnDef) => (
+        <Input
+          value={text}
+          onChange={(e) => handleSaveColumn(record.id, 'defaultValue', e.target.value)}
+          placeholder="默认值"
+          size="small"
+        />
+      ),
+    },
+    {
+      title: '说明',
+      dataIndex: 'comment',
+      key: 'comment',
+      render: (text: string, record: ColumnDef) => (
+        <Input
+          value={text}
+          onChange={(e) => handleSaveColumn(record.id, 'comment', e.target.value)}
+          placeholder="字段说明"
+          size="small"
+        />
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (text: string, record: ColumnDef) => (
+        <Space size="small">
+          <Tooltip title="删除字段">
+            <Button
+              type="text"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteColumn(record.id)}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 50 }}>
+        <Text>加载中...</Text>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div style={{ textAlign: 'center', padding: 50 }}>
+        <Text>项目不存在</Text>
+      </div>
+    );
+  }
+
+  return (
+    <ConfigProvider
+      theme={{
+        algorithm: settings.isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#1890ff',
+          borderRadius: 8,
+        },
+      }}
+    >
+      <Layout style={{ minHeight: '100vh' }}>
+        {/* 头部 */}
+        <Header 
+          style={{ 
+            background: settings.isDarkMode ? '#141414' : '#fff',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            padding: '0 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <Space>
+            <Tooltip title="返回主页">
+              <Button 
+                type="text" 
+                icon={<ArrowLeftOutlined />}
+                onClick={handleBack}
+              >
+                返回
+              </Button>
+            </Tooltip>
+            <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
+            <Title level={3} style={{ margin: 0, color: settings.isDarkMode ? '#fff' : '#000' }}>
+              {project.name}
+            </Title>
+            <Tag color={project.database_type === 'mysql' ? 'green' : 'purple'}>
+              {project.database_type === 'mysql' ? 'MySQL' : 'PostgreSQL'}
+            </Tag>
+          </Space>
+          
+          <Space>
+            <Tooltip title="生成SQL">
+              <Button 
+                type="text" 
+                icon={<CodeOutlined />}
+              >
+                生成SQL
+              </Button>
+            </Tooltip>
+            <Tooltip title="项目设置">
+              <Button 
+                type="text" 
+                icon={<SettingOutlined />}
+              >
+                设置
+              </Button>
+            </Tooltip>
+          </Space>
+        </Header>
+
+        <Layout>
+          {/* 左侧边栏 - 表列表 */}
+          <Sider 
+            width={300} 
+            style={{ 
+              background: settings.isDarkMode ? '#141414' : '#fff',
+              borderRight: `1px solid ${token.colorBorderSecondary}`
+            }}
+          >
+            <div style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Title level={4} style={{ margin: 0 }}>表列表</Title>
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />}
+                  size="small"
+                  onClick={handleCreateTable}
+                >
+                  新建表
+                </Button>
+              </div>
+              
+              <List
+                dataSource={tables}
+                renderItem={(table) => (
+                  <List.Item
+                    style={{ 
+                      cursor: 'pointer',
+                      background: selectedTable?.id === table.id ? token.colorPrimaryBg : 'transparent',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      border: selectedTable?.id === table.id ? `1px solid ${token.colorPrimaryBorder}` : '1px solid transparent'
+                    }}
+                    onClick={() => setSelectedTable(table)}
+                    actions={[
+                      <Button 
+                        type="text" 
+                        icon={<EditOutlined />}
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditTable(table);
+                        }}
+                      />,
+                      <Popconfirm
+                        title="确定删除此表吗？"
+                        onConfirm={(e) => {
+                          e?.stopPropagation();
+                          handleDeleteTable(table.id);
+                        }}
+                      >
+                        <Button 
+                          type="text" 
+                          danger 
+                          icon={<DeleteOutlined />}
+                          size="small"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Popconfirm>
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{table.displayName}</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{table.name}</Text>
+                        </Space>
+                      }
+                    />
+                  </List.Item>
+                )}
+                locale={{
+                  emptyText: (
+                    <div style={{ textAlign: 'center', padding: 20 }}>
+                      <TableOutlined style={{ fontSize: 32, color: token.colorTextDisabled, marginBottom: 8 }} />
+                      <div style={{ color: token.colorTextDisabled }}>暂无表，点击上方按钮创建第一个表</div>
+                    </div>
+                  )
+                }}
+              />
+            </div>
+          </Sider>
+
+          {/* 右侧内容 - 表设计 */}
+          <Content style={{ padding: '24px', background: settings.isDarkMode ? '#000' : '#f5f5f5' }}>
+            <div style={{ maxWidth: '100%', margin: '0 auto' }}>
+              {selectedTable ? (
+                <Card>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <Space>
+                      <TableOutlined />
+                      <Title level={4} style={{ margin: 0 }}>
+                        {selectedTable.displayName} ({selectedTable.name})
+                      </Title>
+                    </Space>
+                    <Button 
+                      type="primary" 
+                      icon={<PlusOutlined />}
+                      onClick={handleAddColumn}
+                    >
+                      添加列
+                    </Button>
+                  </div>
+                  
+                  <Table
+                    dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
+                    columns={columnsColumns}
+                    pagination={false}
+                    rowKey="id"
+                    size="middle"
+                  />
+                </Card>
+              ) : (
+                <div style={{ textAlign: 'center', padding: 50 }}>
+                  <TableOutlined style={{ fontSize: 48, color: token.colorTextDisabled, marginBottom: 16 }} />
+                  <div style={{ color: token.colorTextDisabled }}>请从左侧选择一个表开始设计</div>
+                </div>
+              )}
+            </div>
+          </Content>
+        </Layout>
+      </Layout>
+
+      {/* 表编辑模态框 */}
+      <Modal
+        title={editingTable ? '编辑表' : '新建表'}
+        open={isTableModalVisible}
+        onCancel={() => setIsTableModalVisible(false)}
+        footer={null}
+      >
+        <Form
+          form={tableForm}
+          layout="vertical"
+          onFinish={handleSaveTable}
+        >
+          <Form.Item
+            name="name"
+            label="表名（英文）"
+            rules={[{ required: true, message: '请输入表名' }]}
+          >
+            <Input placeholder="请输入表名，如：users" />
+          </Form.Item>
+          
+          <Form.Item
+            name="displayName"
+            label="中文名"
+            rules={[{ required: true, message: '请输入中文名' }]}
+          >
+            <Input placeholder="请输入表的中文名，如：用户表" />
+          </Form.Item>
+          
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                {editingTable ? '更新' : '创建'}
+              </Button>
+              <Button onClick={() => setIsTableModalVisible(false)}>
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </ConfigProvider>
+  );
+};
+
+export default ProjectDetail;
