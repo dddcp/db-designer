@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product 
+    Id="*" 
+    Name="数据库设计器" 
+    Language="1033" 
+    Version="1.0.0" 
+    Manufacturer="DCP" 
+    UpgradeCode="12345678-1234-1234-1234-123456789012">
+    
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+    
+    <MajorUpgrade DowngradeErrorMessage="已经安装了更新的版本，无法降级安装。" />
+    <MediaTemplate EmbedCab="yes" />
+    
+    <!-- 应用图标 -->
+    <Icon Id="icon.ico" SourceFile="icons\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="icon.ico" />
+    
+    <!-- 安装目录 -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="数据库设计器" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="数据库设计器" />
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+    
+    <!-- 应用文件 -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="DatabaseDesignerExe" Guid="*">
+        <File Id="DatabaseDesignerExe" Source="target\release\db-designer.exe" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    
+    <!-- 开始菜单快捷方式 -->
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="*">
+        <Shortcut 
+          Id="ApplicationStartMenuShortcut"
+          Name="数据库设计器"
+          Description="数据库设计工具"
+          Target="[INSTALLFOLDER]db-designer.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="icon.ico" />
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue 
+          Root="HKCU" 
+          Key="Software\DCP\数据库设计器" 
+          Name="installed" 
+          Type="integer" 
+          Value="1" 
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    
+    <!-- 桌面快捷方式 -->
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="*">
+        <Shortcut 
+          Id="DesktopShortcut"
+          Name="数据库设计器"
+          Description="数据库设计工具"
+          Target="[INSTALLFOLDER]db-designer.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="icon.ico" />
+        <RegistryValue 
+          Root="HKCU" 
+          Key="Software\DCP\数据库设计器" 
+          Name="desktop_shortcut" 
+          Type="integer" 
+          Value="1" 
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    
+    <!-- 功能定义 -->
+    <Feature Id="MainFeature" Title="数据库设计器" Level="1">
+      <ComponentRef Id="DatabaseDesignerExe" />
+      <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+    
+    <!-- 用户界面 -->
+    <UIRef Id="WixUI_FeatureTree" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+    
+    <!-- 安装界面配置 -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    
+  </Product>
+</Wix>

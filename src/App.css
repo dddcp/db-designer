@@ -1,116 +1,193 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+/* 全局样式重置 */
+* {
+  box-sizing: border-box;
 }
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
 }
 
-.container {
-  margin: 0;
-  padding-top: 10vh;
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 暗色模式下的滚动条 */
+.ant-layout.ant-layout-dark ::-webkit-scrollbar-track {
+  background: #303030;
+}
+
+.ant-layout.ant-layout-dark ::-webkit-scrollbar-thumb {
+  background: #595959;
+}
+
+.ant-layout.ant-layout-dark ::-webkit-scrollbar-thumb:hover {
+  background: #434343;
+}
+
+/* 卡片悬停效果 */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* 列表项悬停效果 */
+.ant-list-item {
+  transition: all 0.2s ease;
+}
+
+.ant-list-item:hover {
+  background-color: rgba(24, 144, 255, 0.04);
+}
+
+/* 按钮动画效果 */
+.ant-btn {
+  transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+
+.ant-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* 浮动按钮组样式 */
+.ant-float-btn-group {
+  transition: all 0.3s ease;
+}
+
+.ant-float-btn-group:hover {
+  transform: scale(1.05);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .ant-layout-header {
+    padding: 0 16px !important;
+  }
+  
+  .ant-layout-content {
+    padding: 16px !important;
+  }
+  
+  .ant-card {
+    margin-bottom: 16px !important;
+  }
+  
+  .ant-list-item-actions {
+    margin-top: 8px;
+  }
+}
+
+/* 加载动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ant-list-item {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 主题切换过渡 */
+.ant-layout {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 自定义空状态样式 */
+.ant-empty {
+  padding: 40px 0;
+}
+
+.ant-empty-image {
+  margin-bottom: 16px;
+}
+
+/* 表单输入框焦点效果 */
+.ant-input:focus,
+.ant-input-focused {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+/* 模态框动画 */
+.ant-modal {
+  animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 消息通知样式优化 */
+.ant-message {
+  z-index: 9999;
+}
+
+/* 标签样式优化 */
+.ant-tag {
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* 头像样式优化 */
+.ant-avatar {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
+  align-items: center;
   justify-content: center;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+/* 分割线样式优化 */
+.ant-divider {
+  margin: 0 8px;
 }
 
-a:hover {
-  color: #535bf2;
+/* 工具提示样式优化 */
+.ant-tooltip {
+  z-index: 9998;
 }
 
-h1 {
-  text-align: center;
+/* 浮动按钮样式优化 */
+.ant-float-btn {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+.ant-float-btn:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
