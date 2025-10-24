@@ -147,13 +147,23 @@ const ProjectDetail: React.FC = () => {
   /**
    * 显示通知
    */
-  const showNotification = (type: 'success' | 'error' | 'warning' | 'info', message: string, description?: string) => {
-    notification[type]({
-      message,
-      description,
-      placement: 'topRight',
-      duration: 3,
-    });
+  const showNotification = (type: 'success' | 'error' | 'warning' | 'info', msg: string, description?: string) => {
+    const fullMessage = description ? `${msg}\n${description}` : msg;
+    
+    switch (type) {
+      case 'success':
+        message.success(fullMessage, 3);
+        break;
+      case 'error':
+        message.error(fullMessage, 3);
+        break;
+      case 'warning':
+        message.warning(fullMessage, 3);
+        break;
+      case 'info':
+        message.info(fullMessage, 3);
+        break;
+    }
   };
 
   /**
@@ -322,13 +332,19 @@ const ProjectDetail: React.FC = () => {
    * 保存列
    */
   const handleSaveColumn = (columnId: string, field: keyof ColumnDef, value: any) => {
+    
+    const updateObj = {[field]: value };
+    if (field === 'primaryKey'){
+      updateObj.nullable = false;
+    }
+    
     if (!selectedTable) return;
     
     const updatedTable = {
       ...selectedTable,
       columns: selectedTable.columns.map(col => 
         col.id === columnId 
-          ? { ...col, [field]: value }
+          ? { ...col, ...updateObj }
           : col
       )
     };
@@ -336,6 +352,8 @@ const ProjectDetail: React.FC = () => {
     setTables(tables.map(table => 
       table.id === selectedTable.id ? updatedTable : table
     ));
+    console.log(updatedTable);
+    
     setSelectedTable(updatedTable);
   };
 
@@ -404,18 +422,18 @@ const ProjectDetail: React.FC = () => {
     
     // 验证表基本信息
     if (!selectedTable.name.trim()) {
-      showNotification('error', '表名不能为空');
+      alert('表名不能为空');
       return;
     }
     
     if (!selectedTable.displayName.trim()) {
-      showNotification('error', '表中文名称不能为空');
+      alert('表中文名称不能为空');
       return;
     }
     
     // 验证列数据
     if (selectedTable.columns.length === 0) {
-      showNotification('error', '请至少添加一个字段');
+      alert('请至少添加一个字段');
       return;
     }
     
@@ -438,7 +456,7 @@ const ProjectDetail: React.FC = () => {
         return `${column.displayName || '未命名字段'} (${issues.join('、')})`;
       });
       
-      showNotification('error', '以下字段信息不完整', invalidDetails.join('\n'));
+      alert('以下字段信息不完整'+invalidDetails.join('\n'));
       return;
     }
     
@@ -446,7 +464,7 @@ const ProjectDetail: React.FC = () => {
     const columnNames = selectedTable.columns.map(col => col.name.trim().toLowerCase());
     const duplicateNames = columnNames.filter((name, index) => columnNames.indexOf(name) !== index);
     if (duplicateNames.length > 0) {
-      showNotification('error', `存在重复的字段名: ${[...new Set(duplicateNames)].join(', ')}`);
+      alert(`存在重复的字段名: ${[...new Set(duplicateNames)].join(', ')}`);
       return;
     }
     
@@ -454,14 +472,15 @@ const ProjectDetail: React.FC = () => {
     const displayNames = selectedTable.columns.map(col => col.displayName.trim());
     const duplicateDisplayNames = displayNames.filter((name, index) => displayNames.indexOf(name) !== index);
     if (duplicateDisplayNames.length > 0) {
-      showNotification('error', `存在重复的中文名称: ${[...new Set(duplicateDisplayNames)].join(', ')}`);
+      alert(`存在重复的中文名称: ${[...new Set(duplicateDisplayNames)].join(', ')}`);
       return;
     }
     
     // 验证主键设置
     const primaryKeyColumns = selectedTable.columns.filter(col => col.primaryKey);
     if (primaryKeyColumns.length === 0) {
-      showNotification('warning', '当前表没有设置主键，建议设置主键字段');
+      alert('当前表没有设置主键，建议设置主键字段');
+      return;
     }
     
     try {
@@ -570,13 +589,9 @@ const ProjectDetail: React.FC = () => {
         <Space size={[0, 4]} wrap>
           <Switch
             checked={record.primaryKey}
-            onChange={(checked, event) => {
-              event.stopPropagation();
+            onChange={(checked) => {
               // 如果设置为主键，则必须是非空的
               handleSaveColumn(record.id, 'primaryKey', checked);
-              if (checked) {
-                handleSaveColumn(record.id, 'nullable', false);
-              }
             }}
             size="small"
             checkedChildren="主键"
@@ -824,21 +839,69 @@ const ProjectDetail: React.FC = () => {
                         {selectedTable.displayName} ({selectedTable.name})
                       </Title>
                     </Space>
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      onClick={handleAddColumn}
-                    >
-                      添加列
-                    </Button>
+                  
                   </div>
                   
-                  <Table
-                    dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
-                    columns={columnsColumns}
-                    pagination={false}
-                    rowKey="id"
-                    size="middle"
+                  <Tabs 
+                    activeKey={activeTab} 
+                    onChange={setActiveTab}
+                    items={[
+                      {
+                        key: 'structure',
+                        label: (
+                          <span>
+                            <TableOutlined />
+                            表结构
+                          </span>
+                        ),
+                        children: (
+                          <div>
+                            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Button 
+                                type="primary" 
+                                icon={<PlusOutlined />}
+                                onClick={handleAddColumn}
+                              >
+                                添加列
+                              </Button>
+                              <Button 
+                                type="primary" 
+                                onClick={handleSaveStructure}
+                              >
+                                保存表结构
+                              </Button>
+                            </div>
+                            <Table
+                              dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
+                              columns={columnsColumns}
+                              pagination={false}
+                              rowKey="id"
+                              size="middle"
+                            />
+                          </div>
+                        )
+                      },
+                      {
+                        key: 'index',
+                        label: (
+                          <span>
+                            <DatabaseOutlined />
+                            索引
+                          </span>
+                        ),
+                        children: <IndexTab selectedTable={selectedTable} />
+                      },
+                      {
+                        key: 'sql',
+                        label: (
+                          <span>
+                            <CodeOutlined />
+                            SQL
+                          </span>
+                        ),
+                        children: <DatabaseCodeTab selectedTable={selectedTable} />
+                      }
+                    ]}
                   />
                 </Card>
               ) : (
