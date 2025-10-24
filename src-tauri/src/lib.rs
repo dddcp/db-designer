@@ -1,6 +1,41 @@
 use rusqlite::{Connection, params, Result as SqlResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
+use std::path::PathBuf;
+
+/// 获取数据库文件路径
+/// 优先使用环境变量 DB_DESIGNER_DATA_PATH
+/// 如果未设置环境变量，则使用用户主目录下的 db_designer_data_path 文件夹
+fn get_database_path() -> String {
+    // 检查环境变量
+    if let Ok(custom_path) = env::var("DB_DESIGNER_DATA_PATH") {
+        let custom_path = PathBuf::from(custom_path);
+        if custom_path.is_dir() {
+            // 如果环境变量指向的是目录，则在目录中创建数据库文件
+            return custom_path.join("db_designer.db").to_string_lossy().to_string();
+        } else {
+            // 如果环境变量指向的是文件路径，直接使用
+            return custom_path.to_string_lossy().to_string();
+        }
+    }
+    
+    // 默认路径：用户主目录下的 db_designer_data_path 文件夹
+    let home_dir = match env::var("HOME") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => match env::var("USERPROFILE") {
+            Ok(path) => PathBuf::from(path),
+            Err(_) => {
+                // 如果无法获取用户主目录，使用当前目录
+                println!("警告：无法获取用户主目录，使用当前目录");
+                PathBuf::from(".")
+            }
+        }
+    };
+    
+    let default_path = home_dir.join("db_designer_data_path").join("db_designer.db");
+    default_path.to_string_lossy().to_string()
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -29,7 +64,18 @@ pub struct CreateProjectRequest {
 
 // 初始化数据库
 fn init_db() -> SqlResult<Connection> {
-    let conn = Connection::open("db_designer.db")?;
+    // 获取数据库文件路径
+    let db_path = get_database_path();
+    println!("数据库文件路径: {}", db_path);
+    
+    // 确保目录存在
+    if let Some(parent) = std::path::Path::new(&db_path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+    }
+    
+    let conn = Connection::open(&db_path)?;
     
     // 创建表结构相关的表
     conn.execute(

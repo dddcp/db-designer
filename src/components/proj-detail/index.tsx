@@ -152,16 +152,16 @@ const ProjectDetail: React.FC = () => {
     
     switch (type) {
       case 'success':
-        alert(fullMessage);
+        message.success(fullMessage);
         break;
       case 'error':
-        alert(fullMessage);
+        message.error(fullMessage);
         break;
       case 'warning':
-        alert(fullMessage);
+        message.warning(fullMessage);
         break;
       case 'info':
-        alert(fullMessage);
+        message.info(fullMessage);
         break;
     }
   };
@@ -421,18 +421,18 @@ const ProjectDetail: React.FC = () => {
     
     // 验证表基本信息
     if (!selectedTable.name.trim()) {
-      alert('表名不能为空');
+      message.warning('表名不能为空');
       return;
     }
     
     if (!selectedTable.displayName.trim()) {
-      alert('表中文名称不能为空');
+      message.warning('表中文名称不能为空');
       return;
     }
     
     // 验证列数据
     if (selectedTable.columns.length === 0) {
-      alert('请至少添加一个字段');
+      message.warning('请至少添加一个字段');
       return;
     }
     
@@ -455,7 +455,7 @@ const ProjectDetail: React.FC = () => {
         return `${column.displayName || '未命名字段'} (${issues.join('、')})`;
       });
       
-      alert('以下字段信息不完整'+invalidDetails.join('\n'));
+      message.warning('以下字段信息不完整: ' + invalidDetails.join(', '));
       return;
     }
     
@@ -463,7 +463,7 @@ const ProjectDetail: React.FC = () => {
     const columnNames = selectedTable.columns.map(col => col.name.trim().toLowerCase());
     const duplicateNames = columnNames.filter((name, index) => columnNames.indexOf(name) !== index);
     if (duplicateNames.length > 0) {
-      alert(`存在重复的字段名: ${[...new Set(duplicateNames)].join(', ')}`);
+      message.warning(`存在重复的字段名: ${[...new Set(duplicateNames)].join(', ')}`);
       return;
     }
     
@@ -471,18 +471,22 @@ const ProjectDetail: React.FC = () => {
     const displayNames = selectedTable.columns.map(col => col.displayName.trim());
     const duplicateDisplayNames = displayNames.filter((name, index) => displayNames.indexOf(name) !== index);
     if (duplicateDisplayNames.length > 0) {
-      alert(`存在重复的中文名称: ${[...new Set(duplicateDisplayNames)].join(', ')}`);
+      message.warning(`存在重复的中文名称: ${[...new Set(duplicateDisplayNames)].join(', ')}`);
       return;
     }
     
     // 验证主键设置
     const primaryKeyColumns = selectedTable.columns.filter(col => col.primaryKey);
     if (primaryKeyColumns.length === 0) {
-      alert('当前表没有设置主键，建议设置主键字段');
+      message.warning('当前表没有设置主键，建议设置主键字段');
       return;
     }
     
     try {
+      console.log('=== 前端开始保存表结构 ===');
+      console.log('项目ID:', project.id);
+      console.log('表信息:', selectedTable);
+      
       // 转换数据结构以匹配后端接口
       const tableData = {
         id: selectedTable.id,
@@ -500,14 +504,15 @@ const ProjectDetail: React.FC = () => {
         name: column.name,
         display_name: column.displayName,
         data_type: column.type,
-        length: column.length,
+        length: column.length || null,
         nullable: column.nullable,
         primary_key: column.primaryKey,
         auto_increment: column.autoIncrement,
-        default_value: column.defaultValue,
-        comment: column.comment,
+        default_value: column.defaultValue || null,
+        comment: column.comment || null,
         sort_order: column.order,
       }));
+      
       
       // 调用后端接口保存表结构
       await invoke('save_table_structure', {
@@ -515,10 +520,10 @@ const ProjectDetail: React.FC = () => {
         table: tableData,
         columns: columnsData,
       });
-      showNotification('success', '表结构保存成功');
+      
     } catch (error) {
       console.error('保存表结构失败:', error);
-      showNotification('error', '保存表结构失败');
+      message.error('保存表结构失败: ' + error);
     }
   };
 
