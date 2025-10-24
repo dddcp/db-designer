@@ -34,7 +34,6 @@ import {
 } from '@ant-design/icons';
 import IndexTab from './index-tab';
 import DatabaseCodeTab from './database-code-tab';
-import SortableTableRow from './sortable-table-row';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
