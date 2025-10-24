@@ -13,13 +13,15 @@
     <MajorUpgrade DowngradeErrorMessage="已经安装了更新的版本，无法降级安装。" />
     <MediaTemplate EmbedCab="yes" />
     
+    <!-- 协议 -->
+    <WixVariable Id="WixUILicenseRtf" Value="D:\workspace\react\db-designer\src-tauri\wix\license.rtf" />
     <!-- 应用图标 -->
-    <Icon Id="icon.ico" SourceFile="icons\icon.ico" />
+    <Icon Id="icon.ico" SourceFile="D:\workspace\react\db-designer\src-tauri\icons\icon.ico" />
     <Property Id="ARPPRODUCTICON" Value="icon.ico" />
     
     <!-- 安装目录 -->
     <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
+      <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="数据库设计器" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
@@ -30,8 +32,8 @@
     
     <!-- 应用文件 -->
     <DirectoryRef Id="INSTALLFOLDER">
-      <Component Id="DatabaseDesignerExe" Guid="*">
-        <File Id="DatabaseDesignerExe" Source="target\release\db-designer.exe" KeyPath="yes" />
+      <Component Id="DatabaseDesignerExe" Guid="*" Win64="yes">
+        <File Id="DatabaseDesignerExe" Source="D:\workspace\react\db-designer\src-tauri\target\release\db-designer.exe" KeyPath="yes" />
       </Component>
     </DirectoryRef>
     
@@ -84,7 +86,7 @@
     </Feature>
     
     <!-- 用户界面 -->
-    <UIRef Id="WixUI_FeatureTree" />
+    <UIRef Id="WixUI_InstallDir" />
     <UIRef Id="WixUI_ErrorProgressText" />
     
     <!-- 安装界面配置 -->
