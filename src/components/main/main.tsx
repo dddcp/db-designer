@@ -1,31 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import {
+  CodeOutlined,
+  DatabaseOutlined,
+  PlusOutlined,
+  SettingOutlined,
+  SyncOutlined
+} from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Layout, 
-  Card, 
-  Button, 
-  Space, 
-  Typography, 
-  theme, 
-  ConfigProvider, 
-  List, 
-  Avatar, 
-  Tag,
-  Modal,
+import {
+  Avatar,
+  Button,
+  Card,
+  ConfigProvider,
+  Divider,
   Form,
   Input,
+  Layout,
+  List,
+  Modal,
   Select,
-  message,
+  Space,
+  Tag,
   Tooltip,
-  Divider
+  Typography,
+  message,
+  theme
 } from 'antd';
-import { 
-  SettingOutlined, 
-  SyncOutlined, 
-  PlusOutlined,
-  CodeOutlined,
-  DatabaseOutlined
-} from '@ant-design/icons';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const { Header, Content, Footer } = Layout;
@@ -93,7 +93,7 @@ const Main: React.FC = () => {
   const navigate = useNavigate();
 
   // 默认设置
-  const [settings, setSettings] = useState<Settings>({
+  const [settings] = useState<Settings>({
     isDarkMode: false,
     storagePath: './data', // 固定使用默认路径
     gitConfig: {

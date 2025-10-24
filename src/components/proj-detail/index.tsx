@@ -1,47 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeftOutlined,
+  CodeOutlined,
+  DatabaseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  SettingOutlined,
+  TableOutlined
+} from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Layout, 
-  Card, 
-  Button, 
-  Space, 
-  Typography, 
-  theme, 
-  ConfigProvider, 
-  List,
-  Input,
+import {
+  Button,
+  Card,
+  ConfigProvider,
   Form,
-  Select,
-  Switch,
-  Table,
-  Tag,
+  Input,
+  Layout,
+  List,
   message,
-  Tooltip,
   Modal,
   Popconfirm,
-  Tabs
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+  theme,
+  Tooltip,
+  Typography
 } from 'antd';
-import { 
-  ArrowLeftOutlined,
-  DatabaseOutlined,
-  TableOutlined,
-  CodeOutlined,
-  SettingOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined
-} from '@ant-design/icons';
-import IndexTab from './index-tab';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import DatabaseCodeTab from './database-code-tab';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import IndexTab from './index-tab';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
 const { useToken } = theme;
 const { Option } = Select;
-const { TabPane } = Tabs;
 
 // 项目类型定义
 interface Project {
@@ -376,41 +373,41 @@ const ProjectDetail: React.FC = () => {
   /**
    * 拖拽排序处理
    */
-  const handleDragEnd = (event: any) => {
-    const { active, over } = event;
+  // const handleDragEnd = (event: any) => {
+  //   const { active, over } = event;
 
-    if (active.id !== over?.id && selectedTable) {
-      const oldIndex = selectedTable.columns.findIndex(col => col.id === active.id);
-      const newIndex = selectedTable.columns.findIndex(col => col.id === over.id);
+  //   if (active.id !== over?.id && selectedTable) {
+  //     const oldIndex = selectedTable.columns.findIndex(col => col.id === active.id);
+  //     const newIndex = selectedTable.columns.findIndex(col => col.id === over.id);
 
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newColumns = arrayMove(selectedTable.columns, oldIndex, newIndex);
+  //     if (oldIndex !== -1 && newIndex !== -1) {
+  //       const newColumns = arrayMove(selectedTable.columns, oldIndex, newIndex);
         
-        // 更新排序值
-        newColumns.forEach((col, index) => {
-          col.order = index + 1;
-        });
+  //       // 更新排序值
+  //       newColumns.forEach((col, index) => {
+  //         col.order = index + 1;
+  //       });
         
-        const updatedTable = {
-          ...selectedTable,
-          columns: newColumns
-        };
+  //       const updatedTable = {
+  //         ...selectedTable,
+  //         columns: newColumns
+  //       };
         
-        setTables(tables.map(table => 
-          table.id === selectedTable.id ? updatedTable : table
-        ));
-        setSelectedTable(updatedTable);
-      }
-    }
-  };
+  //       setTables(tables.map(table => 
+  //         table.id === selectedTable.id ? updatedTable : table
+  //       ));
+  //       setSelectedTable(updatedTable);
+  //     }
+  //   }
+  // };
 
   // 拖拽传感器配置
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  // const sensors = useSensors(
+  //   useSensor(PointerSensor),
+  //   useSensor(KeyboardSensor, {
+  //     coordinateGetter: sortableKeyboardCoordinates,
+  //   })
+  // );
 
   /**
    * 保存表结构

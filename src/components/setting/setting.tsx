@@ -23,7 +23,6 @@ import {
   ArrowLeftOutlined,
   SettingOutlined,
   CodeOutlined,
-  DatabaseOutlined,
   SaveOutlined
 } from '@ant-design/icons';
 
@@ -69,7 +68,6 @@ interface Settings {
 const Setting: React.FC = () => {
   const navigate = useNavigate();
   const { token } = useToken();
-  const [form] = Form.useForm();
   const [gitForm] = Form.useForm();
   const [dbForm] = Form.useForm();
   
@@ -187,7 +185,7 @@ const Setting: React.FC = () => {
   /**
    * 保存数据库连接配置
    */
-  const handleSaveDatabaseConnection = async (values: any) => {
+  const handleSaveDatabaseConnection = async (_values: any) => {
     setLoading(true);
     try {
       // 这里需要实现数据库连接配置的保存逻辑

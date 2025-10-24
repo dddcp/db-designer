@@ -1,10 +1,9 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
+import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import './App.css';
 import Main from './components/main/main';
 import ProjectDetail from './components/proj-detail';
 import Setting from './components/setting/setting';
-import './App.css';
 
 /**
  * 主应用组件 - 使用React Router配置多页面路由
