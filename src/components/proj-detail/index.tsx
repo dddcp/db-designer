@@ -352,7 +352,6 @@ const ProjectDetail: React.FC = () => {
     setTables(tables.map(table => 
       table.id === selectedTable.id ? updatedTable : table
     ));
-    console.log(updatedTable);
     
     setSelectedTable(updatedTable);
   };
