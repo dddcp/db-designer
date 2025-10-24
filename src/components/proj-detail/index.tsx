@@ -520,7 +520,7 @@ const ProjectDetail: React.FC = () => {
         table: tableData,
         columns: columnsData,
       });
-      
+      message.success("保存成功");
     } catch (error) {
       console.error('保存表结构失败:', error);
       message.error('保存表结构失败: ' + error);
@@ -589,7 +589,7 @@ const ProjectDetail: React.FC = () => {
     {
       title: '属性',
       key: 'properties',
-      render: (text: string, record: ColumnDef) => (
+      render: (_text: string, record: ColumnDef) => (
         <Space size={[0, 4]} wrap>
           <Switch
             checked={record.primaryKey}
@@ -655,7 +655,7 @@ const ProjectDetail: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (text: string, record: ColumnDef) => (
+      render: (_text: string, record: ColumnDef) => (
         <Space size="small">
           <Tooltip title="删除字段">
             <Button
