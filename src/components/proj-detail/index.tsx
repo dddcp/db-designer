@@ -152,16 +152,16 @@ const ProjectDetail: React.FC = () => {
     
     switch (type) {
       case 'success':
-        message.success(fullMessage, 3);
+        alert(fullMessage);
         break;
       case 'error':
-        message.error(fullMessage, 3);
+        alert(fullMessage);
         break;
       case 'warning':
-        message.warning(fullMessage, 3);
+        alert(fullMessage);
         break;
       case 'info':
-        message.info(fullMessage, 3);
+        alert(fullMessage);
         break;
     }
   };
