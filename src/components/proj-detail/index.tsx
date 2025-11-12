@@ -8,6 +8,7 @@ import {
   SettingOutlined,
   TableOutlined
 } from '@ant-design/icons';
+import { HolderOutlined } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -34,6 +35,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DatabaseCodeTab from './database-code-tab';
 import IndexTab from './index-tab';
+import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -372,42 +376,73 @@ const ProjectDetail: React.FC = () => {
 
   /**
    * 拖拽排序处理
+   *
+   * 说明：当用户结束一次拖拽操作时，根据拖拽的起止位置
+   * 重新计算字段列的顺序（order），并更新到当前选中表的列集合。
    */
-  // const handleDragEnd = (event: any) => {
-  //   const { active, over } = event;
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
 
-  //   if (active.id !== over?.id && selectedTable) {
-  //     const oldIndex = selectedTable.columns.findIndex(col => col.id === active.id);
-  //     const newIndex = selectedTable.columns.findIndex(col => col.id === over.id);
+    if (!selectedTable) return;
+    if (!over) return;
+    if (active.id === over.id) return;
 
-  //     if (oldIndex !== -1 && newIndex !== -1) {
-  //       const newColumns = arrayMove(selectedTable.columns, oldIndex, newIndex);
-        
-  //       // 更新排序值
-  //       newColumns.forEach((col, index) => {
-  //         col.order = index + 1;
-  //       });
-        
-  //       const updatedTable = {
-  //         ...selectedTable,
-  //         columns: newColumns
-  //       };
-        
-  //       setTables(tables.map(table => 
-  //         table.id === selectedTable.id ? updatedTable : table
-  //       ));
-  //       setSelectedTable(updatedTable);
-  //     }
-  //   }
-  // };
+    // 计算旧索引与新索引（当前 columns 数组已按 order 排序）
+    const oldIndex = selectedTable.columns.findIndex(col => col.id === active.id);
+    const newIndex = selectedTable.columns.findIndex(col => col.id === over.id);
 
-  // 拖拽传感器配置
-  // const sensors = useSensors(
-  //   useSensor(PointerSensor),
-  //   useSensor(KeyboardSensor, {
-  //     coordinateGetter: sortableKeyboardCoordinates,
-  //   })
-  // );
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newColumns = arrayMove(selectedTable.columns, oldIndex, newIndex).map((col, idx) => ({
+      ...col,
+      order: idx + 1,
+    }));
+
+    const updatedTable = {
+      ...selectedTable,
+      columns: newColumns,
+    };
+
+    setTables(tables.map(table => 
+      table.id === selectedTable.id ? updatedTable : table
+    ));
+    setSelectedTable(updatedTable);
+  };
+
+  /**
+   * 拖拽传感器配置
+   *
+   * 说明：同时支持鼠标拖拽与键盘方向键移动，提升可访问性。
+   */
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  /**
+   * 可拖拽表格行组件
+   *
+   * 说明：替换 antd Table 的 tr，接入 dnd-kit 的 useSortable，
+   * 根据拖拽状态为行添加 transform/transition，实现平滑移动。
+   */
+  const DraggableRow: React.FC<any> = (props) => {
+    const id = props['data-row-key'];
+    const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
+
+    const style = {
+      ...props.style,
+      transform: CSS.Transform.toString(transform),
+      transition,
+      cursor: 'grab',
+      ...(isDragging ? { position: 'relative', zIndex: 999 } : {})
+    } as React.CSSProperties;
+
+    return (
+      <tr ref={setNodeRef} style={style} {...attributes} {...listeners} {...props} />
+    );
+  };
 
   /**
    * 保存表结构
@@ -525,6 +560,17 @@ const ProjectDetail: React.FC = () => {
 
   // 列定义
   const columnsColumns = [
+    {
+      title: '排序',
+      dataIndex: 'order',
+      key: 'order',
+      width: 60,
+      render: () => (
+        <span style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center' }}>
+          <HolderOutlined />
+        </span>
+      ),
+    },
     {
       title: '字段名',
       dataIndex: 'name',
@@ -871,13 +917,25 @@ const ProjectDetail: React.FC = () => {
                                 保存表结构
                               </Button>
                             </div>
-                            <Table
-                              dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
-                              columns={columnsColumns}
-                              pagination={false}
-                              rowKey="id"
-                              size="middle"
-                            />
+                            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                              <SortableContext
+                                items={selectedTable.columns.map(col => col.id)}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <Table
+                                  dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
+                                  columns={columnsColumns}
+                                  pagination={false}
+                                  rowKey="id"
+                                  size="middle"
+                                  components={{
+                                    body: {
+                                      row: DraggableRow,
+                                    },
+                                  }}
+                                />
+                              </SortableContext>
+                            </DndContext>
                           </div>
                         )
                       },
