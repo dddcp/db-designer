@@ -35,7 +35,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DatabaseCodeTab from './database-code-tab';
 import IndexTab from './index-tab';
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -120,6 +120,7 @@ const ProjectDetail: React.FC = () => {
   const [isTableModalVisible, setIsTableModalVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<TableDef | null>(null);
   const [activeTab, setActiveTab] = useState('structure');
+  const [activeId, setActiveId] = useState<string | null>(null); // 当前拖拽的项目ID
 
   // 默认设置
   const [settings] = useState({
@@ -380,7 +381,13 @@ const ProjectDetail: React.FC = () => {
    * 说明：当用户结束一次拖拽操作时，根据拖拽的起止位置
    * 重新计算字段列的顺序（order），并更新到当前选中表的列集合。
    */
+  const handleDragStart = (event: any) => {
+    setActiveId(event.active.id);
+  };
+
   const handleDragEnd = (event: any) => {
+    // 重置拖拽状态
+    setActiveId(null);
     const { active, over } = event;
 
     if (!selectedTable) return;
@@ -415,7 +422,11 @@ const ProjectDetail: React.FC = () => {
    * 说明：同时支持鼠标拖拽与键盘方向键移动，提升可访问性。
    */
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 需要移动8px才激活拖拽，避免误触
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -427,16 +438,68 @@ const ProjectDetail: React.FC = () => {
    * 说明：替换 antd Table 的 tr，接入 dnd-kit 的 useSortable，
    * 根据拖拽状态为行添加 transform/transition，实现平滑移动。
    */
+  /**
+   * 拖拽时的幽灵元素组件
+   *
+   * 说明：在拖拽过程中显示一个半透明的预览元素，提升视觉反馈
+   * 修复：调整样式和布局，确保与鼠标位置对齐
+   */
+  const DragOverlayRow: React.FC<any> = ({ column }) => {
+    return (
+      <div style={{
+        padding: '8px 12px',
+        backgroundColor: token.colorPrimaryBg,
+        border: `1px solid ${token.colorPrimaryBorder}`,
+        borderRadius: token.borderRadius,
+        boxShadow: token.boxShadow,
+        opacity: 0.95,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        minWidth: '250px',
+        maxWidth: '400px',
+        height: '40px',
+        position: 'relative',
+        transform: 'translate(-50%, -50%)', // 居中于鼠标位置
+        pointerEvents: 'none', // 确保不影响鼠标事件
+        zIndex: 9999
+      }}>
+        <HolderOutlined style={{ color: token.colorPrimary, fontSize: '14px' }} />
+        <span style={{ fontWeight: 500, fontSize: '14px' }}>{column.name}</span>
+        <span style={{ color: token.colorTextSecondary, fontSize: '12px' }}>
+          {column.displayName}
+        </span>
+        <Tag color="blue" style={{ marginLeft: 'auto', fontSize: '12px' }}>
+          {column.type}
+        </Tag>
+      </div>
+    );
+  };
+
   const DraggableRow: React.FC<any> = (props) => {
     const id = props['data-row-key'];
-    const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
+    const { setNodeRef, attributes, listeners, transform, transition, isDragging, isOver } = useSortable({ id });
 
     const style = {
       ...props.style,
       transform: CSS.Transform.toString(transform),
-      transition,
-      cursor: 'grab',
-      ...(isDragging ? { position: 'relative', zIndex: 999 } : {})
+      transition: transition || 'transform 200ms ease-in-out, box-shadow 200ms ease-in-out',
+      cursor: isDragging ? 'grabbing' : 'grab',
+      ...(isDragging ? { 
+        position: 'relative', 
+        zIndex: 999,
+        backgroundColor: token.colorPrimaryBg,
+        boxShadow: token.boxShadow,
+        opacity: 0.9
+      } : {}),
+      ...(isOver && !isDragging ? {
+        borderTop: `2px solid ${token.colorPrimary}`,
+        backgroundColor: token.colorFillSecondary
+      } : {}),
+      // 添加悬停效果
+      '&:hover': {
+        backgroundColor: token.colorFillAlter,
+      }
     } as React.CSSProperties;
 
     return (
@@ -566,8 +629,8 @@ const ProjectDetail: React.FC = () => {
       key: 'order',
       width: 60,
       render: () => (
-        <span style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center' }}>
-          <HolderOutlined />
+        <span style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '8px' }}>
+          <HolderOutlined style={{ fontSize: '16px', color: token.colorTextSecondary }} />
         </span>
       ),
     },
@@ -917,7 +980,20 @@ const ProjectDetail: React.FC = () => {
                                 保存表结构
                               </Button>
                             </div>
-                            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                            <DndContext 
+                              sensors={sensors} 
+                              onDragStart={handleDragStart} 
+                              onDragEnd={handleDragEnd}
+                              // 修复：优化拖拽覆盖层的定位
+                              modifiers={[
+                                // 限制拖拽范围在可视区域内
+                                ({ transform }) => ({
+                                  ...transform,
+                                  x: transform.x,
+                                  y: transform.y,
+                                }),
+                              ]}
+                            >
                               <SortableContext
                                 items={selectedTable.columns.map(col => col.id)}
                                 strategy={verticalListSortingStrategy}
@@ -935,6 +1011,32 @@ const ProjectDetail: React.FC = () => {
                                   }}
                                 />
                               </SortableContext>
+                              <DragOverlay
+                                // 修复：优化拖拽覆盖层的定位和动画
+                                dropAnimation={{
+                                  sideEffects: defaultDropAnimationSideEffects({
+                                    styles: {
+                                      active: {
+                                        opacity: '0.5',
+                                      },
+                                    },
+                                  }),
+                                }}
+                                // 调整覆盖层位置，减少偏移
+                                modifiers={[
+                                  ({ transform }) => ({
+                                    ...transform,
+                                    x: transform.x - 100, // 调整X轴偏移
+                                    y: transform.y - 20,  // 调整Y轴偏移
+                                  }),
+                                ]}
+                              >
+                                {activeId ? (
+                                  <DragOverlayRow 
+                                    column={selectedTable.columns.find(col => col.id === activeId)} 
+                                  />
+                                ) : null}
+                              </DragOverlay>
                             </DndContext>
                           </div>
                         )
