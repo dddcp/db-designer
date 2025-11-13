@@ -1081,6 +1081,9 @@ const ProjectDetail: React.FC = () => {
         open={isTableModalVisible}
         onCancel={() => setIsTableModalVisible(false)}
         footer={null}
+        destroyOnClose
+        transitionName="ant-modal-zoom"
+        maskTransitionName="ant-modal-mask"
       >
         <Form
           form={tableForm}
