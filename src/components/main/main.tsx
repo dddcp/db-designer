@@ -392,9 +392,12 @@ const Main: React.FC = () => {
             form.resetFields();
           }}
           footer={null}
-          destroyOnClose
-          transitionName="ant-modal-zoom"
-          maskTransitionName="ant-modal-mask"
+          destroyOnClose={true}
+          maskClosable={false}
+          centered={true}
+          transitionName="ant-fade"
+          maskTransitionName="ant-fade"
+          width={520}
         >
           <Form
             form={form}

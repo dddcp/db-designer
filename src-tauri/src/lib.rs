@@ -135,6 +135,23 @@ fn init_db() -> SqlResult<Connection> {
         [],
     )?;
     
+    // 创建数据库连接配置表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS t_database_connection (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL,
+            database TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )",
+        [],
+    )?;
+    
     Ok(conn)
 }
 
@@ -592,6 +609,170 @@ fn get_all_settings() -> Result<HashMap<String, String>, String> {
     Ok(settings)
 }
 
+// 数据库连接配置数据结构
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DatabaseConnection {
+    pub id: i32,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub host: String,
+    pub port: i32,
+    pub username: String,
+    pub password: String,
+    pub database: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// 创建数据库连接配置的请求结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateDatabaseConnectionRequest {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub host: String,
+    pub port: i32,
+    pub username: String,
+    pub password: String,
+    pub database: String,
+}
+
+// 更新数据库连接配置的请求结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateDatabaseConnectionRequest {
+    pub id: i32,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub host: String,
+    pub port: i32,
+    pub username: String,
+    pub password: String,
+    pub database: String,
+}
+
+// 获取所有数据库连接配置
+#[tauri::command]
+fn get_database_connections() -> Result<Vec<DatabaseConnection>, String> {
+    let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    
+    let mut stmt = conn.prepare("SELECT * FROM t_database_connection ORDER BY created_at DESC")
+        .map_err(|e| format!("Error preparing statement: {}", e))?;
+    
+    let connection_iter = stmt.query_map([], |row| {
+        Ok(DatabaseConnection {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            r#type: row.get(2)?,
+            host: row.get(3)?,
+            port: row.get(4)?,
+            username: row.get(5)?,
+            password: row.get(6)?,
+            database: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+        })
+    }).map_err(|e| format!("Error querying database connections: {}", e))?;
+    
+    let mut connections = Vec::new();
+    for connection in connection_iter {
+        connections.push(connection.map_err(|e| format!("Error reading database connection: {}", e))?);
+    }
+    
+    Ok(connections)
+}
+
+// 创建数据库连接配置
+#[tauri::command]
+fn create_database_connection(connection: CreateDatabaseConnectionRequest) -> Result<DatabaseConnection, String> {
+    let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    
+    // 插入新连接
+    conn.execute(
+        "INSERT INTO t_database_connection (name, type, host, port, username, password, database) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![connection.name, connection.r#type, connection.host, connection.port, connection.username, connection.password, connection.database],
+    ).map_err(|e| format!("Error creating database connection: {}", e))?;
+    
+    // 获取最后插入的ID
+    let id = conn.last_insert_rowid() as i32;
+    
+    // 获取刚创建的连接
+    let mut stmt = conn.prepare("SELECT * FROM t_database_connection WHERE id = ?1")
+        .map_err(|e| format!("Error preparing statement: {}", e))?;
+    
+    let mut connection_iter = stmt.query_map(params![id], |row| {
+        Ok(DatabaseConnection {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            r#type: row.get(2)?,
+            host: row.get(3)?,
+            port: row.get(4)?,
+            username: row.get(5)?,
+            password: row.get(6)?,
+            database: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+        })
+    }).map_err(|e| format!("Error fetching created database connection: {}", e))?;
+    
+    if let Some(connection) = connection_iter.next() {
+        connection.map_err(|e| format!("Error reading database connection: {}", e))
+    } else {
+        Err("Failed to fetch created database connection".to_string())
+    }
+}
+
+// 更新数据库连接配置
+#[tauri::command]
+fn update_database_connection(connection: UpdateDatabaseConnectionRequest) -> Result<DatabaseConnection, String> {
+    let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    
+    // 更新连接
+    conn.execute(
+        "UPDATE t_database_connection SET name = ?1, type = ?2, host = ?3, port = ?4, username = ?5, password = ?6, database = ?7, updated_at = datetime('now') WHERE id = ?8",
+        params![connection.name, connection.r#type, connection.host, connection.port, connection.username, connection.password, connection.database, connection.id],
+    ).map_err(|e| format!("Error updating database connection: {}", e))?;
+    
+    // 获取更新后的连接
+    let mut stmt = conn.prepare("SELECT * FROM t_database_connection WHERE id = ?1")
+        .map_err(|e| format!("Error preparing statement: {}", e))?;
+    
+    let mut connection_iter = stmt.query_map(params![connection.id], |row| {
+        Ok(DatabaseConnection {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            r#type: row.get(2)?,
+            host: row.get(3)?,
+            port: row.get(4)?,
+            username: row.get(5)?,
+            password: row.get(6)?,
+            database: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
+        })
+    }).map_err(|e| format!("Error fetching updated database connection: {}", e))?;
+    
+    if let Some(connection) = connection_iter.next() {
+        connection.map_err(|e| format!("Error reading database connection: {}", e))
+    } else {
+        Err("Failed to fetch updated database connection".to_string())
+    }
+}
+
+// 删除数据库连接配置
+#[tauri::command]
+fn delete_database_connection(id: i32) -> Result<String, String> {
+    let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    
+    conn.execute(
+        "DELETE FROM t_database_connection WHERE id = ?1",
+        params![id],
+    ).map_err(|e| format!("Error deleting database connection: {}", e))?;
+    
+    Ok("数据库连接配置删除成功".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -610,7 +791,11 @@ pub fn run() {
             get_table_indexes,
             get_setting,
             save_setting,
-            get_all_settings
+            get_all_settings,
+            get_database_connections,
+            create_database_connection,
+            update_database_connection,
+            delete_database_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

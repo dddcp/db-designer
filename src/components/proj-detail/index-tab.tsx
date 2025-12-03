@@ -290,9 +290,6 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
         onCancel={() => setIsModalVisible(false)}
         footer={null}
         width={600}
-        destroyOnClose
-        transitionName="ant-modal-zoom"
-        maskTransitionName="ant-modal-mask"
       >
         <Form
           form={form}

@@ -138,144 +138,19 @@ body {
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
 }
 
-/* 模态框动画优化 - 防止闪烁 */
-.ant-modal-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  pointer-events: none;
-}
-
-.ant-modal-wrap.ant-modal-wrap-open {
-  pointer-events: auto;
-}
-
-/* 优化模态框内容样式 - 使用硬件加速 */
+/* 模态框动画 */
 .ant-modal {
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
+  animation: modalFadeIn 0.3s ease-out;
 }
 
-.ant-modal-content {
-  overflow: hidden;
-  border-radius: 8px;
-  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 
-              0 3px 6px -4px rgba(0, 0, 0, 0.12), 
-              0 9px 28px 8px rgba(0, 0, 0, 0.05);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-}
-
-/* 优化模态框遮罩层动画 - 防止闪烁 */
-.ant-modal-mask {
-  will-change: opacity;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-/* 防止模态框初始渲染时的闪烁 */
-.ant-modal-wrap.ant-modal-wrap-open .ant-modal {
-  animation-fill-mode: both;
-}
-
-/* 优化模态框打开动画 */
-.ant-modal-zoom-enter,
-.ant-modal-zoom-appear {
-  opacity: 0;
-  transform: scale(0.8);
-  animation-duration: 0.2s;
-  animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(0.08, 0.82, 0.17, 1);
-}
-
-.ant-modal-zoom-enter-active,
-.ant-modal-zoom-appear-active {
-  animation-name: antModalZoomIn;
-  animation-duration: 0.2s;
-  animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(0.08, 0.82, 0.17, 1);
-}
-
-.ant-modal-zoom-leave {
-  animation-duration: 0.15s;
-  animation-fill-mode: both;
-}
-
-.ant-modal-zoom-leave-active {
-  animation-name: antModalZoomOut;
-  animation-duration: 0.15s;
-  animation-fill-mode: both;
-}
-
-@keyframes antModalZoomIn {
-  0% {
-    transform: scale(0.8);
+@keyframes modalFadeIn {
+  from {
     opacity: 0;
+    transform: scale(0.9) translateY(-10px);
   }
-  100% {
-    transform: scale(1);
+  to {
     opacity: 1;
-  }
-}
-
-@keyframes antModalZoomOut {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-}
-
-/* 优化遮罩层动画 */
-.ant-modal-mask-enter,
-.ant-modal-mask-appear {
-  animation-duration: 0.2s;
-  animation-fill-mode: both;
-  opacity: 0;
-}
-
-.ant-modal-mask-enter-active,
-.ant-modal-mask-appear-active {
-  animation-name: antModalFadeIn;
-  animation-duration: 0.2s;
-  animation-fill-mode: both;
-}
-
-.ant-modal-mask-leave {
-  animation-duration: 0.15s;
-  animation-fill-mode: both;
-}
-
-.ant-modal-mask-leave-active {
-  animation-name: antModalFadeOut;
-  animation-duration: 0.15s;
-  animation-fill-mode: both;
-}
-
-@keyframes antModalFadeIn {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes antModalFadeOut {
-  0% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
+    transform: scale(1) translateY(0);
   }
 }
 
