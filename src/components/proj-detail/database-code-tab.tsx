@@ -18,24 +18,7 @@ const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
-// 表定义
-interface TableDef {
-  id: string;
-  name: string;
-  displayName: string;
-  columns: Array<{
-    id: string;
-    name: string;
-    displayName: string;
-    type: string;
-    length?: number;
-    nullable: boolean;
-    primaryKey: boolean;
-    autoIncrement: boolean;
-    defaultValue?: string;
-    comment?: string;
-  }>;
-}
+import type { TableDef } from '../../types';
 
 interface DatabaseCodeTabProps {
   selectedTable: TableDef | null;

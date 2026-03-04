@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { 
   Card, 
@@ -25,22 +25,7 @@ import {
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-// 索引定义
-interface IndexDef {
-  id: string;
-  name: string;
-  type: 'normal' | 'unique' | 'fulltext';
-  columns: string[];
-  comment?: string;
-}
-
-// 表定义
-interface TableDef {
-  id: string;
-  name: string;
-  displayName: string;
-  columns: Array<{ id: string; name: string; displayName: string }>;
-}
+import type { IndexDef, TableDef } from '../../types';
 
 interface IndexTabProps {
   selectedTable: TableDef | null;
@@ -54,6 +39,50 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<IndexDef | null>(null);
   const [form] = Form.useForm();
+
+  // 后端索引数据结构
+  interface BackendIndexDef {
+    id: string;
+    table_id: string;
+    name: string;
+    index_type: string;
+    comment?: string;
+    fields: Array<{ column_id: string; sort_order: number }>;
+  }
+
+  // 加载索引
+  useEffect(() => {
+    if (selectedTable) {
+      loadIndexes();
+    } else {
+      setIndexes([]);
+    }
+  }, [selectedTable?.id]);
+
+  const loadIndexes = async () => {
+    if (!selectedTable) return;
+    try {
+      const backendIndexes = await invoke<BackendIndexDef[]>('get_table_indexes', {
+        tableId: selectedTable.id
+      });
+      // 将后端数据转换为前端格式：column_id -> column name
+      const frontendIndexes: IndexDef[] = backendIndexes.map(idx => ({
+        id: idx.id,
+        name: idx.name,
+        type: idx.index_type as IndexDef['type'],
+        comment: idx.comment,
+        columns: idx.fields
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(f => {
+            const col = selectedTable.columns.find(c => c.id === f.column_id);
+            return col ? col.name : f.column_id;
+          })
+      }));
+      setIndexes(frontendIndexes);
+    } catch (error) {
+      console.error('加载索引失败:', error);
+    }
+  };
 
   /**
    * 添加索引

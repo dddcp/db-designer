@@ -1,10 +1,14 @@
 import {
   ArrowLeftOutlined,
+  CloudSyncOutlined,
   CodeOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileTextOutlined,
+  HistoryOutlined,
   PlusOutlined,
+  RobotOutlined,
   SettingOutlined,
   TableOutlined
 } from '@ant-design/icons';
@@ -13,7 +17,6 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
   Card,
-  ConfigProvider,
   Form,
   Input,
   Layout,
@@ -33,8 +36,14 @@ import {
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTheme } from '../../store/theme-context';
 import DatabaseCodeTab from './database-code-tab';
 import IndexTab from './index-tab';
+import InitDataTab from './init-data-tab';
+import VersionTab from './version-tab';
+import SyncTab from './sync-tab';
+import AiDesignModal from './ai-design-modal';
+import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -44,65 +53,7 @@ const { Title, Text } = Typography;
 const { useToken } = theme;
 const { Option } = Select;
 
-// 项目类型定义
-interface Project {
-  id: number;
-  name: string;
-  description?: string;
-  database_type: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// 前端表定义
-interface TableDef {
-  id: string;
-  name: string;        // 表名（英文）
-  displayName: string; // 中文名
-  columns: ColumnDef[];
-}
-
-// 前端列定义
-interface ColumnDef {
-  id: string;
-  name: string;        // 字段名（英文）
-  displayName: string; // 中文名称
-  type: string;        // 数据类型
-  length?: number;     // 长度/精度
-  nullable: boolean;   // 是否为空
-  primaryKey: boolean; // 是否为主键
-  autoIncrement: boolean; // 是否自增
-  defaultValue?: string;  // 默认值
-  comment?: string;    // 说明
-  order: number;       // 排序
-}
-
-// 后端表定义
-interface BackendTableDef {
-  id: string;
-  project_id: number;
-  name: string;
-  display_name: string;
-  comment?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// 后端列定义
-interface BackendColumnDef {
-  id: string;
-  table_id: string;
-  name: string;
-  display_name: string;
-  data_type: string;
-  length?: number;
-  nullable: boolean;
-  primary_key: boolean;
-  auto_increment: boolean;
-  default_value?: string;
-  comment?: string;
-  sort_order: number;
-}
+import type { Project, TableDef, ColumnDef, BackendTableDef, BackendColumnDef } from '../../types';
 
 /**
  * 项目详情页面组件 - 表设计功能
@@ -111,7 +62,8 @@ const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token } = useToken();
-  
+  const { isDarkMode } = useTheme();
+
   const [project, setProject] = useState<Project | null>(null);
   const [tables, setTables] = useState<TableDef[]>([]);
   const [selectedTable, setSelectedTable] = useState<TableDef | null>(null);
@@ -120,12 +72,9 @@ const ProjectDetail: React.FC = () => {
   const [isTableModalVisible, setIsTableModalVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<TableDef | null>(null);
   const [activeTab, setActiveTab] = useState('structure');
-  const [activeId, setActiveId] = useState<string | null>(null); // 当前拖拽的项目ID
-
-  // 默认设置
-  const [settings] = useState({
-    isDarkMode: false
-  });
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [projectView, setProjectView] = useState('design');
+  const [isAiModalVisible, setIsAiModalVisible] = useState(false);
 
   // 数据类型选项
   const dataTypes = [
@@ -261,41 +210,98 @@ const ProjectDetail: React.FC = () => {
   /**
    * 删除表
    */
-  const handleDeleteTable = (tableId: string) => {
-    setTables(tables.filter(table => table.id !== tableId));
-    if (selectedTable?.id === tableId) {
-      setSelectedTable(null);
+  const handleDeleteTable = async (tableId: string) => {
+    try {
+      await invoke('delete_table', { tableId });
+      setTables(tables.filter(table => table.id !== tableId));
+      if (selectedTable?.id === tableId) {
+        setSelectedTable(null);
+      }
+      showNotification('success', '表删除成功');
+    } catch (error) {
+      console.error('删除表失败:', error);
+      showNotification('error', '删除表失败: ' + error);
     }
-    showNotification('success', '表删除成功');
   };
 
   /**
    * 保存表
    */
-  const handleSaveTable = (values: any) => {
-    if (editingTable) {
-      // 编辑现有表
-      setTables(tables.map(table => 
-        table.id === editingTable.id 
-          ? { ...table, ...values }
-          : table
-      ));
-      if (selectedTable?.id === editingTable.id) {
-        setSelectedTable({ ...selectedTable, ...values });
+  const handleSaveTable = async (values: any) => {
+    if (!project) return;
+
+    try {
+      if (editingTable) {
+        // 编辑现有表 - 调用后端保存
+        const tableData = {
+          id: editingTable.id,
+          project_id: project.id,
+          name: values.name,
+          display_name: values.displayName,
+          comment: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        const columnsData = editingTable.columns.map(column => ({
+          id: column.id,
+          table_id: editingTable.id,
+          name: column.name,
+          display_name: column.displayName,
+          data_type: column.type,
+          length: column.length || null,
+          nullable: column.nullable,
+          primary_key: column.primaryKey,
+          auto_increment: column.autoIncrement,
+          default_value: column.defaultValue || null,
+          comment: column.comment || null,
+          sort_order: column.order,
+        }));
+        await invoke('save_table_structure', {
+          projectId: project.id,
+          table: tableData,
+          columns: columnsData,
+        });
+
+        const updatedTable = { ...editingTable, name: values.name, displayName: values.displayName };
+        setTables(tables.map(table =>
+          table.id === editingTable.id ? updatedTable : table
+        ));
+        if (selectedTable?.id === editingTable.id) {
+          setSelectedTable(updatedTable);
+        }
+        showNotification('success', '表更新成功');
+      } else {
+        // 创建新表 - 调用后端保存
+        const newId = Date.now().toString();
+        const tableData = {
+          id: newId,
+          project_id: project.id,
+          name: values.name,
+          display_name: values.displayName,
+          comment: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        await invoke('save_table_structure', {
+          projectId: project.id,
+          table: tableData,
+          columns: [],
+        });
+
+        const newTable: TableDef = {
+          id: newId,
+          name: values.name,
+          displayName: values.displayName,
+          columns: []
+        };
+        setTables([...tables, newTable]);
+        showNotification('success', '表创建成功');
       }
-      showNotification('success', '表更新成功');
-    } else {
-      // 创建新表
-      const newTable: TableDef = {
-        id: Date.now().toString(),
-        name: values.name,
-        displayName: values.displayName,
-        columns: []
-      };
-      setTables([...tables, newTable]);
-      showNotification('success', '表创建成功');
+      setIsTableModalVisible(false);
+    } catch (error) {
+      console.error('保存表失败:', error);
+      showNotification('error', '保存表失败: ' + error);
     }
-    setIsTableModalVisible(false);
   };
 
   /**
@@ -621,6 +627,82 @@ const ProjectDetail: React.FC = () => {
     }
   };
 
+  /**
+   * AI生成表结构回调
+   */
+  const handleAiTablesGenerated = async (aiTables: GeneratedTable[]) => {
+    if (!project) return;
+
+    try {
+      const newTables: TableDef[] = [];
+
+      for (let i = 0; i < aiTables.length; i++) {
+        const aiTable = aiTables[i];
+        const newId = (Date.now() + i).toString();
+
+        const columnsData = aiTable.columns.map((col, colIdx) => ({
+          id: (Date.now() + i * 1000 + colIdx).toString(),
+          table_id: newId,
+          name: col.name,
+          display_name: col.displayName,
+          data_type: col.type,
+          length: col.length || null,
+          nullable: col.nullable,
+          primary_key: col.primaryKey,
+          auto_increment: col.autoIncrement,
+          default_value: col.defaultValue || null,
+          comment: col.comment || null,
+          sort_order: colIdx + 1,
+        }));
+
+        const tableData = {
+          id: newId,
+          project_id: project.id,
+          name: aiTable.name,
+          display_name: aiTable.displayName,
+          comment: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        await invoke('save_table_structure', {
+          projectId: project.id,
+          table: tableData,
+          columns: columnsData,
+        });
+
+        newTables.push({
+          id: newId,
+          name: aiTable.name,
+          displayName: aiTable.displayName,
+          columns: aiTable.columns.map((col, colIdx) => ({
+            id: columnsData[colIdx].id,
+            name: col.name,
+            displayName: col.displayName,
+            type: col.type,
+            length: col.length,
+            nullable: col.nullable,
+            primaryKey: col.primaryKey,
+            autoIncrement: col.autoIncrement,
+            defaultValue: col.defaultValue,
+            comment: col.comment,
+            order: colIdx + 1,
+          }))
+        });
+      }
+
+      setTables(prev => [...prev, ...newTables]);
+      if (newTables.length > 0) {
+        setSelectedTable(newTables[0]);
+      }
+      setIsAiModalVisible(false);
+      message.success(`成功创建 ${newTables.length} 张表`);
+    } catch (error) {
+      console.error('创建AI生成的表失败:', error);
+      message.error('创建表失败: ' + error);
+    }
+  };
+
   // 列定义
   const columnsColumns = [
     {
@@ -793,20 +875,12 @@ const ProjectDetail: React.FC = () => {
   }
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: settings.isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1890ff',
-          borderRadius: 8,
-        },
-      }}
-    >
+    <>
       <Layout style={{ minHeight: '100vh' }}>
         {/* 头部 */}
         <Header 
           style={{ 
-            background: settings.isDarkMode ? '#141414' : '#fff',
+            background: isDarkMode ? '#141414' : '#fff',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
             padding: '0 24px',
             display: 'flex',
@@ -825,7 +899,7 @@ const ProjectDetail: React.FC = () => {
               </Button>
             </Tooltip>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0, color: settings.isDarkMode ? '#fff' : '#000' }}>
+            <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
               {project.name}
             </Title>
             <Tag color={project.database_type === 'mysql' ? 'green' : 'purple'}>
@@ -853,26 +927,59 @@ const ProjectDetail: React.FC = () => {
           </Space>
         </Header>
 
+        {/* 项目级视图切换 */}
+        <div style={{ padding: '0 24px', background: isDarkMode ? '#141414' : '#fff', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+          <Tabs
+            activeKey={projectView}
+            onChange={setProjectView}
+            style={{ marginBottom: 0 }}
+            items={[
+              {
+                key: 'design',
+                label: <span><TableOutlined /> 表设计</span>,
+              },
+              {
+                key: 'version',
+                label: <span><HistoryOutlined /> 版本管理</span>,
+              },
+              {
+                key: 'sync',
+                label: <span><CloudSyncOutlined /> 数据库同步</span>,
+              },
+            ]}
+          />
+        </div>
+
+        {projectView === 'design' ? (
         <Layout>
           {/* 左侧边栏 - 表列表 */}
           <Sider 
             width={300} 
             style={{ 
-              background: settings.isDarkMode ? '#141414' : '#fff',
+              background: isDarkMode ? '#141414' : '#fff',
               borderRight: `1px solid ${token.colorBorderSecondary}`
             }}
           >
             <div style={{ padding: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <Title level={4} style={{ margin: 0 }}>表列表</Title>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />}
-                  size="small"
-                  onClick={handleCreateTable}
-                >
-                  新建表
-                </Button>
+                <Space>
+                  <Button
+                    icon={<RobotOutlined />}
+                    size="small"
+                    onClick={() => setIsAiModalVisible(true)}
+                  >
+                    AI设计
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    size="small"
+                    onClick={handleCreateTable}
+                  >
+                    新建表
+                  </Button>
+                </Space>
               </div>
               
               <List
@@ -937,7 +1044,7 @@ const ProjectDetail: React.FC = () => {
           </Sider>
 
           {/* 右侧内容 - 表设计 */}
-          <Content style={{ padding: '24px', background: settings.isDarkMode ? '#000' : '#f5f5f5' }}>
+          <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5' }}>
             <div style={{ maxWidth: '100%', margin: '0 auto' }}>
               {selectedTable ? (
                 <Card>
@@ -1052,6 +1159,16 @@ const ProjectDetail: React.FC = () => {
                         children: <IndexTab selectedTable={selectedTable} />
                       },
                       {
+                        key: 'initData',
+                        label: (
+                          <span>
+                            <FileTextOutlined />
+                            初始数据
+                          </span>
+                        ),
+                        children: <InitDataTab selectedTable={selectedTable} />
+                      },
+                      {
                         key: 'sql',
                         label: (
                           <span>
@@ -1073,6 +1190,11 @@ const ProjectDetail: React.FC = () => {
             </div>
           </Content>
         </Layout>
+        ) : projectView === 'version' ? (
+          <VersionTab project={project} />
+        ) : (
+          <SyncTab project={project} />
+        )}
       </Layout>
 
       {/* 表编辑模态框 */}
@@ -1094,7 +1216,7 @@ const ProjectDetail: React.FC = () => {
           >
             <Input placeholder="请输入表名，如：users" />
           </Form.Item>
-          
+
           <Form.Item
             name="displayName"
             label="中文名"
@@ -1102,7 +1224,7 @@ const ProjectDetail: React.FC = () => {
           >
             <Input placeholder="请输入表的中文名，如：用户表" />
           </Form.Item>
-          
+
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
@@ -1115,7 +1237,15 @@ const ProjectDetail: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </ConfigProvider>
+
+      {/* AI设计弹窗 */}
+      <AiDesignModal
+        open={isAiModalVisible}
+        onCancel={() => setIsAiModalVisible(false)}
+        onTablesGenerated={handleAiTablesGenerated}
+        databaseType={project.database_type}
+      />
+    </>
   );
 };
 

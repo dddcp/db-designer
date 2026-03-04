@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(cargo check:*)",
+      "Bash(yarn add:*)",
+      "Bash(where:*)",
+      "Bash(cargo clean:*)",
+      "Bash(rustc:*)",
+      "Bash(rustup show:*)"
+    ]
+  }
+}

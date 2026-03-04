@@ -10,13 +10,13 @@ import {
   Avatar,
   Button,
   Card,
-  ConfigProvider,
   Divider,
   Form,
   Input,
   Layout,
   List,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Tag,
@@ -27,57 +27,12 @@ import {
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../store/theme-context';
+import type { Project, GitInfo } from '../../types';
 
 const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
 const { useToken } = theme;
-
-// 项目类型定义
-interface Project {
-  id: number;
-  name: string;
-  description?: string;
-  database_type: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Git信息类型定义
-interface GitInfo {
-  branch: string;
-  latest_commit: string;
-}
-
-// Git平台类型
-type GitPlatform = 'github' | 'gitlab' | 'gitee';
-
-// 数据库连接配置
-interface DatabaseConnection {
-  id: string;
-  name: string;
-  type: 'mysql' | 'postgresql';
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  database: string;
-}
-
-// Git配置
-interface GitConfig {
-  platform: GitPlatform;
-  token: string;
-  repositoryName: string;
-  isInitialized: boolean;
-}
-
-// 设置项类型定义
-interface Settings {
-  isDarkMode: boolean;
-  storagePath: string;
-  gitConfig: GitConfig;
-  databaseConnections: DatabaseConnection[];
-}
 
 /**
  * 主页面组件
@@ -86,24 +41,11 @@ const Main: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  // 移除设置模态框状态
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const { token } = useToken();
   const navigate = useNavigate();
-
-  // 默认设置
-  const [settings] = useState<Settings>({
-    isDarkMode: false,
-    storagePath: './data', // 固定使用默认路径
-    gitConfig: {
-      platform: 'github',
-      token: '',
-      repositoryName: '',
-      isInitialized: false
-    },
-    databaseConnections: []
-  });
+  const { isDarkMode } = useTheme();
 
   // 初始化数据库和加载数据
   useEffect(() => {
@@ -193,7 +135,19 @@ const Main: React.FC = () => {
     }
   };
 
-  // 移除设置变更处理函数
+  /**
+   * 删除项目
+   */
+  const handleDeleteProject = async (projectId: number) => {
+    try {
+      await invoke('delete_project', { id: projectId });
+      message.success('项目删除成功');
+      await loadProjects();
+    } catch (error) {
+      console.error('删除项目失败:', error);
+      message.error('删除项目失败');
+    }
+  };
 
   /**
    * 格式化日期
@@ -216,20 +170,11 @@ const Main: React.FC = () => {
   };
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: settings.isDarkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1890ff',
-          borderRadius: 8,
-        },
-      }}
-    >
       <Layout style={{ minHeight: '100vh' }}>
         {/* 头部 */}
         <Header 
           style={{ 
-            background: settings.isDarkMode ? '#141414' : '#fff',
+            background: isDarkMode ? '#141414' : '#fff',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
             padding: '0 24px',
             display: 'flex',
@@ -239,7 +184,7 @@ const Main: React.FC = () => {
         >
           <Space>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0, color: settings.isDarkMode ? '#fff' : '#000' }}>
+            <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
               数据库设计器
             </Title>
           </Space>
@@ -267,7 +212,7 @@ const Main: React.FC = () => {
         </Header>
 
         {/* 主要内容区域 */}
-        <Content style={{ padding: '24px', background: settings.isDarkMode ? '#000' : '#f5f5f5' }}>
+        <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5' }}>
           <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             {/* 操作栏 */}
             <Card 
@@ -301,14 +246,19 @@ const Main: React.FC = () => {
                 renderItem={(project) => (
                   <List.Item
                     actions={[
-                      <Button 
-                        type="link" 
-                        key="view"
-                        onClick={() => handleProjectClick(project.id)}
-                      >
+                      <Button type="link" key="view" onClick={() => handleProjectClick(project.id)}>
                         查看详情
                       </Button>,
-                      <Button type="link" danger key="delete">删除</Button>,
+                      <Popconfirm
+                        key="delete"
+                        title="确定删除此项目吗？"
+                        description="删除后将同时删除项目下的所有表和索引数据"
+                        onConfirm={() => handleDeleteProject(project.id)}
+                        okText="确定"
+                        cancelText="取消"
+                      >
+                        <Button type="link" danger>删除</Button>
+                      </Popconfirm>,
                     ]}
                   >
                     <List.Item.Meta
@@ -359,7 +309,7 @@ const Main: React.FC = () => {
         {/* 底部 */}
         <Footer style={{ 
           textAlign: 'center', 
-          background: settings.isDarkMode ? '#141414' : '#fafafa',
+          background: isDarkMode ? '#141414' : '#fafafa',
           borderTop: `1px solid ${token.colorBorderSecondary}`,
           padding: '16px 24px'
         }}>
@@ -455,7 +405,6 @@ const Main: React.FC = () => {
           </Form>
         </Modal>
       </Layout>
-    </ConfigProvider>
   );
 };
 

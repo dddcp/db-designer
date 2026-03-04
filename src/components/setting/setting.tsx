@@ -35,34 +35,10 @@ import {
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
 const { Option } = Select;
 const { useToken } = theme;
 
-// Git平台类型
-type GitPlatform = 'github' | 'gitlab' | 'gitee';
-
-// 数据库连接配置
-interface DatabaseConnection {
-  id: number;
-  name: string;
-  type: 'mysql' | 'postgresql';
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  database: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-// Git配置
-interface GitConfig {
-  platform: GitPlatform;
-  token: string;
-  repositoryName: string;
-  isInitialized: boolean;
-}
+import type { GitPlatform, DatabaseConnection, GitConfig } from '../../types';
 
 // 设置项类型定义
 interface Settings {
@@ -79,6 +55,7 @@ const Setting: React.FC = () => {
   const { token } = useToken();
   const [gitForm] = Form.useForm();
   const [dbForm] = Form.useForm();
+  const [aiForm] = Form.useForm();
   
   const [settings, setSettings] = useState<Settings>({
     isDarkMode: false,
@@ -126,6 +103,13 @@ const Setting: React.FC = () => {
         platform: gitPlatform,
         token: gitToken,
         repositoryName: gitRepo
+      });
+
+      // 加载AI配置
+      aiForm.setFieldsValue({
+        ai_base_url: themeSetting['ai_base_url'] || '',
+        ai_api_key: themeSetting['ai_api_key'] || '',
+        ai_model: themeSetting['ai_model'] || ''
       });
 
     } catch (error) {
@@ -190,6 +174,24 @@ const Setting: React.FC = () => {
     } catch (error) {
       console.error('保存Git配置失败:', error);
       message.error('保存Git配置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * 保存AI配置
+   */
+  const handleSaveAiConfig = async (values: any) => {
+    setLoading(true);
+    try {
+      await invoke('save_setting', { key: 'ai_base_url', value: values.ai_base_url });
+      await invoke('save_setting', { key: 'ai_api_key', value: values.ai_api_key });
+      await invoke('save_setting', { key: 'ai_model', value: values.ai_model });
+      message.success('AI配置保存成功');
+    } catch (error) {
+      console.error('保存AI配置失败:', error);
+      message.error('保存AI配置失败');
     } finally {
       setLoading(false);
     }
@@ -347,14 +349,16 @@ const Setting: React.FC = () => {
       <Content style={{ padding: '24px', background: token.colorBgLayout }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <Card>
-            <Tabs activeKey={activeTab} onChange={setActiveTab}>
-              {/* 基础设置 */}
-              <TabPane tab="基础设置" key="basic">
+            <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
+              {
+                key: 'basic',
+                label: '基础设置',
+                children: (
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <Title level={4}>主题设置</Title>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text>深色模式</Text>
-                    <Switch 
+                    <Switch
                       checked={settings.isDarkMode}
                       onChange={(checked) => {
                         setSettings(prev => ({ ...prev, isDarkMode: checked }));
@@ -364,9 +368,9 @@ const Setting: React.FC = () => {
                       unCheckedChildren="关闭"
                     />
                   </div>
-                  
+
                   <Divider />
-                  
+
                   <Title level={4}>应用信息</Title>
                   <Row gutter={16}>
                     <Col span={12}>
@@ -383,10 +387,12 @@ const Setting: React.FC = () => {
                     </Col>
                   </Row>
                 </Space>
-              </TabPane>
-
-              {/* Git配置 */}
-              <TabPane tab="Git配置" key="git">
+                )
+              },
+              {
+                key: 'git',
+                label: 'Git配置',
+                children: (
                 <Form
                   form={gitForm}
                   layout="vertical"
@@ -394,7 +400,7 @@ const Setting: React.FC = () => {
                 >
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <Title level={4}>Git仓库配置</Title>
-                    
+
                     <Form.Item
                       name="platform"
                       label="Git平台"
@@ -412,8 +418,8 @@ const Setting: React.FC = () => {
                       label="访问令牌"
                       rules={[{ required: true, message: '请输入访问令牌' }]}
                     >
-                      <Input.Password 
-                        placeholder="请输入Git访问令牌" 
+                      <Input.Password
+                        placeholder="请输入Git访问令牌"
                       />
                     </Form.Item>
 
@@ -427,15 +433,15 @@ const Setting: React.FC = () => {
 
                     <Form.Item>
                       <Space>
-                        <Button 
-                          type="primary" 
+                        <Button
+                          type="primary"
                           htmlType="submit"
                           loading={loading}
                           icon={<SaveOutlined />}
                         >
                           保存配置
                         </Button>
-                        <Button 
+                        <Button
                           type="default"
                           icon={<CodeOutlined />}
                           onClick={handleInitGitRepository}
@@ -446,22 +452,24 @@ const Setting: React.FC = () => {
                     </Form.Item>
                   </Space>
                 </Form>
-              </TabPane>
-
-              {/* 数据库连接 */}
-              <TabPane tab="数据库连接" key="database">
+                )
+              },
+              {
+                key: 'database',
+                label: '数据库连接',
+                children: (
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Title level={4} style={{ margin: 0 }}>数据库连接配置</Title>
-                    <Button 
-                      type="primary" 
+                    <Button
+                      type="primary"
                       icon={<PlusOutlined />}
                       onClick={handleAddDatabaseConnection}
                     >
                       添加连接
                     </Button>
                   </div>
-                  
+
                   <List
                     dataSource={dbConnections}
                     locale={{
@@ -521,8 +529,62 @@ const Setting: React.FC = () => {
                     )}
                   />
                 </Space>
-              </TabPane>
-            </Tabs>
+                )
+              },
+              {
+                key: 'ai',
+                label: 'AI配置',
+                children: (
+                <Form
+                  form={aiForm}
+                  layout="vertical"
+                  onFinish={handleSaveAiConfig}
+                >
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Title level={4}>AI配置</Title>
+                    <Text type="secondary">
+                      兼容所有 OpenAI 格式的 API（通义千问、Deepseek、文心等均可使用）
+                    </Text>
+
+                    <Form.Item
+                      name="ai_base_url"
+                      label="API 地址"
+                      rules={[{ required: true, message: '请输入API地址' }]}
+                    >
+                      <Input placeholder="https://api.openai.com" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name="ai_api_key"
+                      label="API Key"
+                      rules={[{ required: true, message: '请输入API Key' }]}
+                    >
+                      <Input.Password placeholder="请输入API Key" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name="ai_model"
+                      label="模型名称"
+                      rules={[{ required: true, message: '请输入模型名称' }]}
+                    >
+                      <Input placeholder="gpt-4o" />
+                    </Form.Item>
+
+                    <Form.Item>
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        loading={loading}
+                        icon={<SaveOutlined />}
+                      >
+                        保存配置
+                      </Button>
+                    </Form.Item>
+                  </Space>
+                </Form>
+                )
+              }
+            ]} />
           </Card>
         </div>
       </Content>
