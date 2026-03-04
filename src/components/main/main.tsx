@@ -14,6 +14,7 @@ import {
   Layout,
   List,
   Drawer,
+  Modal,
   Popconfirm,
   Space,
   Tag,
@@ -38,6 +39,9 @@ const Main: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncModalVisible, setSyncModalVisible] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [commitMessage, setCommitMessage] = useState('');
   const [form] = Form.useForm();
   const { token } = useToken();
   const navigate = useNavigate();
@@ -102,15 +106,29 @@ const Main: React.FC = () => {
   };
 
   /**
-   * 同步数据
+   * 打开同步弹窗
    */
-  const handleSync = async () => {
-    message.loading({ content: '同步中...', key: 'sync', duration: 0 });
+  const handleSync = () => {
+    setCommitMessage('');
+    setSyncModalVisible(true);
+  };
+
+  /**
+   * 执行Git同步
+   */
+  const handleConfirmSync = async () => {
+    setSyncLoading(true);
     try {
-      await loadProjects();
-      message.success({ content: '同步完成', key: 'sync' });
+      const result = await invoke<string>('sync_git_repository', {
+        commitMessage: commitMessage || 'Auto sync: database changes'
+      });
+      message.success(result);
+      setSyncModalVisible(false);
     } catch (error) {
-      message.error({ content: '同步失败', key: 'sync' });
+      console.error('同步失败:', error);
+      message.error(`同步失败: ${error}`);
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -251,9 +269,6 @@ const Main: React.FC = () => {
                         <Space>
                           <Text strong>{project.name}</Text>
                           <Tag color="blue">项目</Tag>
-                          <Tag color={project.database_type === 'mysql' ? 'green' : 'purple'}>
-                            {project.database_type === 'mysql' ? 'MySQL' : 'PostgreSQL'}
-                          </Tag>
                         </Space>
                       }
                       description={
@@ -343,6 +358,27 @@ const Main: React.FC = () => {
             </Form.Item>
           </Form>
         </Drawer>
+
+        {/* 同步提交信息弹窗 */}
+        <Modal
+          title="Git 同步"
+          open={syncModalVisible}
+          onOk={handleConfirmSync}
+          onCancel={() => setSyncModalVisible(false)}
+          confirmLoading={syncLoading}
+          okText="同步"
+          cancelText="取消"
+        >
+          <div style={{ marginBottom: 8 }}>
+            <Text type="secondary">输入提交信息（留空则使用默认信息）</Text>
+          </div>
+          <Input.TextArea
+            value={commitMessage}
+            onChange={(e) => setCommitMessage(e.target.value)}
+            placeholder="Auto sync: database changes"
+            rows={3}
+          />
+        </Modal>
       </Layout>
   );
 };

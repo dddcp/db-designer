@@ -28,7 +28,6 @@ import {
   Switch,
   Table,
   Tabs,
-  Tag,
   theme,
   Tooltip,
   Typography
@@ -53,6 +52,42 @@ const { useToken } = theme;
 const { Option } = Select;
 
 import type { Project, TableDef, ColumnDef, BackendTableDef, BackendColumnDef } from '../../types';
+
+// 拖拽手柄 Context：将 listeners 从行组件传递给手柄图标（必须在组件外部定义，避免每次渲染重新创建）
+const DragHandleContext = React.createContext<any>({});
+
+const DragHandle: React.FC = () => {
+  const { attributes, listeners } = React.useContext(DragHandleContext);
+  const { token } = theme.useToken();
+  return (
+    <span
+      {...attributes}
+      {...listeners}
+      style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '4px 8px' }}
+    >
+      <HolderOutlined style={{ fontSize: 16, color: token.colorTextSecondary }} />
+    </span>
+  );
+};
+
+const DraggableRow: React.FC<any> = (props) => {
+  const id = props['data-row-key'];
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
+  const { token } = theme.useToken();
+
+  const style = {
+    ...props.style,
+    transform: CSS.Transform.toString(transform ? { ...transform, scaleY: 1 } : null),
+    transition,
+    ...(isDragging ? { opacity: 0.4, background: token.colorPrimaryBg } : {}),
+  } as React.CSSProperties;
+
+  return (
+    <DragHandleContext.Provider value={{ attributes, listeners }}>
+      <tr ref={setNodeRef} style={style} {...props} />
+    </DragHandleContext.Provider>
+  );
+};
 
 /**
  * 项目详情页面组件 - 表设计功能
@@ -417,40 +452,6 @@ const ProjectDetail: React.FC = () => {
       },
     })
   );
-
-  // 拖拽手柄 Context：将 listeners 从行组件传递给手柄图标
-  const DragHandleContext = React.createContext<any>({});
-
-  const DragHandle: React.FC = () => {
-    const { attributes, listeners } = React.useContext(DragHandleContext);
-    return (
-      <span
-        {...attributes}
-        {...listeners}
-        style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '4px 8px' }}
-      >
-        <HolderOutlined style={{ fontSize: 16, color: token.colorTextSecondary }} />
-      </span>
-    );
-  };
-
-  const DraggableRow: React.FC<any> = (props) => {
-    const id = props['data-row-key'];
-    const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
-
-    const style = {
-      ...props.style,
-      transform: CSS.Transform.toString(transform ? { ...transform, scaleY: 1 } : null),
-      transition,
-      ...(isDragging ? { opacity: 0.4, background: token.colorPrimaryBg } : {}),
-    } as React.CSSProperties;
-
-    return (
-      <DragHandleContext.Provider value={{ attributes, listeners }}>
-        <tr ref={setNodeRef} style={style} {...props} />
-      </DragHandleContext.Provider>
-    );
-  };
 
   /**
    * 保存表结构
@@ -837,9 +838,6 @@ const ProjectDetail: React.FC = () => {
             <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
               {project.name}
             </Title>
-            <Tag color={project.database_type === 'mysql' ? 'green' : 'purple'}>
-              {project.database_type === 'mysql' ? 'MySQL' : 'PostgreSQL'}
-            </Tag>
           </Space>
         </Header>
 

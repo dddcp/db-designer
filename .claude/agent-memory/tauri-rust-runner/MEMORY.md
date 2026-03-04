@@ -15,7 +15,10 @@
 ## Build Commands
 - Frontend TS check: `cd D:/workspace/react/db-designer && npx tsc --noEmit`
 - Rust check: `cd D:/workspace/react/db-designer/src-tauri && cargo check`
+- Rust build: `cd D:/workspace/react/db-designer/src-tauri && cargo build`
 - First-time cargo check takes ~60s (rusqlite bundled build)
+- Incremental `cargo build` (dev) takes ~40s when only top-level crate changed
+- Additional deps: mysql 25, postgres 0.19, native-tls 0.2, postgres-native-tls 0.5
 
 ## Known Issues & Fixes
 - 2026-03-04: `src/components/proj-detail/index.tsx` had JSX with multiple root nodes in `return()`:

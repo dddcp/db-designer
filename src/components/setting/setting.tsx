@@ -306,12 +306,15 @@ const Setting: React.FC = () => {
    * 初始化Git仓库
    */
   const handleInitGitRepository = async () => {
+    setLoading(true);
     try {
-      // 这里需要实现Git仓库初始化逻辑
-      message.success('Git仓库初始化成功');
+      const result = await invoke<string>('init_git_repository');
+      message.success(result);
     } catch (error) {
       console.error('Git仓库初始化失败:', error);
-      message.error('Git仓库初始化失败');
+      message.error(`Git仓库初始化失败: ${error}`);
+    } finally {
+      setLoading(false);
     }
   };
 

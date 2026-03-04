@@ -4,37 +4,30 @@ use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 
+/// 获取应用安装目录下的 data 文件夹路径
+fn get_data_dir() -> PathBuf {
+    let exe_path = std::env::current_exe().expect("无法获取可执行文件路径");
+    let install_dir = exe_path.parent().expect("无法获取安装目录");
+    install_dir.join("data")
+}
+
 /// 获取数据库文件路径
 /// 优先使用环境变量 DB_DESIGNER_DATA_PATH
-/// 如果未设置环境变量，则使用用户主目录下的 db_designer_data_path 文件夹
+/// 默认使用应用安装目录下的 data/db_designer.db
 fn get_database_path() -> String {
-    // 检查环境变量
+    // 环境变量优先（保留开发模式灵活性）
     if let Ok(custom_path) = env::var("DB_DESIGNER_DATA_PATH") {
         let custom_path = PathBuf::from(custom_path);
         if custom_path.is_dir() {
-            // 如果环境变量指向的是目录，则在目录中创建数据库文件
             return custom_path.join("db_designer.db").to_string_lossy().to_string();
         } else {
-            // 如果环境变量指向的是文件路径，直接使用
             return custom_path.to_string_lossy().to_string();
         }
     }
-    
-    // 默认路径：用户主目录下的 db_designer_data_path 文件夹
-    let home_dir = match env::var("HOME") {
-        Ok(path) => PathBuf::from(path),
-        Err(_) => match env::var("USERPROFILE") {
-            Ok(path) => PathBuf::from(path),
-            Err(_) => {
-                // 如果无法获取用户主目录，使用当前目录
-                println!("警告：无法获取用户主目录，使用当前目录");
-                PathBuf::from(".")
-            }
-        }
-    };
-    
-    let default_path = home_dir.join("db_designer_data_path").join("db_designer.db");
-    default_path.to_string_lossy().to_string()
+
+    // 默认使用安装目录下的 data 文件夹
+    let data_dir = get_data_dir();
+    data_dir.join("db_designer.db").to_string_lossy().to_string()
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -217,7 +210,7 @@ fn init_database() -> Result<String, String> {
 fn get_projects() -> Result<Vec<Project>, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
     
-    let mut stmt = conn.prepare("SELECT * FROM t_proj ORDER BY updated_at DESC")
+    let mut stmt = conn.prepare("SELECT * FROM t_proj ORDER BY created_at")
         .map_err(|e| format!("Error preparing statement: {}", e))?;
     
     let project_iter = stmt.query_map([], |row| {
@@ -278,63 +271,155 @@ fn create_project(project: CreateProjectRequest) -> Result<Project, String> {
 // 获取Git分支信息
 #[tauri::command]
 fn get_git_info() -> Result<HashMap<String, String>, String> {
+    let data_dir = get_data_dir();
     let mut info = HashMap::new();
-    
+
     // 获取当前分支
     let output = std::process::Command::new("git")
+        .current_dir(&data_dir)
         .args(["branch", "--show-current"])
         .output()
         .map_err(|e| format!("Failed to execute git command: {}", e))?;
-    
+
     let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
     info.insert("branch".to_string(), branch);
-    
+
     // 获取最新提交信息
     let commit_output = std::process::Command::new("git")
+        .current_dir(&data_dir)
         .args(["log", "-1", "--pretty=format:%h %s"])
         .output()
         .map_err(|e| format!("Failed to execute git command: {}", e))?;
-    
+
     let commit = String::from_utf8_lossy(&commit_output.stdout).trim().to_string();
     info.insert("latest_commit".to_string(), commit);
-    
+
     Ok(info)
+}
+
+// 初始化Git仓库
+#[tauri::command]
+fn init_git_repository() -> Result<String, String> {
+    let data_dir = get_data_dir();
+
+    // 确保 data 目录存在
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("无法创建 data 目录: {}", e))?;
+
+    // 1. git init
+    let init_output = std::process::Command::new("git")
+        .current_dir(&data_dir)
+        .args(["init"])
+        .output()
+        .map_err(|e| format!("执行 git init 失败: {}", e))?;
+
+    if !init_output.status.success() {
+        let stderr = String::from_utf8_lossy(&init_output.stderr);
+        return Err(format!("git init 失败: {}", stderr));
+    }
+
+    // 2. 从 settings 读取 git 配置
+    let db_path = get_database_path();
+    let conn = Connection::open(&db_path)
+        .map_err(|e| format!("无法打开数据库: {}", e))?;
+
+    let get_setting = |key: &str| -> Option<String> {
+        conn.query_row(
+            "SELECT value FROM t_setting WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ).ok()
+    };
+
+    let platform = get_setting("git_platform").unwrap_or_default();
+    let token = get_setting("git_token").unwrap_or_default();
+    let repo = get_setting("git_repository").unwrap_or_default();
+
+    if token.is_empty() || repo.is_empty() {
+        return Err("请先在设置中配置 Git Token 和仓库名称".to_string());
+    }
+
+    // 3. 构造 remote URL
+    let remote_url = match platform.as_str() {
+        "gitlab" => format!("https://oauth2:{}@gitlab.com/{}.git", token, repo),
+        "gitee" => format!("https://{}@gitee.com/{}.git", token, repo),
+        _ => format!("https://{}@github.com/{}.git", token, repo), // 默认 GitHub
+    };
+
+    // 移除已有的 origin（忽略错误，可能不存在）
+    let _ = std::process::Command::new("git")
+        .current_dir(&data_dir)
+        .args(["remote", "remove", "origin"])
+        .output();
+
+    // 4. 添加 remote origin
+    let remote_output = std::process::Command::new("git")
+        .current_dir(&data_dir)
+        .args(["remote", "add", "origin", &remote_url])
+        .output()
+        .map_err(|e| format!("添加 remote 失败: {}", e))?;
+
+    if !remote_output.status.success() {
+        let stderr = String::from_utf8_lossy(&remote_output.stderr);
+        return Err(format!("添加 remote origin 失败: {}", stderr));
+    }
+
+    Ok("Git 仓库初始化成功".to_string())
 }
 
 // Git同步操作
 #[tauri::command]
-fn sync_git_repository() -> Result<String, String> {
-    // 添加所有更改
+fn sync_git_repository(commit_message: String) -> Result<String, String> {
+    let data_dir = get_data_dir();
+
+    // 1. git add db_designer.db
     let add_output = std::process::Command::new("git")
-        .args(["add", "."])
+        .current_dir(&data_dir)
+        .args(["add", "db_designer.db"])
         .output()
-        .map_err(|e| format!("Failed to add changes: {}", e))?;
-    
+        .map_err(|e| format!("执行 git add 失败: {}", e))?;
+
     if !add_output.status.success() {
-        return Err("Failed to add changes to git".to_string());
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(format!("git add 失败: {}", stderr));
     }
-    
-    // 提交更改
+
+    // 2. git commit
+    let msg = if commit_message.trim().is_empty() {
+        "Auto sync: database changes".to_string()
+    } else {
+        commit_message
+    };
+
     let commit_output = std::process::Command::new("git")
-        .args(["commit", "-m", "Auto sync: database changes"])
+        .current_dir(&data_dir)
+        .args(["commit", "-m", &msg])
         .output()
-        .map_err(|e| format!("Failed to commit changes: {}", e))?;
-    
+        .map_err(|e| format!("执行 git commit 失败: {}", e))?;
+
     if !commit_output.status.success() {
-        return Err("Failed to commit changes".to_string());
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        let stdout = String::from_utf8_lossy(&commit_output.stdout);
+        // "nothing to commit" 不算错误
+        if stdout.contains("nothing to commit") || stderr.contains("nothing to commit") {
+            return Ok("没有需要提交的更改".to_string());
+        }
+        return Err(format!("git commit 失败: {}", stderr));
     }
-    
-    // 推送到远程仓库
+
+    // 3. git push origin（推送到当前分支）
     let push_output = std::process::Command::new("git")
-        .args(["push", "origin", "main"])
+        .current_dir(&data_dir)
+        .args(["push", "origin", "HEAD"])
         .output()
-        .map_err(|e| format!("Failed to push changes: {}", e))?;
-    
+        .map_err(|e| format!("执行 git push 失败: {}", e))?;
+
     if !push_output.status.success() {
-        return Err("Failed to push changes to remote".to_string());
+        let stderr = String::from_utf8_lossy(&push_output.stderr);
+        return Err(format!("git push 失败: {}", stderr));
     }
-    
-    Ok("Git同步成功".to_string())
+
+    Ok("同步成功".to_string())
 }
 
 // 表结构数据结构
@@ -1812,6 +1897,7 @@ pub fn run() {
             create_project,
             get_git_info,
             sync_git_repository,
+            init_git_repository,
             get_project_tables,
             save_table_structure,
             get_table_columns,
