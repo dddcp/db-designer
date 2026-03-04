@@ -9,7 +9,6 @@ import {
   HistoryOutlined,
   PlusOutlined,
   RobotOutlined,
-  SettingOutlined,
   TableOutlined
 } from '@ant-design/icons';
 import { HolderOutlined } from '@ant-design/icons';
@@ -22,7 +21,7 @@ import {
   Layout,
   List,
   message,
-  Modal,
+  Drawer,
   Popconfirm,
   Select,
   Space,
@@ -44,8 +43,8 @@ import VersionTab from './version-tab';
 import SyncTab from './sync-tab';
 import AiDesignModal from './ai-design-modal';
 import type { GeneratedTable } from './ai-design-modal';
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay, defaultDropAnimationSideEffects } from '@dnd-kit/core';
-import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 const { Header, Content, Sider } = Layout;
@@ -72,7 +71,6 @@ const ProjectDetail: React.FC = () => {
   const [isTableModalVisible, setIsTableModalVisible] = useState(false);
   const [editingTable, setEditingTable] = useState<TableDef | null>(null);
   const [activeTab, setActiveTab] = useState('structure');
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [projectView, setProjectView] = useState('design');
   const [isAiModalVisible, setIsAiModalVisible] = useState(false);
 
@@ -383,24 +381,14 @@ const ProjectDetail: React.FC = () => {
 
   /**
    * 拖拽排序处理
-   *
-   * 说明：当用户结束一次拖拽操作时，根据拖拽的起止位置
-   * 重新计算字段列的顺序（order），并更新到当前选中表的列集合。
    */
-  const handleDragStart = (event: any) => {
-    setActiveId(event.active.id);
-  };
-
   const handleDragEnd = (event: any) => {
-    // 重置拖拽状态
-    setActiveId(null);
     const { active, over } = event;
 
     if (!selectedTable) return;
     if (!over) return;
     if (active.id === over.id) return;
 
-    // 计算旧索引与新索引（当前 columns 数组已按 order 排序）
     const oldIndex = selectedTable.columns.findIndex(col => col.id === active.id);
     const newIndex = selectedTable.columns.findIndex(col => col.id === over.id);
 
@@ -416,100 +404,51 @@ const ProjectDetail: React.FC = () => {
       columns: newColumns,
     };
 
-    setTables(tables.map(table => 
+    setTables(tables.map(table =>
       table.id === selectedTable.id ? updatedTable : table
     ));
     setSelectedTable(updatedTable);
   };
 
-  /**
-   * 拖拽传感器配置
-   *
-   * 说明：同时支持鼠标拖拽与键盘方向键移动，提升可访问性。
-   */
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 需要移动8px才激活拖拽，避免误触
+        distance: 5,
       },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
-  /**
-   * 可拖拽表格行组件
-   *
-   * 说明：替换 antd Table 的 tr，接入 dnd-kit 的 useSortable，
-   * 根据拖拽状态为行添加 transform/transition，实现平滑移动。
-   */
-  /**
-   * 拖拽时的幽灵元素组件
-   *
-   * 说明：在拖拽过程中显示一个半透明的预览元素，提升视觉反馈
-   * 修复：调整样式和布局，确保与鼠标位置对齐
-   */
-  const DragOverlayRow: React.FC<any> = ({ column }) => {
+  // 拖拽手柄 Context：将 listeners 从行组件传递给手柄图标
+  const DragHandleContext = React.createContext<any>({});
+
+  const DragHandle: React.FC = () => {
+    const { attributes, listeners } = React.useContext(DragHandleContext);
     return (
-      <div style={{
-        padding: '8px 12px',
-        backgroundColor: token.colorPrimaryBg,
-        border: `1px solid ${token.colorPrimaryBorder}`,
-        borderRadius: token.borderRadius,
-        boxShadow: token.boxShadow,
-        opacity: 0.95,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        minWidth: '250px',
-        maxWidth: '400px',
-        height: '40px',
-        position: 'relative',
-        transform: 'translate(-50%, -50%)', // 居中于鼠标位置
-        pointerEvents: 'none', // 确保不影响鼠标事件
-        zIndex: 9999
-      }}>
-        <HolderOutlined style={{ color: token.colorPrimary, fontSize: '14px' }} />
-        <span style={{ fontWeight: 500, fontSize: '14px' }}>{column.name}</span>
-        <span style={{ color: token.colorTextSecondary, fontSize: '12px' }}>
-          {column.displayName}
-        </span>
-        <Tag color="blue" style={{ marginLeft: 'auto', fontSize: '12px' }}>
-          {column.type}
-        </Tag>
-      </div>
+      <span
+        {...attributes}
+        {...listeners}
+        style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '4px 8px' }}
+      >
+        <HolderOutlined style={{ fontSize: 16, color: token.colorTextSecondary }} />
+      </span>
     );
   };
 
   const DraggableRow: React.FC<any> = (props) => {
     const id = props['data-row-key'];
-    const { setNodeRef, attributes, listeners, transform, transition, isDragging, isOver } = useSortable({ id });
+    const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
 
     const style = {
       ...props.style,
-      transform: CSS.Transform.toString(transform),
-      transition: transition || 'transform 200ms ease-in-out, box-shadow 200ms ease-in-out',
-      cursor: isDragging ? 'grabbing' : 'grab',
-      ...(isDragging ? { 
-        position: 'relative', 
-        zIndex: 999,
-        backgroundColor: token.colorPrimaryBg,
-        boxShadow: token.boxShadow,
-        opacity: 0.9
-      } : {}),
-      ...(isOver && !isDragging ? {
-        borderTop: `2px solid ${token.colorPrimary}`,
-        backgroundColor: token.colorFillSecondary
-      } : {}),
-      // 添加悬停效果
-      '&:hover': {
-        backgroundColor: token.colorFillAlter,
-      }
+      transform: CSS.Transform.toString(transform ? { ...transform, scaleY: 1 } : null),
+      transition,
+      ...(isDragging ? { opacity: 0.4, background: token.colorPrimaryBg } : {}),
     } as React.CSSProperties;
 
     return (
-      <tr ref={setNodeRef} style={style} {...attributes} {...listeners} {...props} />
+      <DragHandleContext.Provider value={{ attributes, listeners }}>
+        <tr ref={setNodeRef} style={style} {...props} />
+      </DragHandleContext.Provider>
     );
   };
 
@@ -710,11 +649,7 @@ const ProjectDetail: React.FC = () => {
       dataIndex: 'order',
       key: 'order',
       width: 60,
-      render: () => (
-        <span style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '8px' }}>
-          <HolderOutlined style={{ fontSize: '16px', color: token.colorTextSecondary }} />
-        </span>
-      ),
+      render: () => <DragHandle />,
     },
     {
       title: '字段名',
@@ -906,25 +841,6 @@ const ProjectDetail: React.FC = () => {
               {project.database_type === 'mysql' ? 'MySQL' : 'PostgreSQL'}
             </Tag>
           </Space>
-          
-          <Space>
-            <Tooltip title="生成SQL">
-              <Button 
-                type="text" 
-                icon={<CodeOutlined />}
-              >
-                生成SQL
-              </Button>
-            </Tooltip>
-            <Tooltip title="项目设置">
-              <Button 
-                type="text" 
-                icon={<SettingOutlined />}
-              >
-                设置
-              </Button>
-            </Tooltip>
-          </Space>
         </Header>
 
         {/* 项目级视图切换 */}
@@ -1087,19 +1003,9 @@ const ProjectDetail: React.FC = () => {
                                 保存表结构
                               </Button>
                             </div>
-                            <DndContext 
-                              sensors={sensors} 
-                              onDragStart={handleDragStart} 
+                            <DndContext
+                              sensors={sensors}
                               onDragEnd={handleDragEnd}
-                              // 修复：优化拖拽覆盖层的定位
-                              modifiers={[
-                                // 限制拖拽范围在可视区域内
-                                ({ transform }) => ({
-                                  ...transform,
-                                  x: transform.x,
-                                  y: transform.y,
-                                }),
-                              ]}
                             >
                               <SortableContext
                                 items={selectedTable.columns.map(col => col.id)}
@@ -1118,32 +1024,6 @@ const ProjectDetail: React.FC = () => {
                                   }}
                                 />
                               </SortableContext>
-                              <DragOverlay
-                                // 修复：优化拖拽覆盖层的定位和动画
-                                dropAnimation={{
-                                  sideEffects: defaultDropAnimationSideEffects({
-                                    styles: {
-                                      active: {
-                                        opacity: '0.5',
-                                      },
-                                    },
-                                  }),
-                                }}
-                                // 调整覆盖层位置，减少偏移
-                                modifiers={[
-                                  ({ transform }) => ({
-                                    ...transform,
-                                    x: transform.x - 100, // 调整X轴偏移
-                                    y: transform.y - 20,  // 调整Y轴偏移
-                                  }),
-                                ]}
-                              >
-                                {activeId ? (
-                                  <DragOverlayRow 
-                                    column={selectedTable.columns.find(col => col.id === activeId)} 
-                                  />
-                                ) : null}
-                              </DragOverlay>
                             </DndContext>
                           </div>
                         )
@@ -1198,10 +1078,10 @@ const ProjectDetail: React.FC = () => {
       </Layout>
 
       {/* 表编辑模态框 */}
-      <Modal
+      <Drawer
         title={editingTable ? '编辑表' : '新建表'}
         open={isTableModalVisible}
-        onCancel={() => setIsTableModalVisible(false)}
+        onClose={() => setIsTableModalVisible(false)}
         footer={null}
       >
         <Form
@@ -1236,7 +1116,7 @@ const ProjectDetail: React.FC = () => {
             </Space>
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
 
       {/* AI设计弹窗 */}
       <AiDesignModal

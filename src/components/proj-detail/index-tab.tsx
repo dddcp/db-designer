@@ -11,7 +11,7 @@ import {
   Tag, 
   message, 
   Popconfirm,
-  Modal,
+  Drawer,
   Form,
   Row,
   Col
@@ -313,10 +313,10 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       </Card>
 
       {/* 索引编辑模态框 */}
-      <Modal
+      <Drawer
         title={editingIndex ? '编辑索引' : '添加索引'}
         open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
+        onClose={() => setIsModalVisible(false)}
         footer={null}
         width={600}
       >
@@ -389,7 +389,7 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
             </Space>
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
     </div>
   );
 };

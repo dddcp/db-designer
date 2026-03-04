@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Modal,
+  Drawer,
   Input,
   Button,
   Table,
@@ -272,10 +272,10 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
   ];
 
   return (
-    <Modal
+    <Drawer
       title={<Space><RobotOutlined /> AI 自动设计表结构</Space>}
       open={open}
-      onCancel={handleClose}
+      onClose={handleClose}
       width={900}
       footer={
         generatedTables.length > 0 ? (
@@ -287,7 +287,6 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           </Space>
         ) : null
       }
-      destroyOnClose
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <div>
@@ -359,7 +358,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           />
         )}
       </Space>
-    </Modal>
+    </Drawer>
   );
 };
 

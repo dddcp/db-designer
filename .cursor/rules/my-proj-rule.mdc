@@ -1,8 +1,0 @@
----
-alwaysApply: true
----
-
-- 项目的主要功能在[README.md](../../README.md)中
-- 项目使用rust-tauri编写，后台代码使用rust写的
-- 项目启动使用的是`yarn run tauri dev`
-- 验证代码，我自己验证即可，不需要自动验证

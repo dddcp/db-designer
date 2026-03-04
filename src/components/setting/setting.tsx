@@ -20,7 +20,7 @@ import {
   Col,
   List,
   Tag,
-  Modal,
+  Drawer,
   Popconfirm
 } from 'antd';
 import { 
@@ -254,7 +254,7 @@ const Setting: React.FC = () => {
             name: values.name,
             type: values.type,
             host: values.host,
-            port: values.port,
+            port: Number(values.port),
             username: values.username,
             password: values.password,
             database: values.database
@@ -268,7 +268,7 @@ const Setting: React.FC = () => {
             name: values.name,
             type: values.type,
             host: values.host,
-            port: values.port,
+            port: Number(values.port),
             username: values.username,
             password: values.password,
             database: values.database
@@ -590,18 +590,15 @@ const Setting: React.FC = () => {
       </Content>
 
       {/* 数据库连接配置弹框 */}
-      <Modal
+      <Drawer
         title={editingConnection ? '编辑数据库连接' : '添加数据库连接'}
         open={isDbModalVisible}
-        onCancel={() => {
+        onClose={() => {
           setIsDbModalVisible(false);
           dbForm.resetFields();
           setEditingConnection(null);
         }}
         footer={null}
-        destroyOnClose
-        transitionName="ant-modal-zoom"
-        maskTransitionName="ant-modal-mask"
         width={600}
       >
         <Form
@@ -704,7 +701,7 @@ const Setting: React.FC = () => {
             </Space>
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
     </Layout>
   );
 };

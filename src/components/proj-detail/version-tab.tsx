@@ -7,7 +7,7 @@ import {
   Input,
   List,
   message,
-  Modal,
+  Drawer,
   Popconfirm,
   Select,
   Space,
@@ -277,12 +277,11 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       </Card>
 
       {/* 创建版本弹窗 */}
-      <Modal
+      <Drawer
         title="创建版本"
         open={isCreateModalVisible}
-        onCancel={() => setIsCreateModalVisible(false)}
+        onClose={() => setIsCreateModalVisible(false)}
         footer={null}
-        destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleCreateVersion}>
           <Form.Item
@@ -299,22 +298,24 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
             </Space>
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
 
       {/* SQL 查看弹窗 */}
-      <Modal
+      <Drawer
         title={sqlTitle}
         open={isSqlModalVisible}
-        onCancel={() => setIsSqlModalVisible(false)}
+        onClose={() => setIsSqlModalVisible(false)}
         width={800}
-        footer={[
-          <Button key="copy" icon={<CopyOutlined />} onClick={handleCopySQL}>
-            复制
-          </Button>,
-          <Button key="close" onClick={() => setIsSqlModalVisible(false)}>
-            关闭
-          </Button>,
-        ]}
+        footer={
+          <Space>
+            <Button icon={<CopyOutlined />} onClick={handleCopySQL}>
+              复制
+            </Button>
+            <Button onClick={() => setIsSqlModalVisible(false)}>
+              关闭
+            </Button>
+          </Space>
+        }
       >
         <TextArea
           value={sqlContent}
@@ -322,15 +323,19 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
           rows={20}
           style={{ fontFamily: 'monospace', fontSize: 13 }}
         />
-      </Modal>
+      </Drawer>
 
       {/* 升级脚本弹窗 */}
-      <Modal
+      <Drawer
         title="生成升级脚本"
         open={isUpgradeModalVisible}
-        onCancel={() => setIsUpgradeModalVisible(false)}
-        onOk={handleGenerateUpgradeSQL}
-        okText="生成"
+        onClose={() => setIsUpgradeModalVisible(false)}
+        footer={
+          <Space>
+            <Button type="primary" onClick={handleGenerateUpgradeSQL}>生成</Button>
+            <Button onClick={() => setIsUpgradeModalVisible(false)}>取消</Button>
+          </Space>
+        }
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
@@ -360,7 +365,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
             </Select>
           </div>
         </Space>
-      </Modal>
+      </Drawer>
     </div>
   );
 };

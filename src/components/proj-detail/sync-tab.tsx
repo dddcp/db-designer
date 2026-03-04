@@ -7,7 +7,7 @@ import {
   Empty,
   Input,
   message,
-  Modal,
+  Drawer,
   Select,
   Space,
   Table,
@@ -259,7 +259,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
         {/* 连接选择 */}
         <Space style={{ marginBottom: 24 }} size="middle">
           <Select
-            style={{ width: 300 }}
+            style={{ width: 500 }}
             placeholder="选择数据库连接"
             value={selectedConnectionId}
             onChange={(v) => { setSelectedConnectionId(v); setConnected(false); setDiffs([]); }}
@@ -343,19 +343,21 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       </Card>
 
       {/* SQL 查看弹窗 */}
-      <Modal
+      <Drawer
         title="同步脚本"
         open={isSqlModalVisible}
-        onCancel={() => setIsSqlModalVisible(false)}
+        onClose={() => setIsSqlModalVisible(false)}
         width={800}
-        footer={[
-          <Button key="copy" icon={<CopyOutlined />} onClick={handleCopySQL}>
-            复制
-          </Button>,
-          <Button key="close" onClick={() => setIsSqlModalVisible(false)}>
-            关闭
-          </Button>,
-        ]}
+        footer={
+          <Space>
+            <Button icon={<CopyOutlined />} onClick={handleCopySQL}>
+              复制
+            </Button>
+            <Button onClick={() => setIsSqlModalVisible(false)}>
+              关闭
+            </Button>
+          </Space>
+        }
       >
         <TextArea
           value={sqlContent}
@@ -363,7 +365,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
           rows={20}
           style={{ fontFamily: 'monospace', fontSize: 13 }}
         />
-      </Modal>
+      </Drawer>
     </div>
   );
 };

@@ -1,5 +1,4 @@
 import {
-  CodeOutlined,
   DatabaseOutlined,
   PlusOutlined,
   SettingOutlined,
@@ -10,14 +9,12 @@ import {
   Avatar,
   Button,
   Card,
-  Divider,
   Form,
   Input,
   Layout,
   List,
-  Modal,
+  Drawer,
   Popconfirm,
-  Select,
   Space,
   Tag,
   Tooltip,
@@ -28,9 +25,9 @@ import {
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../store/theme-context';
-import type { Project, GitInfo } from '../../types';
+import type { Project } from '../../types';
 
-const { Header, Content, Footer } = Layout;
+const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 const { useToken } = theme;
 
@@ -39,7 +36,6 @@ const { useToken } = theme;
  */
 const Main: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -62,9 +58,6 @@ const Main: React.FC = () => {
       
       // 加载项目列表
       await loadProjects();
-      
-      // 加载Git信息
-      await loadGitInfo();
     } catch (error) {
       console.error('初始化失败:', error);
       message.error('应用初始化失败');
@@ -85,28 +78,15 @@ const Main: React.FC = () => {
   };
 
   /**
-   * 加载Git信息
-   */
-  const loadGitInfo = async () => {
-    try {
-      const result = await invoke<GitInfo>('get_git_info');
-      setGitInfo(result);
-    } catch (error) {
-      console.error('加载Git信息失败:', error);
-    }
-  };
-
-  /**
    * 创建新项目
    */
-  const handleCreateProject = async (values: { name: string; description?: string; databaseType: 'mysql' | 'postgresql' }) => {
+  const handleCreateProject = async (values: { name: string; description?: string }) => {
     setLoading(true);
     try {
-      // 转换字段名以匹配后端期望的格式
       const projectData = {
         name: values.name,
         description: values.description,
-        database_type: values.databaseType
+        database_type: 'mysql'
       };
       await invoke('create_project', { project: projectData });
       message.success('项目创建成功');
@@ -128,7 +108,6 @@ const Main: React.FC = () => {
     message.loading({ content: '同步中...', key: 'sync', duration: 0 });
     try {
       await loadProjects();
-      await loadGitInfo();
       message.success({ content: '同步完成', key: 'sync' });
     } catch (error) {
       message.error({ content: '同步失败', key: 'sync' });
@@ -305,48 +284,19 @@ const Main: React.FC = () => {
             </Card>
           </div>
         </Content>
-
-        {/* 底部 */}
-        <Footer style={{ 
-          textAlign: 'center', 
-          background: isDarkMode ? '#141414' : '#fafafa',
-          borderTop: `1px solid ${token.colorBorderSecondary}`,
-          padding: '16px 24px'
-        }}>
-          <Space split={<Divider type="vertical" />}>
-            <Text type="secondary">
-              Database Designer ©2025
-            </Text>
-            {gitInfo && (
-              <>
-                <Space>
-                  <CodeOutlined />
-                  <Text type="secondary">分支: {gitInfo.branch || 'main'}</Text>
-                </Space>
-                <Text type="secondary" style={{ maxWidth: 300, textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                  最新提交: {gitInfo.latest_commit}
-                </Text>
-              </>
-            )}
-          </Space>
-        </Footer>
+    
 
         {/* 移除设置模态框 */}
 
         {/* 创建项目模态框 */}
-        <Modal
+        <Drawer
           title="创建新项目"
           open={isModalVisible}
-          onCancel={() => {
+          onClose={() => {
             setIsModalVisible(false);
             form.resetFields();
           }}
           footer={null}
-          destroyOnClose={true}
-          maskClosable={false}
-          centered={true}
-          transitionName="ant-fade"
-          maskTransitionName="ant-fade"
           width={520}
         >
           <Form
@@ -372,17 +322,6 @@ const Main: React.FC = () => {
               />
             </Form.Item>
 
-            <Form.Item
-              name="databaseType"
-              label="数据库类型"
-              rules={[{ required: true, message: '请选择数据库类型' }]}
-            >
-              <Select placeholder="请选择数据库类型">
-                <Select.Option value="mysql">MySQL</Select.Option>
-                <Select.Option value="postgresql">PostgreSQL</Select.Option>
-              </Select>
-            </Form.Item>
-            
             <Form.Item>
               <Space>
                 <Button 
@@ -403,7 +342,7 @@ const Main: React.FC = () => {
               </Space>
             </Form.Item>
           </Form>
-        </Modal>
+        </Drawer>
       </Layout>
   );
 };
