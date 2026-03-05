@@ -433,12 +433,30 @@ const Setting: React.FC = () => {
                       />
                     </Form.Item>
 
-                    <Form.Item
-                      name="repositoryName"
-                      label="仓库名称"
-                      rules={[{ required: true, message: '请输入仓库名称' }]}
-                    >
-                      <Input placeholder="请输入仓库名称，格式：用户名/仓库名" />
+                    <Form.Item noStyle dependencies={['platform']}>
+                      {({ getFieldValue }) => {
+                        const platform = getFieldValue('platform') || 'github';
+                        const placeholderMap: Record<string, string> = {
+                          github: '例如：octocat/my-repo',
+                          gitlab: '例如：myuser/my-project',
+                          gitee: '例如：myuser/my-repo',
+                        };
+                        const extraMap: Record<string, string> = {
+                          github: '格式：用户名/仓库名，如 octocat/hello-world',
+                          gitlab: '格式：用户名/仓库名，如 myuser/my-project',
+                          gitee: '格式：用户名/仓库名，如 myuser/my-repo',
+                        };
+                        return (
+                          <Form.Item
+                            name="repositoryName"
+                            label="仓库名称"
+                            rules={[{ required: true, message: '请输入仓库名称' }]}
+                            extra={extraMap[platform]}
+                          >
+                            <Input placeholder={placeholderMap[platform]} />
+                          </Form.Item>
+                        );
+                      }}
                     </Form.Item>
 
                     <Form.Item>
