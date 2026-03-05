@@ -35,6 +35,12 @@ pub fn get_project_tables(project_id: i32) -> Result<Vec<TableDef>, String> {
 #[tauri::command]
 pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<String, String> {
     let mut conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+    // 临时禁用外键约束，因为 t_index_field 引用了 t_column，
+    // 删除列再重新插入（ID不变）期间会触发外键检查
+    conn.execute_batch("PRAGMA foreign_keys = OFF")
+        .map_err(|e| format!("Error disabling foreign keys: {}", e))?;
+
     let tx = conn.transaction().map_err(|e| format!("Error starting transaction: {}", e))?;
 
     tx.execute(
@@ -57,6 +63,9 @@ pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<Colum
     }
 
     tx.commit().map_err(|e| format!("Error committing transaction: {}", e))?;
+
+    conn.execute_batch("PRAGMA foreign_keys = ON")
+        .map_err(|e| format!("Error enabling foreign keys: {}", e))?;
 
     Ok("表结构保存成功".to_string())
 }
