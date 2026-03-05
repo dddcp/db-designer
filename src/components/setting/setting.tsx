@@ -392,7 +392,7 @@ const Setting: React.FC = () => {
                     <Col span={12}>
                       <Text strong>版本</Text>
                       <div>
-                        <Text type="secondary">1.0.0</Text>
+                        <Text type="secondary">0.1.0</Text>
                       </div>
                     </Col>
                   </Row>
