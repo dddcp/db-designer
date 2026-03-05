@@ -22,8 +22,25 @@
 * 数据库比对，不同的可以一键导入到设计模型中
 
 
-## 项目打包
+# 项目截图
+
+## AI设计表结构
+
+![alt title](./doc/images/setting_ai.png)
+![alt title](./doc/images/ai_design.png)
+
+## 导出SQL
+![alt title](./doc/images/export_sql.png)
+
+## 数据库对比和同步
+
+![alt title](./doc/images/sync_db.png)
+
+
+
+
+# 项目打包
 
 ```bash
-yarn tauri build --verbose
+yarn tauri build
 ```
