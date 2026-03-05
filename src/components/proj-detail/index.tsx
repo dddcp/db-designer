@@ -5,6 +5,7 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  ExportOutlined,
   FileTextOutlined,
   HistoryOutlined,
   PlusOutlined,
@@ -40,6 +41,7 @@ import IndexTab from './index-tab';
 import InitDataTab from './init-data-tab';
 import VersionTab from './version-tab';
 import SyncTab from './sync-tab';
+import SqlExportTab from './sql-export-tab';
 import AiDesignModal from './ai-design-modal';
 import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -860,6 +862,10 @@ const ProjectDetail: React.FC = () => {
                 key: 'sync',
                 label: <span><CloudSyncOutlined /> 数据库同步</span>,
               },
+              {
+                key: 'sqlexport',
+                label: <span><ExportOutlined /> SQL导出</span>,
+              },
             ]}
           />
         </div>
@@ -1070,8 +1076,10 @@ const ProjectDetail: React.FC = () => {
         </Layout>
         ) : projectView === 'version' ? (
           <VersionTab project={project} />
-        ) : (
+        ) : projectView === 'sync' ? (
           <SyncTab project={project} />
+        ) : (
+          <SqlExportTab project={project} />
         )}
       </Layout>
 

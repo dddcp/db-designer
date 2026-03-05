@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
   Card,
+  Dropdown,
   Form,
   Input,
   List,
@@ -20,6 +21,7 @@ import {
   ExportOutlined,
   DiffOutlined,
   CopyOutlined,
+  DownOutlined,
 } from '@ant-design/icons';
 import type { Project } from '../../types';
 
@@ -108,13 +110,13 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
   };
 
   // 导出版本 SQL
-  const handleExportSQL = async (version: Version) => {
+  const handleExportSQL = async (version: Version, dbType: string) => {
     try {
       const sql = await invoke<string>('export_version_sql', {
         versionId: version.id,
-        databaseType: project.database_type,
+        databaseType: dbType,
       });
-      setSqlTitle(`版本 "${version.name}" 完整 SQL`);
+      setSqlTitle(`版本 "${version.name}" 完整 SQL (${dbType === 'mysql' ? 'MySQL' : 'PostgreSQL'})`);
       setSqlContent(sql);
       setIsSqlModalVisible(true);
     } catch (error) {
@@ -227,14 +229,19 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
           renderItem={(version) => (
             <List.Item
               actions={[
-                <Button
-                  type="link"
+                <Dropdown
                   key="export"
-                  icon={<ExportOutlined />}
-                  onClick={() => handleExportSQL(version)}
+                  menu={{
+                    items: [
+                      { key: 'mysql', label: 'MySQL', onClick: () => handleExportSQL(version, 'mysql') },
+                      { key: 'postgresql', label: 'PostgreSQL', onClick: () => handleExportSQL(version, 'postgresql') },
+                    ],
+                  }}
                 >
-                  导出SQL
-                </Button>,
+                  <Button type="link" icon={<ExportOutlined />}>
+                    导出SQL <DownOutlined />
+                  </Button>
+                </Dropdown>,
                 <Popconfirm
                   key="delete"
                   title="确定删除此版本吗？"

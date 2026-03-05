@@ -1160,9 +1160,8 @@ fn export_version_sql(version_id: i64, database_type: String) -> Result<String, 
                 if !dv.is_empty() { def.push_str(&format!(" DEFAULT '{}'", dv)); }
             }
             if is_mysql {
-                if let Some(c) = &col.comment {
-                    if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c)); }
-                }
+                let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
             }
             col_defs.push(def);
         }
@@ -1181,10 +1180,9 @@ fn export_version_sql(version_id: i64, database_type: String) -> Result<String, 
         } else {
             sql.push_str(&format!("COMMENT ON TABLE {} IS '{}';\n", table.name, table.display_name));
             for col in &table.columns {
-                if let Some(c) = &col.comment {
-                    if !c.is_empty() {
-                        sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table.name, col.name, c));
-                    }
+                let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                if !comment_text.is_empty() {
+                    sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table.name, col.name, comment_text));
                 }
             }
             sql.push('\n');
@@ -1352,7 +1350,129 @@ fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_type: S
     Ok(sql)
 }
 
-// 删除项目
+// 导出当前项目的完整 SQL（从实时数据，包含表结构、索引、初始数据）
+#[tauri::command]
+fn export_project_sql(project_id: i32, database_type: String) -> Result<String, String> {
+    let conn = init_db().map_err(|e| format!("Error: {}", e))?;
+    let is_mysql = database_type == "mysql";
+    let mut sql = String::new();
+
+    // 获取所有表
+    let mut table_stmt = conn.prepare("SELECT id, name, display_name FROM t_table WHERE project_id = ?1 ORDER BY created_at")
+        .map_err(|e| format!("Error: {}", e))?;
+    let tables: Vec<(String, String, String)> = table_stmt.query_map(params![project_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+    for (table_id, table_name, display_name) in &tables {
+        // 获取列
+        let mut col_stmt = conn.prepare(
+            "SELECT name, display_name, data_type, length, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
+        ).map_err(|e| format!("Error: {}", e))?;
+        let cols: Vec<(String, String, String, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?))
+        }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+        // CREATE TABLE
+        sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
+        sql.push_str(&format!("CREATE TABLE {} (\n", table_name));
+        let mut col_defs = Vec::new();
+        for (name, disp_name, dt, len, nullable, _pk, ai, dv, cmt) in &cols {
+            let mut def = format!("  {} {}", name, dt.to_uppercase());
+            if let Some(l) = len {
+                if ["varchar", "char", "decimal"].contains(&dt.to_lowercase().as_str()) {
+                    def.push_str(&format!("({})", l));
+                }
+            }
+            if !nullable { def.push_str(" NOT NULL"); }
+            if *ai {
+                if is_mysql { def.push_str(" AUTO_INCREMENT"); }
+                else { def.push_str(" GENERATED ALWAYS AS IDENTITY"); }
+            }
+            if let Some(d) = dv { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
+            if is_mysql {
+                let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
+                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
+            }
+            col_defs.push(def);
+        }
+        let pks: Vec<&str> = cols.iter().filter(|c| c.5).map(|c| c.0.as_str()).collect();
+        if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
+        sql.push_str(&col_defs.join(",\n"));
+        sql.push_str("\n);\n\n");
+
+        // 表注释 & 列注释
+        if is_mysql {
+            sql.push_str(&format!("ALTER TABLE {} COMMENT = '{}';\n\n", table_name, display_name));
+        } else {
+            sql.push_str(&format!("COMMENT ON TABLE {} IS '{}';\n", table_name, display_name));
+            for (name, disp_name, _, _, _, _, _, _, cmt) in &cols {
+                let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
+                if !comment_text.is_empty() {
+                    sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table_name, name, comment_text));
+                }
+            }
+            sql.push('\n');
+        }
+
+        // 索引
+        let mut idx_stmt = conn.prepare("SELECT id, name, index_type FROM t_index WHERE table_id = ?1")
+            .map_err(|e| format!("Error: {}", e))?;
+        let indexes: Vec<(String, String, String)> = idx_stmt.query_map(params![table_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+        for (idx_id, idx_name, idx_type) in &indexes {
+            let mut field_stmt = conn.prepare("SELECT column_id FROM t_index_field WHERE index_id = ?1 ORDER BY sort_order")
+                .map_err(|e| format!("Error: {}", e))?;
+            let col_ids: Vec<String> = field_stmt.query_map(params![idx_id], |row| row.get(0))
+                .map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+            // Resolve column IDs to names
+            let mut name_stmt = conn.prepare("SELECT name FROM t_column WHERE id = ?1")
+                .map_err(|e| format!("Error: {}", e))?;
+            let resolved_names: Vec<String> = col_ids.iter().map(|cid| {
+                name_stmt.query_row(params![cid], |row| row.get(0)).unwrap_or_else(|_| "?".to_string())
+            }).collect();
+            let unique_str = if idx_type == "unique" { "UNIQUE " } else { "" };
+            sql.push_str(&format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, table_name, resolved_names.join(", ")));
+        }
+        if !indexes.is_empty() { sql.push('\n'); }
+
+        // 初始数据
+        let mut data_stmt = conn.prepare("SELECT data FROM t_init_data WHERE table_id = ?1 ORDER BY id")
+            .map_err(|e| format!("Error: {}", e))?;
+        let init_data: Vec<String> = data_stmt.query_map(params![table_id], |row| row.get(0))
+            .map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+        if !init_data.is_empty() && !cols.is_empty() {
+            let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
+            sql.push_str(&format!("-- {} 初始数据\n", display_name));
+            for data_json in &init_data {
+                if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
+                    let values: Vec<String> = col_names.iter().map(|cn| {
+                        match data.get(*cn) {
+                            Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                            Some(serde_json::Value::Number(n)) => n.to_string(),
+                            Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
+                            Some(serde_json::Value::Null) | None => "NULL".into(),
+                            Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                        }
+                    }).collect();
+                    sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", table_name, col_names.join(", "), values.join(", ")));
+                }
+            }
+            sql.push('\n');
+        }
+    }
+
+    if sql.is_empty() {
+        sql.push_str("-- 项目中暂无表结构\n");
+    }
+
+    Ok(sql)
+}
+
+
 #[tauri::command]
 fn delete_project(id: i32) -> Result<String, String> {
     let mut conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
@@ -1923,7 +2043,8 @@ pub fn run() {
             connect_database,
             get_remote_tables,
             compare_tables,
-            generate_sync_sql
+            generate_sync_sql,
+            export_project_sql
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
