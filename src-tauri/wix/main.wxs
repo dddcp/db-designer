@@ -2,7 +2,7 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product 
     Id="*" 
-    Name="数据库设计器" 
+    Name="数据库模型设计器" 
     Language="1033" 
     Version="1.0.0" 
     Manufacturer="DCP" 
@@ -22,10 +22,10 @@
     <!-- 安装目录 -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="数据库设计器" />
+        <Directory Id="INSTALLFOLDER" Name="数据库模型设计器" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="数据库设计器" />
+        <Directory Id="ApplicationProgramsFolder" Name="数据库模型设计器" />
       </Directory>
       <Directory Id="DesktopFolder" Name="Desktop" />
     </Directory>
@@ -42,7 +42,7 @@
       <Component Id="ApplicationShortcut" Guid="*">
         <Shortcut 
           Id="ApplicationStartMenuShortcut"
-          Name="数据库设计器"
+          Name="数据库模型设计器"
           Description="数据库设计工具"
           Target="[INSTALLFOLDER]db-designer.exe"
           WorkingDirectory="INSTALLFOLDER"
@@ -50,7 +50,7 @@
         <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
         <RegistryValue 
           Root="HKCU" 
-          Key="Software\DCP\数据库设计器" 
+          Key="Software\DCP\数据库模型设计器" 
           Name="installed" 
           Type="integer" 
           Value="1" 
@@ -63,14 +63,14 @@
       <Component Id="DesktopShortcut" Guid="*">
         <Shortcut 
           Id="DesktopShortcut"
-          Name="数据库设计器"
+          Name="数据库模型设计器"
           Description="数据库设计工具"
           Target="[INSTALLFOLDER]db-designer.exe"
           WorkingDirectory="INSTALLFOLDER"
           Icon="icon.ico" />
         <RegistryValue 
           Root="HKCU" 
-          Key="Software\DCP\数据库设计器" 
+          Key="Software\DCP\数据库模型设计器" 
           Name="desktop_shortcut" 
           Type="integer" 
           Value="1" 
@@ -79,7 +79,7 @@
     </DirectoryRef>
     
     <!-- 功能定义 -->
-    <Feature Id="MainFeature" Title="数据库设计器" Level="1">
+    <Feature Id="MainFeature" Title="数据库模型设计器" Level="1">
       <ComponentRef Id="DatabaseDesignerExe" />
       <ComponentRef Id="ApplicationShortcut" />
       <ComponentRef Id="DesktopShortcut" />

@@ -182,7 +182,7 @@ const Main: React.FC = () => {
           <Space>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
             <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
-              数据库设计器
+              数据库模型设计器
             </Title>
           </Space>
           

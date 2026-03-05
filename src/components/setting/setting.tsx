@@ -386,7 +386,7 @@ const Setting: React.FC = () => {
                     <Col span={12}>
                       <Text strong>应用名称</Text>
                       <div>
-                        <Text type="secondary">数据库设计器</Text>
+                        <Text type="secondary">数据库模型设计器</Text>
                       </div>
                     </Col>
                     <Col span={12}>
