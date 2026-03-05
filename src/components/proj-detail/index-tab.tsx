@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Card, 
-  Button, 
-  Space, 
-  Typography, 
-  Table, 
-  Input, 
-  Select, 
-  Tag, 
-  message, 
+import {
+  Card,
+  Button,
+  Space,
+  Typography,
+  Table,
+  Input,
+  Select,
+  Tag,
+  message,
   Popconfirm,
   Drawer,
   Form,
   Row,
   Col
 } from 'antd';
-import { 
-  PlusOutlined, 
+import {
+  PlusOutlined,
   DeleteOutlined,
   EditOutlined
 } from '@ant-design/icons';
@@ -31,6 +31,16 @@ interface IndexTabProps {
   selectedTable: TableDef | null;
 }
 
+// 后端索引数据结构
+interface BackendIndexDef {
+  id: string;
+  table_id: string;
+  name: string;
+  index_type: string;
+  comment?: string;
+  fields: Array<{ column_id: string; sort_order: number }>;
+}
+
 /**
  * 索引管理组件
  */
@@ -39,16 +49,6 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<IndexDef | null>(null);
   const [form] = Form.useForm();
-
-  // 后端索引数据结构
-  interface BackendIndexDef {
-    id: string;
-    table_id: string;
-    name: string;
-    index_type: string;
-    comment?: string;
-    fields: Array<{ column_id: string; sort_order: number }>;
-  }
 
   // 加载索引
   useEffect(() => {
@@ -65,7 +65,6 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       const backendIndexes = await invoke<BackendIndexDef[]>('get_table_indexes', {
         tableId: selectedTable.id
       });
-      // 将后端数据转换为前端格式：column_id -> column name
       const frontendIndexes: IndexDef[] = backendIndexes.map(idx => ({
         id: idx.id,
         name: idx.name,
@@ -81,6 +80,33 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       setIndexes(frontendIndexes);
     } catch (error) {
       console.error('加载索引失败:', error);
+    }
+  };
+
+  /**
+   * 将索引列表保存到后端
+   */
+  const saveIndexesToBackend = async (newIndexes: IndexDef[]) => {
+    if (!selectedTable) return;
+    try {
+      const indexesData = newIndexes.map(index => ({
+        id: index.id,
+        table_id: selectedTable.id,
+        name: index.name,
+        index_type: index.type,
+        comment: index.comment,
+        fields: index.columns.map((columnName, i) => ({
+          column_id: selectedTable.columns.find(col => col.name === columnName)?.id || '',
+          sort_order: i + 1
+        }))
+      }));
+      await invoke('save_table_indexes', {
+        tableId: selectedTable.id,
+        indexes: indexesData,
+      });
+    } catch (error) {
+      console.error('保存索引失败:', error);
+      message.error('保存索引失败');
     }
   };
 
@@ -112,86 +138,47 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
   };
 
   /**
-   * 删除索引
+   * 删除索引（直接保存）
    */
-  const handleDeleteIndex = (indexId: string) => {
-    setIndexes(indexes.filter(index => index.id !== indexId));
+  const handleDeleteIndex = async (indexId: string) => {
+    const newIndexes = indexes.filter(index => index.id !== indexId);
+    setIndexes(newIndexes);
+    await saveIndexesToBackend(newIndexes);
     message.success('索引删除成功');
   };
 
   /**
-   * 保存索引
+   * 新建/编辑索引后保存（直接保存到后端）
    */
   const handleSaveIndex = async (values: any) => {
-    // 验证字段是否存在
-    const invalidColumns = values.columns.filter((columnName: string) => 
+    const invalidColumns = values.columns.filter((columnName: string) =>
       !selectedTable?.columns.some(col => col.name === columnName)
     );
-    
+
     if (invalidColumns.length > 0) {
       message.error(`以下字段不存在: ${invalidColumns.join(', ')}`);
       return;
     }
-    
+
+    let newIndexes: IndexDef[];
     if (editingIndex) {
-      // 编辑现有索引
-      setIndexes(indexes.map(index => 
-        index.id === editingIndex.id 
+      newIndexes = indexes.map(index =>
+        index.id === editingIndex.id
           ? { ...index, ...values }
           : index
-      ));
-      message.success('索引更新成功');
+      );
     } else {
-      // 创建新索引
       const newIndex: IndexDef = {
         id: Date.now().toString(),
         ...values
       };
-      setIndexes([...indexes, newIndex]);
-      message.success('索引创建成功');
+      newIndexes = [...indexes, newIndex];
     }
+
+    setIndexes(newIndexes);
     setIsModalVisible(false);
-  };
-
-  /**
-   * 保存所有索引
-   */
-  const handleSaveIndexes = async () => {
-    if (!selectedTable) {
-      message.warning('请先选择一个表');
-      return;
-    }
-
-    if (indexes.length === 0) {
-      message.warning('没有需要保存的索引');
-      return;
-    }
-
-    try {
-      // 转换数据结构以匹配后端接口
-      const indexesData = indexes.map(index => ({
-        id: index.id,
-        table_id: selectedTable.id,
-        name: index.name,
-        index_type: index.type,
-        comment: index.comment,
-        fields: index.columns.map((columnName, index) => ({
-          column_id: selectedTable.columns.find(col => col.name === columnName)?.id || '',
-          sort_order: index + 1
-        }))
-      }));
-
-      // 调用后端接口保存索引
-      await invoke('save_table_indexes', {
-        tableId: selectedTable.id,
-        indexes: indexesData,
-      });
-
-      message.success('索引保存成功');
-    } catch (error) {
-      console.error('保存索引失败:', error);
-      message.error('保存索引失败');
-    }
+    await saveIndexesToBackend(newIndexes);
+    message.success(editingIndex ? '索引更新成功' : '索引创建成功');
   };
 
   // 索引列定义
@@ -240,8 +227,8 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       width: 120,
       render: (record: IndexDef) => (
         <Space>
-          <Button 
-            type="link" 
+          <Button
+            type="link"
             icon={<EditOutlined />}
             size="small"
             onClick={() => handleEditIndex(record)}
@@ -252,9 +239,9 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
             title="确定删除此索引吗？"
             onConfirm={() => handleDeleteIndex(record.id)}
           >
-            <Button 
-              type="link" 
-              danger 
+            <Button
+              type="link"
+              danger
               icon={<DeleteOutlined />}
               size="small"
             >
@@ -279,23 +266,15 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Title level={4} style={{ margin: 0 }}>索引管理</Title>
-          <Space>
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />}
-              onClick={handleAddIndex}
-            >
-              添加索引
-            </Button>
-            <Button 
-              type="primary" 
-              onClick={handleSaveIndexes}
-            >
-              保存
-            </Button>
-          </Space>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAddIndex}
+          >
+            添加索引
+          </Button>
         </div>
-        
+
         <Table
           dataSource={indexes}
           columns={indexColumns}
@@ -372,12 +351,12 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
             name="comment"
             label="说明"
           >
-            <Input.TextArea 
-              placeholder="请输入索引说明" 
+            <Input.TextArea
+              placeholder="请输入索引说明"
               rows={3}
             />
           </Form.Item>
-          
+
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">

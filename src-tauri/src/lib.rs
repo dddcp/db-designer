@@ -309,6 +309,7 @@ fn init_git_repository() -> Result<String, String> {
     // 1. git init
     let init_output = std::process::Command::new("git")
         .current_dir(&data_dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
         .args(["init"])
         .output()
         .map_err(|e| format!("执行 git init 失败: {}", e))?;
@@ -339,22 +340,28 @@ fn init_git_repository() -> Result<String, String> {
         return Err("请先在设置中配置 Git Token 和仓库名称".to_string());
     }
 
-    // 3. 构造 remote URL
+    // 3. 构造 remote URL（Gitee 格式: https://用户名:token@gitee.com/repo.git）
     let remote_url = match platform.as_str() {
         "gitlab" => format!("https://oauth2:{}@gitlab.com/{}.git", token, repo),
-        "gitee" => format!("https://{}@gitee.com/{}.git", token, repo),
+        "gitee" => {
+            // Gitee: repo 格式为 "username/reponame"，用户名从 repo 中提取
+            let username = repo.split('/').next().unwrap_or("");
+            format!("https://{}:{}@gitee.com/{}.git", username, token, repo)
+        },
         _ => format!("https://{}@github.com/{}.git", token, repo), // 默认 GitHub
     };
 
     // 移除已有的 origin（忽略错误，可能不存在）
     let _ = std::process::Command::new("git")
         .current_dir(&data_dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
         .args(["remote", "remove", "origin"])
         .output();
 
     // 4. 添加 remote origin
     let remote_output = std::process::Command::new("git")
         .current_dir(&data_dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
         .args(["remote", "add", "origin", &remote_url])
         .output()
         .map_err(|e| format!("添加 remote 失败: {}", e))?;
@@ -372,9 +379,17 @@ fn init_git_repository() -> Result<String, String> {
 fn sync_git_repository(commit_message: String) -> Result<String, String> {
     let data_dir = get_data_dir();
 
+    // 禁用交互式凭证提示，防止界面卡住
+    let git_env = [
+        ("GIT_TERMINAL_PROMPT", "0"),
+        ("GIT_ASKPASS", ""),
+        ("SSH_ASKPASS", ""),
+    ];
+
     // 1. git add db_designer.db
     let add_output = std::process::Command::new("git")
         .current_dir(&data_dir)
+        .envs(git_env.iter().copied())
         .args(["add", "db_designer.db"])
         .output()
         .map_err(|e| format!("执行 git add 失败: {}", e))?;
@@ -393,6 +408,7 @@ fn sync_git_repository(commit_message: String) -> Result<String, String> {
 
     let commit_output = std::process::Command::new("git")
         .current_dir(&data_dir)
+        .envs(git_env.iter().copied())
         .args(["commit", "-m", &msg])
         .output()
         .map_err(|e| format!("执行 git commit 失败: {}", e))?;
@@ -407,10 +423,11 @@ fn sync_git_repository(commit_message: String) -> Result<String, String> {
         return Err(format!("git commit 失败: {}", stderr));
     }
 
-    // 3. git push origin（推送到当前分支）
+    // 3. git push — 使用 remote URL 中已嵌入的 token 认证，无需额外输入密码
     let push_output = std::process::Command::new("git")
         .current_dir(&data_dir)
-        .args(["push", "origin", "HEAD"])
+        .envs(git_env.iter().copied())
+        .args(["push", "-u", "origin", "HEAD"])
         .output()
         .map_err(|e| format!("执行 git push 失败: {}", e))?;
 

@@ -73,6 +73,7 @@ const Setting: React.FC = () => {
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [isDbModalVisible, setIsDbModalVisible] = useState(false);
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | null>(null);
+  const [gitConfigSaved, setGitConfigSaved] = useState(false);
 
   // 加载设置
   useEffect(() => {
@@ -104,6 +105,11 @@ const Setting: React.FC = () => {
         token: gitToken,
         repositoryName: gitRepo
       });
+
+      // 如果已有完整的 git 配置，标记为已保存
+      if (gitToken && gitRepo) {
+        setGitConfigSaved(true);
+      }
 
       // 加载AI配置
       aiForm.setFieldsValue({
@@ -171,6 +177,7 @@ const Setting: React.FC = () => {
       });
       
       message.success('Git配置保存成功');
+      setGitConfigSaved(true);
     } catch (error) {
       console.error('保存Git配置失败:', error);
       message.error('保存Git配置失败');
@@ -448,6 +455,7 @@ const Setting: React.FC = () => {
                           type="default"
                           icon={<CodeOutlined />}
                           onClick={handleInitGitRepository}
+                          disabled={!gitConfigSaved}
                         >
                           初始化仓库
                         </Button>
