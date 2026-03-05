@@ -6,7 +6,7 @@
 
 AI 智能设计表结构 / 多数据库支持 / 版本管理 / 结构同步
 
-[![Release](https://img.shields.io/github/v/release/your-username/db-designer?style=flat-square)](https://github.com/your-username/db-designer/releases)
+[![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)]()
 [![Free](https://img.shields.io/badge/pricing-free-brightgreen?style=flat-square)]()
 
@@ -54,7 +54,7 @@ AI 智能设计表结构 / 多数据库支持 / 版本管理 / 结构同步
 
 ## 安装
 
-前往 [Releases](https://github.com/your-username/db-designer/releases) 下载对应平台安装包：
+前往 [Releases](https://github.com/dddcp/db-designer/releases) 下载对应平台安装包：
 
 | 平台 | 格式 |
 |------|------|
