@@ -856,7 +856,7 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <>
-      <Layout style={{ minHeight: '100vh' }}>
+      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
         {/* 头部 */}
         <Header 
           style={{ 
@@ -915,15 +915,18 @@ const ProjectDetail: React.FC = () => {
         {projectView === 'design' ? (
         <Layout>
           {/* 左侧边栏 - 表列表 */}
-          <Sider 
-            width={300} 
-            style={{ 
+          <Sider
+            width={300}
+            style={{
               background: isDarkMode ? '#141414' : '#fff',
-              borderRight: `1px solid ${token.colorBorderSecondary}`
+              borderRight: `1px solid ${token.colorBorderSecondary}`,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            <div style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
                 <Title level={4} style={{ margin: 0 }}>表列表</Title>
                 <Space>
                   <Button
@@ -943,7 +946,8 @@ const ProjectDetail: React.FC = () => {
                   </Button>
                 </Space>
               </div>
-              
+
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <List
                 dataSource={tables}
                 renderItem={(table) => (
@@ -1002,11 +1006,12 @@ const ProjectDetail: React.FC = () => {
                   )
                 }}
               />
+              </div>
             </div>
           </Sider>
 
           {/* 右侧内容 - 表设计 */}
-          <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5' }}>
+          <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5', overflowY: 'auto' }}>
             <div style={{ maxWidth: '100%', margin: '0 auto' }}>
               {selectedTable ? (
                 <Card>
@@ -1117,11 +1122,17 @@ const ProjectDetail: React.FC = () => {
           </Content>
         </Layout>
         ) : projectView === 'version' ? (
-          <VersionTab project={project} />
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <VersionTab project={project} />
+          </div>
         ) : projectView === 'sync' ? (
-          <SyncTab project={project} />
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <SyncTab project={project} />
+          </div>
         ) : (
-          <SqlExportTab project={project} />
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <SqlExportTab project={project} />
+          </div>
         )}
       </Layout>
 
