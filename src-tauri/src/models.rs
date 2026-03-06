@@ -166,12 +166,21 @@ pub struct RemoteColumn {
     pub comment: Option<String>,
 }
 
+// 远程索引信息
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteIndex {
+    pub name: String,
+    pub index_type: String,        // "unique", "normal", "fulltext"
+    pub column_names: Vec<String>,
+}
+
 // 远程表信息
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RemoteTable {
     pub name: String,
     pub comment: Option<String>,
     pub columns: Vec<RemoteColumn>,
+    pub indexes: Vec<RemoteIndex>,
 }
 
 // 表差异
@@ -181,6 +190,7 @@ pub struct TableDiff {
     pub status: String,
     pub local_display_name: Option<String>,
     pub column_diffs: Vec<ColumnDiff>,
+    pub index_diffs: Vec<IndexDiff>,
 }
 
 // 列差异
@@ -190,5 +200,17 @@ pub struct ColumnDiff {
     pub status: String,
     pub local_type: Option<String>,
     pub remote_type: Option<String>,
+    pub detail: Option<String>,
+}
+
+// 索引差异
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct IndexDiff {
+    pub index_name: String,
+    pub status: String,
+    pub local_type: Option<String>,
+    pub remote_type: Option<String>,
+    pub local_columns: Option<String>,
+    pub remote_columns: Option<String>,
     pub detail: Option<String>,
 }
