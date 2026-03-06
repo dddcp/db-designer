@@ -284,6 +284,7 @@ const ProjectDetail: React.FC = () => {
           display_name: column.displayName,
           data_type: column.type,
           length: column.length || null,
+          scale: column.scale || null,
           nullable: column.nullable,
           primary_key: column.primaryKey,
           auto_increment: column.autoIncrement,
@@ -547,6 +548,7 @@ const ProjectDetail: React.FC = () => {
         display_name: column.displayName,
         data_type: column.type,
         length: column.length || null,
+        scale: column.scale || null,
         nullable: column.nullable,
         primary_key: column.primaryKey,
         auto_increment: column.autoIncrement,
@@ -698,7 +700,7 @@ const ProjectDetail: React.FC = () => {
               </Option>
             ))}
           </Select>
-          {['varchar', 'char', 'decimal'].includes(type) && (
+          {['varchar', 'char'].includes(type) && (
             <Input
               value={record.length}
               onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
@@ -707,6 +709,26 @@ const ProjectDetail: React.FC = () => {
               style={{ width: 80 }}
               type="number"
             />
+          )}
+          {type === 'decimal' && (
+            <>
+              <Input
+                value={record.length}
+                onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
+                placeholder="精度"
+                size="small"
+                style={{ width: 70 }}
+                type="number"
+              />
+              <Input
+                value={record.scale}
+                onChange={(e) => handleSaveColumn(record.id, 'scale', parseInt(e.target.value) || undefined)}
+                placeholder="小数位"
+                size="small"
+                style={{ width: 70 }}
+                type="number"
+              />
+            </>
           )}
         </Space>
       ),

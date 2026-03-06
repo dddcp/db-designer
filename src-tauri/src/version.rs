@@ -46,7 +46,7 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
 
     for (table_id, table_name, display_name, comment) in &tables {
         // 2. 获取列
-        let mut col_stmt = conn.prepare("SELECT id, table_id, name, display_name, data_type, length, nullable, primary_key, auto_increment, default_value, comment, sort_order FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+        let mut col_stmt = conn.prepare("SELECT id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
             .map_err(|e| format!("Error preparing column stmt: {}", e))?;
         let columns: Vec<ColumnDef> = col_stmt.query_map(params![table_id], |row| {
             Ok(ColumnDef {
@@ -56,12 +56,13 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
                 display_name: row.get(3)?,
                 data_type: row.get(4)?,
                 length: row.get(5)?,
-                nullable: row.get(6)?,
-                primary_key: row.get(7)?,
-                auto_increment: row.get(8)?,
-                default_value: row.get(9)?,
-                comment: row.get(10)?,
-                sort_order: row.get(11)?,
+                scale: row.get(6)?,
+                nullable: row.get(7)?,
+                primary_key: row.get(8)?,
+                auto_increment: row.get(9)?,
+                default_value: row.get(10)?,
+                comment: row.get(11)?,
+                sort_order: row.get(12)?,
             })
         }).map_err(|e| format!("Error querying columns: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error reading columns: {}", e))?;
@@ -169,7 +170,10 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         for col in &table.columns {
             let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
             if let Some(len) = col.length {
-                if ["varchar", "char", "decimal"].contains(&col.data_type.to_lowercase().as_str()) {
+                if col.data_type.to_lowercase() == "decimal" {
+                    let s = col.scale.unwrap_or(0);
+                    def.push_str(&format!("({},{})", len, s));
+                } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
                     def.push_str(&format!("({})", len));
                 }
             }
@@ -276,7 +280,10 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             for col in &new_table.columns {
                 let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
                 if let Some(len) = col.length {
-                    if ["varchar", "char", "decimal"].contains(&col.data_type.to_lowercase().as_str()) {
+                    if col.data_type.to_lowercase() == "decimal" {
+                        let s = col.scale.unwrap_or(0);
+                        def.push_str(&format!("({},{})", len, s));
+                    } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
                         def.push_str(&format!("({})", len));
                     }
                 }
@@ -316,7 +323,10 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 if !old_cols.contains_key(&col.name) {
                     let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
                     if let Some(len) = col.length {
-                        if ["varchar", "char", "decimal"].contains(&col.data_type.to_lowercase().as_str()) {
+                        if col.data_type.to_lowercase() == "decimal" {
+                            let s = col.scale.unwrap_or(0);
+                            def.push_str(&format!("({},{})", len, s));
+                        } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
                             def.push_str(&format!("({})", len));
                         }
                     }
@@ -336,11 +346,14 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             for col in &new_table.columns {
                 if let Some(old_col) = old_cols.get(&col.name) {
-                    let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.nullable != old_col.nullable;
+                    let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.scale != old_col.scale || col.nullable != old_col.nullable;
                     if type_changed {
                         let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
                         if let Some(len) = col.length {
-                            if ["varchar", "char", "decimal"].contains(&col.data_type.to_lowercase().as_str()) {
+                            if col.data_type.to_lowercase() == "decimal" {
+                                let s = col.scale.unwrap_or(0);
+                                def.push_str(&format!("({},{})", len, s));
+                            } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
                                 def.push_str(&format!("({})", len));
                             }
                         }
@@ -383,19 +396,22 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
     for (table_id, table_name, display_name) in &tables {
         let mut col_stmt = conn.prepare(
-            "SELECT name, display_name, data_type, length, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
+            "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
         ).map_err(|e| format!("Error: {}", e))?;
-        let cols: Vec<(String, String, String, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?))
+        let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?))
         }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
         sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
         sql.push_str(&format!("CREATE TABLE {} (\n", table_name));
         let mut col_defs = Vec::new();
-        for (name, disp_name, dt, len, nullable, _pk, ai, dv, cmt) in &cols {
+        for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
             let mut def = format!("  {} {}", name, dt.to_uppercase());
             if let Some(l) = len {
-                if ["varchar", "char", "decimal"].contains(&dt.to_lowercase().as_str()) {
+                if dt.to_lowercase() == "decimal" {
+                    let s = scale.unwrap_or(0);
+                    def.push_str(&format!("({},{})", l, s));
+                } else if ["varchar", "char"].contains(&dt.to_lowercase().as_str()) {
                     def.push_str(&format!("({})", l));
                 }
             }
@@ -411,7 +427,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             }
             col_defs.push(def);
         }
-        let pks: Vec<&str> = cols.iter().filter(|c| c.5).map(|c| c.0.as_str()).collect();
+        let pks: Vec<&str> = cols.iter().filter(|c| c.6).map(|c| c.0.as_str()).collect();
         if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
         sql.push_str(&col_defs.join(",\n"));
         sql.push_str("\n);\n\n");
@@ -420,7 +436,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             sql.push_str(&format!("ALTER TABLE {} COMMENT = '{}';\n\n", table_name, display_name));
         } else {
             sql.push_str(&format!("COMMENT ON TABLE {} IS '{}';\n", table_name, display_name));
-            for (name, disp_name, _, _, _, _, _, _, cmt) in &cols {
+            for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
                 let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
                 if !comment_text.is_empty() {
                     sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table_name, name, comment_text));

@@ -118,8 +118,11 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     const columnDefinitions = selectedTable.columns.map(column => {
       let definition = `  ${column.name} ${column.type.toUpperCase()}`;
 
-      if (column.length && ['varchar', 'char', 'decimal'].includes(column.type)) {
+      if (column.length && ['varchar', 'char'].includes(column.type)) {
         definition += `(${column.length})`;
+      }
+      if (column.length && column.type === 'decimal') {
+        definition += `(${column.length},${column.scale || 0})`;
       }
       if (!column.nullable) {
         definition += ' NOT NULL';
@@ -196,6 +199,9 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
 
       if (column.length && ['varchar', 'char'].includes(column.type)) {
         definition += `(${column.length})`;
+      }
+      if (column.length && column.type === 'decimal') {
+        definition += `(${column.length},${column.scale || 0})`;
       }
       if (!column.nullable) {
         definition += ' NOT NULL';

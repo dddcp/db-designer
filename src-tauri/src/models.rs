@@ -40,6 +40,7 @@ pub struct ColumnDef {
     pub display_name: String,
     pub data_type: String,
     pub length: Option<i32>,
+    pub scale: Option<i32>,
     pub nullable: bool,
     pub primary_key: bool,
     pub auto_increment: bool,

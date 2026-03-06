@@ -15,6 +15,7 @@ export interface ColumnDef {
   displayName: string; // 中文名称
   type: string;        // 数据类型
   length?: number;     // 长度/精度
+  scale?: number;      // 小数位数
   nullable: boolean;   // 是否为空
   primaryKey: boolean; // 是否为主键
   autoIncrement: boolean; // 是否自增
@@ -50,6 +51,7 @@ export interface BackendColumnDef {
   display_name: string;
   data_type: string;
   length?: number;
+  scale?: number;
   nullable: boolean;
   primary_key: boolean;
   auto_increment: boolean;

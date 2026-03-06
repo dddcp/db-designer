@@ -296,20 +296,23 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                 let table_id: String = table_stmt.query_row(params![project_id, diff.table_name], |row| row.get(0))
                     .map_err(|e| format!("Error: {}", e))?;
 
-                let mut col_stmt = conn.prepare("SELECT name, data_type, length, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+                let mut col_stmt = conn.prepare("SELECT name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
                     .map_err(|e| format!("Error: {}", e))?;
-                let cols: Vec<(String, String, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?))
+                let cols: Vec<(String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?))
                 }).map_err(|e| format!("Error: {}", e))?
                   .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
                 sql.push_str(&format!("-- 新建表: {} ({})\n", diff.table_name, diff.local_display_name.as_deref().unwrap_or("")));
                 sql.push_str(&format!("CREATE TABLE {} (\n", diff.table_name));
                 let mut col_defs = Vec::new();
-                for (name, dt, len, nullable, _pk, ai, dv, cmt) in &cols {
+                for (name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
                     let mut def = format!("  {} {}", name, dt.to_uppercase());
                     if let Some(l) = len {
-                        if ["varchar", "char", "decimal"].contains(&dt.to_lowercase().as_str()) {
+                        if dt.to_lowercase() == "decimal" {
+                            let s = scale.unwrap_or(0);
+                            def.push_str(&format!("({},{})", l, s));
+                        } else if ["varchar", "char"].contains(&dt.to_lowercase().as_str()) {
                             def.push_str(&format!("({})", l));
                         }
                     }
@@ -321,7 +324,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                     if is_mysql { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c)); } } }
                     col_defs.push(def);
                 }
-                let pks: Vec<&str> = cols.iter().filter(|c| c.4).map(|c| c.0.as_str()).collect();
+                let pks: Vec<&str> = cols.iter().filter(|c| c.5).map(|c| c.0.as_str()).collect();
                 if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
                 sql.push_str(&col_defs.join(",\n"));
                 sql.push_str("\n);\n\n");
@@ -339,15 +342,22 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                                 .map_err(|e| format!("Error: {}", e))?;
                             let table_id: String = table_stmt.query_row(params![project_id, diff.table_name], |row| row.get(0))
                                 .map_err(|e| format!("Error: {}", e))?;
-                            let mut c_stmt = conn.prepare("SELECT data_type, length, nullable, default_value FROM t_column WHERE table_id = ?1 AND name = ?2")
+                            let mut c_stmt = conn.prepare("SELECT data_type, length, scale, nullable, default_value FROM t_column WHERE table_id = ?1 AND name = ?2")
                                 .map_err(|e| format!("Error: {}", e))?;
-                            let col_info: (String, Option<i32>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
-                                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                            let col_info: (String, Option<i32>, Option<i32>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
+                                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
                             }).map_err(|e| format!("Error: {}", e))?;
                             let mut def = format!("{} {}", cd.column_name, col_info.0.to_uppercase());
-                            if let Some(l) = col_info.1 { if ["varchar", "char", "decimal"].contains(&col_info.0.to_lowercase().as_str()) { def.push_str(&format!("({})", l)); } }
-                            if !col_info.2 { def.push_str(" NOT NULL"); }
-                            if let Some(d) = &col_info.3 { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
+                            if let Some(l) = col_info.1 {
+                                if col_info.0.to_lowercase() == "decimal" {
+                                    let s = col_info.2.unwrap_or(0);
+                                    def.push_str(&format!("({},{})", l, s));
+                                } else if ["varchar", "char"].contains(&col_info.0.to_lowercase().as_str()) {
+                                    def.push_str(&format!("({})", l));
+                                }
+                            }
+                            if !col_info.3 { def.push_str(" NOT NULL"); }
+                            if let Some(d) = &col_info.4 { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
                             changes.push(format!("  ADD COLUMN {}", def));
                         }
                         "only_remote" => {

@@ -80,6 +80,7 @@ pub fn init_database() -> Result<String, String> {
             display_name TEXT NOT NULL,
             data_type TEXT NOT NULL,
             length INTEGER,
+            scale INTEGER,
             nullable BOOLEAN NOT NULL DEFAULT 1,
             primary_key BOOLEAN NOT NULL DEFAULT 0,
             auto_increment BOOLEAN NOT NULL DEFAULT 0,
@@ -137,6 +138,9 @@ pub fn init_database() -> Result<String, String> {
             FOREIGN KEY (project_id) REFERENCES t_proj(id)
         );
     ").map_err(|e| format!("Error initializing database: {}", e))?;
+
+    // 数据库迁移：为已存在的 t_column 表添加 scale 列
+    let _ = conn.execute_batch("ALTER TABLE t_column ADD COLUMN scale INTEGER");
 
     Ok("Database initialized successfully".to_string())
 }

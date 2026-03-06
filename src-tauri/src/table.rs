@@ -53,10 +53,10 @@ pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<Colum
 
     for column in columns {
         tx.execute(
-            "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 column.id, table.id, column.name, column.display_name, column.data_type,
-                column.length, column.nullable, column.primary_key, column.auto_increment,
+                column.length, column.scale, column.nullable, column.primary_key, column.auto_increment,
                 column.default_value, column.comment, column.sort_order
             ],
         ).map_err(|e| format!("Error saving column: {}", e))?;
@@ -75,7 +75,7 @@ pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<Colum
 pub fn get_table_columns(table_id: String) -> Result<Vec<ColumnDef>, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
-    let mut stmt = conn.prepare("SELECT * FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+    let mut stmt = conn.prepare("SELECT id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
         .map_err(|e| format!("Error preparing statement: {}", e))?;
 
     let column_iter = stmt.query_map(params![table_id], |row| {
@@ -86,12 +86,13 @@ pub fn get_table_columns(table_id: String) -> Result<Vec<ColumnDef>, String> {
             display_name: row.get(3)?,
             data_type: row.get(4)?,
             length: row.get(5)?,
-            nullable: row.get(6)?,
-            primary_key: row.get(7)?,
-            auto_increment: row.get(8)?,
-            default_value: row.get(9)?,
-            comment: row.get(10)?,
-            sort_order: row.get(11)?,
+            scale: row.get(6)?,
+            nullable: row.get(7)?,
+            primary_key: row.get(8)?,
+            auto_increment: row.get(9)?,
+            default_value: row.get(10)?,
+            comment: row.get(11)?,
+            sort_order: row.get(12)?,
         })
     }).map_err(|e| format!("Error querying columns: {}", e))?;
 
