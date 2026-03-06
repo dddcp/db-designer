@@ -59,7 +59,11 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'DB Designer ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseBody: |
+            ### 🚀 自动发布
+            需要查看更新说明，请移步https://github.com/dddcp/db-designer/releases
+            ---
+            *此版本由 GitHub Actions 自动构建并发布*
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
