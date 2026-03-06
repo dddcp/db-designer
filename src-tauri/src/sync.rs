@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::params;
 
 use crate::db::init_db;
@@ -377,4 +378,114 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
     }
 
     Ok(sql)
+}
+
+fn generate_id() -> String {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    format!("{}", ts)
+}
+
+// 将远程整张表同步到本地模型
+#[tauri::command]
+pub fn sync_remote_table_to_local(project_id: i32, remote_table_json: String) -> Result<String, String> {
+    let remote_table: RemoteTable = serde_json::from_str(&remote_table_json)
+        .map_err(|e| format!("解析远程表数据失败: {}", e))?;
+
+    let mut conn = init_db().map_err(|e| format!("Error: {}", e))?;
+    let table_id = generate_id();
+
+    let display_name = remote_table.comment.clone().unwrap_or_else(|| remote_table.name.clone());
+
+    let tx = conn.transaction().map_err(|e| format!("Error: {}", e))?;
+
+    tx.execute(
+        "INSERT INTO t_table (id, project_id, name, display_name, comment, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))",
+        params![table_id, project_id, remote_table.name, display_name, remote_table.comment],
+    ).map_err(|e| format!("创建表失败: {}", e))?;
+
+    for (i, rc) in remote_table.columns.iter().enumerate() {
+        let col_id = format!("{}_{}", table_id, i);
+        let col_display_name = rc.comment.clone().unwrap_or_else(|| rc.name.clone());
+        let primary_key = rc.column_key == "PRI";
+        let auto_increment = rc.extra.contains("auto_increment");
+
+        tx.execute(
+            "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                col_id, table_id, rc.name, col_display_name, rc.data_type,
+                rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
+                rc.default_value, rc.comment, i as i32
+            ],
+        ).map_err(|e| format!("创建列失败: {}", e))?;
+    }
+
+    tx.commit().map_err(|e| format!("Error: {}", e))?;
+
+    Ok("同步成功".to_string())
+}
+
+// 将远程字段同步到本地模型（处理有差异和仅远程的字段）
+#[tauri::command]
+pub fn sync_remote_columns_to_local(project_id: i32, table_name: String, remote_columns_json: String, column_names: Vec<String>) -> Result<String, String> {
+    let conn = init_db().map_err(|e| format!("Error: {}", e))?;
+
+    let remote_columns: Vec<RemoteColumn> = serde_json::from_str(&remote_columns_json)
+        .map_err(|e| format!("解析远程列数据失败: {}", e))?;
+
+    // 查找本地表 ID
+    let table_id: String = conn.query_row(
+        "SELECT id FROM t_table WHERE project_id = ?1 AND name = ?2",
+        params![project_id, table_name],
+        |row| row.get(0),
+    ).map_err(|e| format!("未找到本地表 {}: {}", table_name, e))?;
+
+    let remote_col_map: HashMap<String, &RemoteColumn> = remote_columns.iter()
+        .map(|c| (c.name.clone(), c))
+        .collect();
+
+    for col_name in &column_names {
+        let rc = remote_col_map.get(col_name)
+            .ok_or_else(|| format!("远程列 {} 不存在", col_name))?;
+
+        let col_display_name = rc.comment.clone().unwrap_or_else(|| rc.name.clone());
+        let primary_key = rc.column_key == "PRI";
+        let auto_increment = rc.extra.contains("auto_increment");
+
+        // 检查本地是否已有同名字段
+        let existing_id: Option<String> = conn.query_row(
+            "SELECT id FROM t_column WHERE table_id = ?1 AND name = ?2",
+            params![table_id, col_name],
+            |row| row.get(0),
+        ).ok();
+
+        if let Some(id) = existing_id {
+            // UPDATE 已有字段
+            conn.execute(
+                "UPDATE t_column SET data_type = ?1, length = ?2, nullable = ?3, default_value = ?4, display_name = ?5, primary_key = ?6, auto_increment = ?7, comment = ?8 WHERE id = ?9",
+                params![rc.data_type, rc.length, rc.nullable, rc.default_value, col_display_name, primary_key, auto_increment, rc.comment, id],
+            ).map_err(|e| format!("更新列失败: {}", e))?;
+        } else {
+            // INSERT 新字段
+            let max_sort: i32 = conn.query_row(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM t_column WHERE table_id = ?1",
+                params![table_id],
+                |row| row.get(0),
+            ).unwrap_or(-1);
+
+            let col_id = generate_id();
+            conn.execute(
+                "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![
+                    col_id, table_id, rc.name, col_display_name, rc.data_type,
+                    rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
+                    rc.default_value, rc.comment, max_sort + 1
+                ],
+            ).map_err(|e| format!("插入列失败: {}", e))?;
+        }
+    }
+
+    Ok("同步成功".to_string())
 }

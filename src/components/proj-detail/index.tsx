@@ -126,12 +126,19 @@ const ProjectDetail: React.FC = () => {
     }
   }, [id]);
 
+  // 切回表设计视图时静默刷新表列表
+  useEffect(() => {
+    if (projectView === 'design' && project) {
+      loadTables(project.id);
+    }
+  }, [projectView]);
+
   /**
    * 显示通知
    */
   const showNotification = (type: 'success' | 'error' | 'warning' | 'info', msg: string, description?: string) => {
     const fullMessage = description ? `${msg}\n${description}` : msg;
-    
+
     switch (type) {
       case 'success':
         message.success(fullMessage);
@@ -149,35 +156,18 @@ const ProjectDetail: React.FC = () => {
   };
 
   /**
-   * 加载项目详情
+   * 从后端加载表列表（静默，不影响 loading 状态）
    */
-  const loadProjectDetail = async () => {
-    setLoading(true);
+  const loadTables = async (projectId: number) => {
     try {
-      // 从后端加载项目数据
-      const projects: Project[] = await invoke('get_projects');
-      const currentProject = projects.find(p => p.id === parseInt(id || '0'));
-      
-      if (!currentProject) {
-        showNotification('error', '项目不存在');
-        navigate('/');
-        return;
-      }
-      
-      setProject(currentProject);
-
-      // 从后端加载表数据
       const projectTables: BackendTableDef[] = await invoke('get_project_tables', {
-        projectId: currentProject.id
+        projectId,
       });
-      
-      // 转换数据结构以匹配前端接口
       const tablesData: TableDef[] = await Promise.all(
         projectTables.map(async (table) => {
           const columns: BackendColumnDef[] = await invoke('get_table_columns', {
-            tableId: table.id
+            tableId: table.id,
           });
-          
           return {
             id: table.id,
             name: table.name,
@@ -193,16 +183,42 @@ const ProjectDetail: React.FC = () => {
               autoIncrement: col.auto_increment,
               defaultValue: col.default_value,
               comment: col.comment,
-              order: col.sort_order
-            }))
+              order: col.sort_order,
+            })),
           };
         })
       );
-      
       setTables(tablesData);
-      if (tablesData.length > 0) {
-        setSelectedTable(tablesData[0]);
+      setSelectedTable(prev => {
+        if (prev) {
+          const updated = tablesData.find(t => t.id === prev.id);
+          if (updated) return updated;
+        }
+        return tablesData.length > 0 ? tablesData[0] : null;
+      });
+    } catch (error) {
+      console.error('加载表列表失败:', error);
+    }
+  };
+
+  /**
+   * 加载项目详情
+   */
+  const loadProjectDetail = async () => {
+    setLoading(true);
+    try {
+      // 从后端加载项目数据
+      const projects: Project[] = await invoke('get_projects');
+      const currentProject = projects.find(p => p.id === parseInt(id || '0'));
+
+      if (!currentProject) {
+        showNotification('error', '项目不存在');
+        navigate('/');
+        return;
       }
+
+      setProject(currentProject);
+      await loadTables(currentProject.id);
     } catch (error) {
       console.error('加载项目详情失败:', error);
       showNotification('error', '加载项目详情失败');

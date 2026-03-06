@@ -21,6 +21,7 @@ import {
   WarningOutlined,
   CopyOutlined,
   DatabaseOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import type { Project, DatabaseConnection } from '../../types';
 
@@ -74,6 +75,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
   const [loading, setLoading] = useState(false);
   const [isSqlModalVisible, setIsSqlModalVisible] = useState(false);
   const [sqlContent, setSqlContent] = useState('');
+  const [syncingKeys, setSyncingKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadConnections();
@@ -157,6 +159,80 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
     }
   };
 
+  // 重新比对
+  const refreshDiffs = async () => {
+    if (!selectedConnectionId) return;
+    try {
+      const tables = await invoke<RemoteTable[]>('get_remote_tables', {
+        connectionId: selectedConnectionId,
+      });
+      setRemoteTables(tables);
+      const diffResult = await invoke<TableDiff[]>('compare_tables', {
+        projectId: project.id,
+        remoteTablesJson: JSON.stringify(tables),
+      });
+      setDiffs(diffResult);
+    } catch (error) {
+      message.error('刷新比对失败: ' + error);
+    }
+  };
+
+  // 同步整张远程表到本地
+  const handleSyncTable = async (tableName: string) => {
+    const key = `table_${tableName}`;
+    setSyncingKeys(prev => new Set(prev).add(key));
+    try {
+      const remoteTable = remoteTables.find(t => t.name === tableName);
+      if (!remoteTable) {
+        message.error('未找到远程表数据');
+        return;
+      }
+      await invoke('sync_remote_table_to_local', {
+        projectId: project.id,
+        remoteTableJson: JSON.stringify(remoteTable),
+      });
+      message.success(`表 ${tableName} 同步成功`);
+      await refreshDiffs();
+    } catch (error) {
+      message.error('同步失败: ' + error);
+    } finally {
+      setSyncingKeys(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  // 同步差异字段到本地
+  const handleSyncColumns = async (tableName: string, columnNames: string[]) => {
+    const key = `cols_${tableName}_${columnNames.join(',')}`;
+    setSyncingKeys(prev => new Set(prev).add(key));
+    try {
+      const remoteTable = remoteTables.find(t => t.name === tableName);
+      if (!remoteTable) {
+        message.error('未找到远程表数据');
+        return;
+      }
+      await invoke('sync_remote_columns_to_local', {
+        projectId: project.id,
+        tableName,
+        remoteColumnsJson: JSON.stringify(remoteTable.columns),
+        columnNames,
+      });
+      message.success('字段同步成功');
+      await refreshDiffs();
+    } catch (error) {
+      message.error('同步失败: ' + error);
+    } finally {
+      setSyncingKeys(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'only_local':
@@ -220,6 +296,46 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
         return <Text>{parts.join('，')}</Text>;
       },
     },
+    {
+      title: '操作',
+      key: 'action',
+      width: 140,
+      render: (_: any, record: TableDiff) => {
+        if (record.status === 'only_remote') {
+          const key = `table_${record.table_name}`;
+          return (
+            <Button
+              type="link"
+              size="small"
+              icon={<DownloadOutlined />}
+              loading={syncingKeys.has(key)}
+              onClick={() => handleSyncTable(record.table_name)}
+            >
+              同步到模型
+            </Button>
+          );
+        }
+        if (record.status === 'different') {
+          const diffCols = record.column_diffs
+            .filter(c => c.status === 'only_remote' || c.status === 'different')
+            .map(c => c.column_name);
+          if (diffCols.length === 0) return '-';
+          const key = `cols_${record.table_name}_${diffCols.join(',')}`;
+          return (
+            <Button
+              type="link"
+              size="small"
+              icon={<DownloadOutlined />}
+              loading={syncingKeys.has(key)}
+              onClick={() => handleSyncColumns(record.table_name, diffCols)}
+            >
+              同步差异字段
+            </Button>
+          );
+        }
+        return '-';
+      },
+    },
   ];
 
   // 展开行：列差异详情
@@ -237,6 +353,28 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       { title: '本地类型', dataIndex: 'local_type', key: 'local_type', render: (v: string | null) => v || '-' },
       { title: '远程类型', dataIndex: 'remote_type', key: 'remote_type', render: (v: string | null) => v || '-' },
       { title: '说明', dataIndex: 'detail', key: 'detail', render: (v: string | null) => v || '-' },
+      {
+        title: '操作',
+        key: 'action',
+        width: 100,
+        render: (_: any, col: ColumnDiff) => {
+          if (col.status === 'only_remote' || col.status === 'different') {
+            const key = `cols_${record.table_name}_${col.column_name}`;
+            return (
+              <Button
+                type="link"
+                size="small"
+                icon={<DownloadOutlined />}
+                loading={syncingKeys.has(key)}
+                onClick={() => handleSyncColumns(record.table_name, [col.column_name])}
+              >
+                同步
+              </Button>
+            );
+          }
+          return '-';
+        },
+      },
     ];
     return (
       <Table

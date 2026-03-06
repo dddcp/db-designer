@@ -55,7 +55,9 @@ pub fn run() {
             sync::connect_database,
             sync::get_remote_tables,
             sync::compare_tables,
-            sync::generate_sync_sql
+            sync::generate_sync_sql,
+            sync::sync_remote_table_to_local,
+            sync::sync_remote_columns_to_local
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
