@@ -642,6 +642,11 @@
   resolved "https://registry.npmmirror.com/@tauri-apps/api/-/api-2.8.0.tgz#0348a2b3ba5982ec67a7d569f329b4a55d7d5f1e"
   integrity sha512-ga7zdhbS2GXOMTIZRT0mYjKJtR9fivsXzsyq5U3vjDL0s6DTMwYRm0UHNjzTY5dh4+LSC68Sm/7WEiimbQNYlw==
 
+"@tauri-apps/api@^2.10.1":
+  version "2.10.1"
+  resolved "https://registry.npmmirror.com/@tauri-apps/api/-/api-2.10.1.tgz#57c1bae6114ec33d977eb2b50dfefc25fa84fc93"
+  integrity sha512-hKL/jWf293UDSUN09rR69hrToyIXBb8CjGaWC7gfinvnQrBVvnLr08FeFi38gxtugAVyVcTa5/FD/Xnkb1siBw==
+
 "@tauri-apps/cli-darwin-arm64@2.8.4":
   version "2.8.4"
   resolved "https://registry.npmmirror.com/@tauri-apps/cli-darwin-arm64/-/cli-darwin-arm64-2.8.4.tgz#ec09c0673dd1816e89910cf31ddc7d94c5cf077f"
@@ -714,12 +719,33 @@
     "@tauri-apps/cli-win32-ia32-msvc" "2.8.4"
     "@tauri-apps/cli-win32-x64-msvc" "2.8.4"
 
+"@tauri-apps/plugin-dialog@^2.6.0":
+  version "2.6.0"
+  resolved "https://registry.npmmirror.com/@tauri-apps/plugin-dialog/-/plugin-dialog-2.6.0.tgz#e09bb26ab7008bfc4a1a044a5fb29ac0575f8898"
+  integrity sha512-q4Uq3eY87TdcYzXACiYSPhmpBA76shgmQswGkSVio4C82Sz2W4iehe9TnKYwbq7weHiL88Yw19XZm7v28+Micg==
+  dependencies:
+    "@tauri-apps/api" "^2.8.0"
+
 "@tauri-apps/plugin-opener@^2":
   version "2.5.0"
   resolved "https://registry.npmmirror.com/@tauri-apps/plugin-opener/-/plugin-opener-2.5.0.tgz#f4ed07559065616bf14012686f5273070a39e003"
   integrity sha512-B0LShOYae4CZjN8leiNDbnfjSrTwoZakqKaWpfoH6nXiJwt6Rgj6RnVIffG3DoJiKsffRhMkjmBV9VeilSb4TA==
   dependencies:
     "@tauri-apps/api" "^2.8.0"
+
+"@tauri-apps/plugin-process@^2.3.1":
+  version "2.3.1"
+  resolved "https://registry.npmmirror.com/@tauri-apps/plugin-process/-/plugin-process-2.3.1.tgz#fff77aa7550c9c5347689c859d581f88287bf7ae"
+  integrity sha512-nCa4fGVaDL/B9ai03VyPOjfAHRHSBz5v6F/ObsB73r/dA3MHHhZtldaDMIc0V/pnUw9ehzr2iEG+XkSEyC0JJA==
+  dependencies:
+    "@tauri-apps/api" "^2.8.0"
+
+"@tauri-apps/plugin-updater@^2.10.0":
+  version "2.10.0"
+  resolved "https://registry.npmmirror.com/@tauri-apps/plugin-updater/-/plugin-updater-2.10.0.tgz#57172dbe9fd06f790bcf3144bc69f3e40048ccd3"
+  integrity sha512-ljN8jPlnT0aSn8ecYhuBib84alxfMx6Hc8vJSKMJyzGbTPFZAC44T2I1QNFZssgWKrAlofvJqCC6Rr472JWfkQ==
+  dependencies:
+    "@tauri-apps/api" "^2.10.1"
 
 "@types/babel__core@^7.20.5":
   version "7.20.5"

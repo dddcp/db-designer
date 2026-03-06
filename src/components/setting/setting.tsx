@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Layout, 
-  Card, 
-  Button, 
-  Space, 
-  Typography, 
-  theme, 
+import { getVersion } from '@tauri-apps/api/app';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
+import {
+  Layout,
+  Card,
+  Button,
+  Space,
+  Typography,
+  theme,
   Tabs,
   Form,
   Input,
@@ -21,16 +24,20 @@ import {
   List,
   Tag,
   Drawer,
-  Popconfirm
+  Popconfirm,
+  Progress,
+  Modal
 } from 'antd';
-import { 
+import {
   ArrowLeftOutlined,
   SettingOutlined,
   CodeOutlined,
   SaveOutlined,
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined
+  DeleteOutlined,
+  SyncOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 
 const { Header, Content } = Layout;
@@ -74,11 +81,16 @@ const Setting: React.FC = () => {
   const [isDbModalVisible, setIsDbModalVisible] = useState(false);
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | null>(null);
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   // 加载设置
   useEffect(() => {
     loadSettings();
     loadDatabaseConnections();
+    getVersion().then(v => setAppVersion(v));
   }, []);
 
   /**
@@ -325,6 +337,76 @@ const Setting: React.FC = () => {
     }
   };
 
+  /**
+   * 检查更新
+   */
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const update = await check();
+      if (update) {
+        Modal.confirm({
+          title: '发现新版本',
+          content: (
+            <div>
+              <p>最新版本: <strong>{update.version}</strong></p>
+              <p>当前版本: {appVersion}</p>
+              {update.body && (
+                <div>
+                  <p>更新说明:</p>
+                  <div style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                    {update.body}
+                  </div>
+                </div>
+              )}
+            </div>
+          ),
+          okText: '下载并安装',
+          cancelText: '稍后再说',
+          onOk: async () => {
+            setUpdating(true);
+            setUpdateProgress(0);
+            try {
+              let totalSize = 0;
+              let downloaded = 0;
+              await update.downloadAndInstall((event) => {
+                switch (event.event) {
+                  case 'Started':
+                    totalSize = event.data.contentLength ?? 0;
+                    break;
+                  case 'Progress':
+                    downloaded += event.data.chunkLength;
+                    if (totalSize > 0) {
+                      setUpdateProgress(Math.round((downloaded / totalSize) * 100));
+                    }
+                    break;
+                  case 'Finished':
+                    setUpdateProgress(100);
+                    break;
+                }
+              });
+              message.success('更新下载完成，即将重启应用...');
+              await relaunch();
+            } catch (err) {
+              console.error('更新失败:', err);
+              message.error(`更新失败: ${err}`);
+            } finally {
+              setUpdating(false);
+              setUpdateProgress(null);
+            }
+          }
+        });
+      } else {
+        message.success('当前已是最新版本');
+      }
+    } catch (error) {
+      console.error('检查更新失败:', error);
+      message.error(`检查更新失败: ${error}`);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
   return (
     <Layout style={{ minHeight: '100vh' }}>
       {/* 头部 */}
@@ -392,10 +474,31 @@ const Setting: React.FC = () => {
                     <Col span={12}>
                       <Text strong>版本</Text>
                       <div>
-                        <Text type="secondary">0.1.0</Text>
+                        <Text type="secondary">{appVersion || '加载中...'}</Text>
                       </div>
                     </Col>
                   </Row>
+
+                  <Divider />
+
+                  <Title level={4}>版本更新</Title>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Button
+                        type="primary"
+                        icon={checkingUpdate ? <SyncOutlined spin /> : <CheckCircleOutlined />}
+                        onClick={handleCheckUpdate}
+                        loading={checkingUpdate}
+                        disabled={updating}
+                      >
+                        检查更新
+                      </Button>
+                      {updating && <Text type="secondary">正在下载更新...</Text>}
+                    </div>
+                    {updateProgress !== null && (
+                      <Progress percent={updateProgress} status={updateProgress < 100 ? 'active' : 'success'} />
+                    )}
+                  </Space>
                 </Space>
                 )
               },
