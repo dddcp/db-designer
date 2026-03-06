@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getAllDataTypes, findDataType } from '../../data-types';
+import type { DataTypeOption } from '../../data-types';
 import {
   Card,
   Button,
@@ -54,6 +56,12 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
   const [databaseType, setDatabaseType] = useState('mysql');
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [initData, setInitData] = useState<InitData[]>([]);
+  const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+
+  // 加载数据类型
+  useEffect(() => {
+    getAllDataTypes().then(setDataTypes);
+  }, []);
 
   // 加载索引和初始数据
   const loadExtraData = async (tableId: string) => {
@@ -81,12 +89,12 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     }
   }, [selectedTable?.id]);
 
-  // 当表、数据库类型、索引或初始数据变化时重新生成代码
+  // 当表、数据库类型、索引、初始数据或数据类型变化时重新生成代码
   useEffect(() => {
-    if (selectedTable) {
+    if (selectedTable && dataTypes.length > 0) {
       generateSQL();
     }
-  }, [selectedTable, databaseType, indexes, initData]);
+  }, [selectedTable, databaseType, indexes, initData, dataTypes]);
 
   /**
    * 根据 column_id 查找列名
@@ -117,12 +125,12 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
 
     const columnDefinitions = selectedTable.columns.map(column => {
       let definition = `  ${column.name} ${column.type.toUpperCase()}`;
+      const dt = findDataType(dataTypes, column.type);
 
-      if (column.length && ['varchar', 'char'].includes(column.type)) {
-        definition += `(${column.length})`;
-      }
-      if (column.length && column.type === 'decimal') {
+      if (column.length && dt?.hasScale) {
         definition += `(${column.length},${column.scale || 0})`;
+      } else if (column.length && dt?.hasLength) {
+        definition += `(${column.length})`;
       }
       if (!column.nullable) {
         definition += ' NOT NULL';
@@ -196,12 +204,12 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
 
     const columnDefinitions = selectedTable.columns.map(column => {
       let definition = `  ${column.name} ${column.type.toUpperCase()}`;
+      const dt = findDataType(dataTypes, column.type);
 
-      if (column.length && ['varchar', 'char'].includes(column.type)) {
-        definition += `(${column.length})`;
-      }
-      if (column.length && column.type === 'decimal') {
+      if (column.length && dt?.hasScale) {
         definition += `(${column.length},${column.scale || 0})`;
+      } else if (column.length && dt?.hasLength) {
+        definition += `(${column.length})`;
       }
       if (!column.nullable) {
         definition += ' NOT NULL';

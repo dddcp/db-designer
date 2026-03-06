@@ -3,6 +3,7 @@ use rusqlite::params;
 
 use crate::db::init_db;
 use crate::models::*;
+use crate::version::{get_type_length_info, append_type_suffix};
 
 // 测试数据库连接
 #[tauri::command]
@@ -284,6 +285,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
     let diffs = compare_tables(project_id, remote_tables_json)?;
     let is_mysql = database_type == "mysql";
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
+    let (length_types, scale_types) = get_type_length_info(&conn);
 
     let mut sql = String::new();
     sql.push_str("-- 同步脚本: 将本地设计同步到远程数据库\n\n");
@@ -308,14 +310,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                 let mut col_defs = Vec::new();
                 for (name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
                     let mut def = format!("  {} {}", name, dt.to_uppercase());
-                    if let Some(l) = len {
-                        if dt.to_lowercase() == "decimal" {
-                            let s = scale.unwrap_or(0);
-                            def.push_str(&format!("({},{})", l, s));
-                        } else if ["varchar", "char"].contains(&dt.to_lowercase().as_str()) {
-                            def.push_str(&format!("({})", l));
-                        }
-                    }
+                    append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
                     if !nullable { def.push_str(" NOT NULL"); }
                     if *ai {
                         if is_mysql { def.push_str(" AUTO_INCREMENT"); }
@@ -348,14 +343,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
                             }).map_err(|e| format!("Error: {}", e))?;
                             let mut def = format!("{} {}", cd.column_name, col_info.0.to_uppercase());
-                            if let Some(l) = col_info.1 {
-                                if col_info.0.to_lowercase() == "decimal" {
-                                    let s = col_info.2.unwrap_or(0);
-                                    def.push_str(&format!("({},{})", l, s));
-                                } else if ["varchar", "char"].contains(&col_info.0.to_lowercase().as_str()) {
-                                    def.push_str(&format!("({})", l));
-                                }
-                            }
+                            append_type_suffix(&mut def, &col_info.0, col_info.1, col_info.2, &length_types, &scale_types);
                             if !col_info.3 { def.push_str(" NOT NULL"); }
                             if let Some(d) = &col_info.4 { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
                             changes.push(format!("  ADD COLUMN {}", def));

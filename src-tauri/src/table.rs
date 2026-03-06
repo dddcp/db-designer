@@ -8,7 +8,7 @@ use crate::models::{TableDef, ColumnDef, IndexDef, IndexField, InitData};
 pub fn get_project_tables(project_id: i32) -> Result<Vec<TableDef>, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
-    let mut stmt = conn.prepare("SELECT * FROM t_table WHERE project_id = ?1 ORDER BY created_at")
+    let mut stmt = conn.prepare("SELECT * FROM t_table WHERE project_id = ?1 ORDER BY created_at DESC")
         .map_err(|e| format!("Error preparing statement: {}", e))?;
 
     let table_iter = stmt.query_map(params![project_id], |row| {
@@ -44,7 +44,9 @@ pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<Colum
     let tx = conn.transaction().map_err(|e| format!("Error starting transaction: {}", e))?;
 
     tx.execute(
-        "INSERT OR REPLACE INTO t_table (id, project_id, name, display_name, comment, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+        "INSERT INTO t_table (id, project_id, name, display_name, comment, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now')) \
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, display_name=excluded.display_name, comment=excluded.comment, updated_at=datetime('now')",
         params![table.id, project_id, table.name, table.display_name, table.comment],
     ).map_err(|e| format!("Error saving table: {}", e))?;
 

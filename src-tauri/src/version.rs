@@ -1,8 +1,54 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use rusqlite::params;
 
 use crate::db::init_db;
 use crate::models::*;
+
+/// 从内置默认 + t_setting 中 custom_data_types 读取动态类型配置。
+/// 返回 (length_types, scale_types) 两个集合。
+pub fn get_type_length_info(conn: &rusqlite::Connection) -> (HashSet<String>, HashSet<String>) {
+    // 内置：仅长度
+    let mut length_types: HashSet<String> = ["varchar", "char"].iter().map(|s| s.to_string()).collect();
+    // 内置：精度+小数位（hasScale 隐含 hasLength）
+    let mut scale_types: HashSet<String> = ["decimal"].iter().map(|s| s.to_string()).collect();
+
+    // 从 t_setting 读取 custom_data_types
+    if let Ok(json) = conn.query_row(
+        "SELECT value FROM t_setting WHERE key = 'custom_data_types'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&json) {
+            for item in &arr {
+                if let Some(value) = item.get("value").and_then(|v| v.as_str()) {
+                    let val = value.to_lowercase();
+                    let has_scale = item.get("hasScale").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let has_length = item.get("hasLength").and_then(|v| v.as_bool()).unwrap_or(false);
+                    if has_scale {
+                        scale_types.insert(val);
+                    } else if has_length {
+                        length_types.insert(val);
+                    }
+                }
+            }
+        }
+    }
+
+    (length_types, scale_types)
+}
+
+/// 根据 length_types/scale_types 集合，拼接类型后缀 (len) 或 (len,scale)
+pub fn append_type_suffix(def: &mut String, data_type: &str, length: Option<i32>, scale: Option<i32>, length_types: &HashSet<String>, scale_types: &HashSet<String>) {
+    if let Some(len) = length {
+        let dt_lower = data_type.to_lowercase();
+        if scale_types.contains(&dt_lower) {
+            let s = scale.unwrap_or(0);
+            def.push_str(&format!("({},{})", len, s));
+        } else if length_types.contains(&dt_lower) {
+            def.push_str(&format!("({})", len));
+        }
+    }
+}
 
 // 获取版本列表
 #[tauri::command]
@@ -151,6 +197,7 @@ pub fn delete_version(id: i64) -> Result<String, String> {
 #[tauri::command]
 pub fn export_version_sql(version_id: i64, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    let (length_types, scale_types) = get_type_length_info(&conn);
 
     let snapshot_json: String = conn.query_row(
         "SELECT snapshot FROM t_version WHERE id = ?1", params![version_id], |row| row.get(0)
@@ -169,14 +216,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         let mut col_defs: Vec<String> = Vec::new();
         for col in &table.columns {
             let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
-            if let Some(len) = col.length {
-                if col.data_type.to_lowercase() == "decimal" {
-                    let s = col.scale.unwrap_or(0);
-                    def.push_str(&format!("({},{})", len, s));
-                } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
-                    def.push_str(&format!("({})", len));
-                }
-            }
+            append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
             if !col.nullable { def.push_str(" NOT NULL"); }
             if col.auto_increment {
                 if is_mysql { def.push_str(" AUTO_INCREMENT"); }
@@ -253,6 +293,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
 #[tauri::command]
 pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+    let (length_types, scale_types) = get_type_length_info(&conn);
 
     let old_json: String = conn.query_row(
         "SELECT snapshot FROM t_version WHERE id = ?1", params![old_version_id], |row| row.get(0)
@@ -279,14 +320,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             let mut col_defs: Vec<String> = Vec::new();
             for col in &new_table.columns {
                 let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
-                if let Some(len) = col.length {
-                    if col.data_type.to_lowercase() == "decimal" {
-                        let s = col.scale.unwrap_or(0);
-                        def.push_str(&format!("({},{})", len, s));
-                    } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
-                        def.push_str(&format!("({})", len));
-                    }
-                }
+                append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                 if !col.nullable { def.push_str(" NOT NULL"); }
                 if col.auto_increment {
                     if is_mysql { def.push_str(" AUTO_INCREMENT"); } else { def.push_str(" GENERATED ALWAYS AS IDENTITY"); }
@@ -322,14 +356,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             for col in &new_table.columns {
                 if !old_cols.contains_key(&col.name) {
                     let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
-                    if let Some(len) = col.length {
-                        if col.data_type.to_lowercase() == "decimal" {
-                            let s = col.scale.unwrap_or(0);
-                            def.push_str(&format!("({},{})", len, s));
-                        } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
-                            def.push_str(&format!("({})", len));
-                        }
-                    }
+                    append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                     if !col.nullable { def.push_str(" NOT NULL"); }
                     if let Some(dv) = &col.default_value {
                         if !dv.is_empty() { def.push_str(&format!(" DEFAULT '{}'", dv)); }
@@ -349,14 +376,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                     let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.scale != old_col.scale || col.nullable != old_col.nullable;
                     if type_changed {
                         let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
-                        if let Some(len) = col.length {
-                            if col.data_type.to_lowercase() == "decimal" {
-                                let s = col.scale.unwrap_or(0);
-                                def.push_str(&format!("({},{})", len, s));
-                            } else if ["varchar", "char"].contains(&col.data_type.to_lowercase().as_str()) {
-                                def.push_str(&format!("({})", len));
-                            }
-                        }
+                        append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                         if !col.nullable { def.push_str(" NOT NULL"); }
                         if is_mysql {
                             changes.push(format!("  MODIFY COLUMN {}", def));
@@ -386,6 +406,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 pub fn export_project_sql(project_id: i32, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
     let is_mysql = database_type == "mysql";
+    let (length_types, scale_types) = get_type_length_info(&conn);
     let mut sql = String::new();
 
     let mut table_stmt = conn.prepare("SELECT id, name, display_name FROM t_table WHERE project_id = ?1 ORDER BY created_at")
@@ -407,14 +428,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
         let mut col_defs = Vec::new();
         for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
             let mut def = format!("  {} {}", name, dt.to_uppercase());
-            if let Some(l) = len {
-                if dt.to_lowercase() == "decimal" {
-                    let s = scale.unwrap_or(0);
-                    def.push_str(&format!("({},{})", l, s));
-                } else if ["varchar", "char"].contains(&dt.to_lowercase().as_str()) {
-                    def.push_str(&format!("({})", l));
-                }
-            }
+            append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
             if !nullable { def.push_str(" NOT NULL"); }
             if *ai {
                 if is_mysql { def.push_str(" AUTO_INCREMENT"); }

@@ -36,6 +36,8 @@ import {
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '../../store/theme-context';
+import { getAllDataTypes, findDataType } from '../../data-types';
+import type { DataTypeOption } from '../../data-types';
 import DatabaseCodeTab from './database-code-tab';
 import IndexTab from './index-tab';
 import InitDataTab from './init-data-tab';
@@ -110,17 +112,12 @@ const ProjectDetail: React.FC = () => {
   const [activeTab, setActiveTab] = useState('structure');
   const [projectView, setProjectView] = useState('design');
   const [isAiModalVisible, setIsAiModalVisible] = useState(false);
+  const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
 
-  // 数据类型选项
-  const dataTypes = [
-    { value: 'int', label: 'INT' },
-    { value: 'varchar', label: 'VARCHAR' },
-    { value: 'text', label: 'TEXT' },
-    { value: 'decimal', label: 'DECIMAL' },
-    { value: 'datetime', label: 'DATETIME' },
-    { value: 'timestamp', label: 'TIMESTAMP' },
-    { value: 'boolean', label: 'BOOLEAN' },
-  ];
+  // 加载数据类型
+  useEffect(() => {
+    getAllDataTypes().then(setDataTypes);
+  }, []);
 
   // 加载项目详情
   useEffect(() => {
@@ -686,13 +683,19 @@ const ProjectDetail: React.FC = () => {
       title: '数据类型',
       dataIndex: 'type',
       key: 'type',
-      render: (type: string, record: ColumnDef) => (
+      render: (type: string, record: ColumnDef) => {
+        const dt = findDataType(dataTypes, type);
+        const showLength = dt ? dt.hasLength : false;
+        const showScale = dt ? dt.hasScale : false;
+        return (
         <Space>
           <Select
             value={type}
             onChange={(value) => handleSaveColumn(record.id, 'type', value)}
             size="small"
-            style={{ width: 120 }}
+            style={{ width: 130 }}
+            showSearch
+            optionFilterProp="children"
           >
             {dataTypes.map(dataType => (
               <Option key={dataType.value} value={dataType.value}>
@@ -700,7 +703,7 @@ const ProjectDetail: React.FC = () => {
               </Option>
             ))}
           </Select>
-          {['varchar', 'char'].includes(type) && (
+          {showLength && !showScale && (
             <Input
               value={record.length}
               onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
@@ -710,7 +713,7 @@ const ProjectDetail: React.FC = () => {
               type="number"
             />
           )}
-          {type === 'decimal' && (
+          {showScale && (
             <>
               <Input
                 value={record.length}
@@ -731,7 +734,8 @@ const ProjectDetail: React.FC = () => {
             </>
           )}
         </Space>
-      ),
+        );
+      },
     },
     {
       title: '属性',

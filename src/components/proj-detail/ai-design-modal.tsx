@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getAllDataTypes } from '../../data-types';
+import type { DataTypeOption } from '../../data-types';
 import {
   Drawer,
   Input,
@@ -50,14 +52,12 @@ interface AiDesignModalProps {
   databaseType: string;
 }
 
-const ALLOWED_TYPES = ['int', 'varchar', 'text', 'decimal', 'datetime', 'timestamp', 'boolean'];
-
-const buildSystemPrompt = (databaseType: string) => `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
+const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
 
 要求：
 1. 输出必须是合法 JSON 数组，不要包含任何其他文本、markdown标记或代码块标记
 2. 每个表包含 name（英文蛇形命名）、displayName（中文名称）、columns 数组
-3. 字段类型只能从以下枚举中选择：int, varchar, text, decimal, datetime, timestamp, boolean
+3. 字段类型只能从以下枚举中选择：${typeNames.join(', ')}
 4. 每张表必须有一个主键字段，标记 primaryKey: true
 5. 数据库类型为 ${databaseType}，请根据该数据库的命名惯例设计
 6. varchar 类型请给出合理的 length 值
@@ -80,6 +80,11 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedTables, setGeneratedTables] = useState<GeneratedTable[]>([]);
+  const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+
+  useEffect(() => {
+    getAllDataTypes().then(setDataTypes);
+  }, []);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -100,6 +105,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       }
 
       const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+      const typeNames = dataTypes.map(t => t.value);
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -109,7 +115,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: buildSystemPrompt(databaseType) },
+            { role: 'system', content: buildSystemPrompt(databaseType, typeNames) },
             { role: 'user', content: prompt }
           ],
           temperature: 0.7
@@ -144,7 +150,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
         columns: table.columns.map(col => ({
           name: col.name,
           displayName: col.displayName,
-          type: ALLOWED_TYPES.includes(col.type) ? col.type : 'varchar',
+          type: typeNames.includes(col.type) ? col.type : 'varchar',
           length: col.length,
           nullable: col.nullable ?? true,
           primaryKey: col.primaryKey ?? false,
@@ -228,10 +234,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           <Select
             value={record.type}
             size="small"
-            style={{ width: 100 }}
+            style={{ width: 110 }}
+            showSearch
+            optionFilterProp="children"
             onChange={(val) => handleColumnChange(tableName, record.name, 'type', val)}
           >
-            {ALLOWED_TYPES.map(t => <Option key={t} value={t}>{t.toUpperCase()}</Option>)}
+            {dataTypes.map(t => <Option key={t.value} value={t.value}>{t.label}</Option>)}
           </Select>
           {record.length && <Text type="secondary">({record.length})</Text>}
         </Space>

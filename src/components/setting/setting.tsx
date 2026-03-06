@@ -46,6 +46,8 @@ const { Option } = Select;
 const { useToken } = theme;
 
 import type { GitPlatform, DatabaseConnection, GitConfig } from '../../types';
+import { BUILT_IN_DATA_TYPES, loadCustomDataTypes, saveCustomDataTypes } from '../../data-types';
+import type { DataTypeOption } from '../../data-types';
 
 // 设置项类型定义
 interface Settings {
@@ -63,7 +65,8 @@ const Setting: React.FC = () => {
   const [gitForm] = Form.useForm();
   const [dbForm] = Form.useForm();
   const [aiForm] = Form.useForm();
-  
+  const [dataTypeForm] = Form.useForm();
+
   const [settings, setSettings] = useState<Settings>({
     isDarkMode: false,
     gitConfig: {
@@ -85,11 +88,15 @@ const Setting: React.FC = () => {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [customDataTypes, setCustomDataTypes] = useState<DataTypeOption[]>([]);
+  const [isDataTypeDrawerVisible, setIsDataTypeDrawerVisible] = useState(false);
+  const [editingDataType, setEditingDataType] = useState<DataTypeOption | null>(null);
 
   // 加载设置
   useEffect(() => {
     loadSettings();
     loadDatabaseConnections();
+    loadCustomDataTypesList();
     getVersion().then(v => setAppVersion(v));
   }, []);
 
@@ -334,6 +341,96 @@ const Setting: React.FC = () => {
       message.error(`Git仓库初始化失败: ${error}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * 加载自定义数据类型列表
+   */
+  const loadCustomDataTypesList = async () => {
+    const types = await loadCustomDataTypes();
+    setCustomDataTypes(types);
+  };
+
+  /**
+   * 打开添加自定义数据类型 Drawer
+   */
+  const handleAddDataType = () => {
+    setEditingDataType(null);
+    dataTypeForm.resetFields();
+    dataTypeForm.setFieldsValue({ hasLength: false, hasScale: false });
+    setIsDataTypeDrawerVisible(true);
+  };
+
+  /**
+   * 打开编辑自定义数据类型 Drawer
+   */
+  const handleEditDataType = (dt: DataTypeOption) => {
+    setEditingDataType(dt);
+    dataTypeForm.setFieldsValue({
+      value: dt.value,
+      label: dt.label,
+      hasLength: dt.hasLength,
+      hasScale: dt.hasScale,
+    });
+    setIsDataTypeDrawerVisible(true);
+  };
+
+  /**
+   * 保存自定义数据类型
+   */
+  const handleSaveDataType = async (values: any) => {
+    const valueLower = values.value.toLowerCase().trim();
+    // 检查是否与内置类型重名
+    if (BUILT_IN_DATA_TYPES.some(t => t.value === valueLower)) {
+      message.error('不允许与内置类型重名');
+      return;
+    }
+    // 检查是否与其他自定义类型重名（排除正在编辑的）
+    const duplicate = customDataTypes.some(t =>
+      t.value.toLowerCase() === valueLower && (!editingDataType || t.value !== editingDataType.value)
+    );
+    if (duplicate) {
+      message.error('已存在相同标识的自定义类型');
+      return;
+    }
+
+    let updated: DataTypeOption[];
+    const newType: DataTypeOption = {
+      value: valueLower,
+      label: values.label.trim().toUpperCase(),
+      hasLength: values.hasLength ?? false,
+      hasScale: values.hasScale ?? false,
+      builtIn: false,
+    };
+
+    if (editingDataType) {
+      updated = customDataTypes.map(t => t.value === editingDataType.value ? newType : t);
+    } else {
+      updated = [...customDataTypes, newType];
+    }
+
+    try {
+      await saveCustomDataTypes(updated);
+      setCustomDataTypes(updated);
+      setIsDataTypeDrawerVisible(false);
+      message.success(editingDataType ? '数据类型更新成功' : '数据类型添加成功');
+    } catch (error) {
+      message.error('保存数据类型失败');
+    }
+  };
+
+  /**
+   * 删除自定义数据类型
+   */
+  const handleDeleteDataType = async (value: string) => {
+    const updated = customDataTypes.filter(t => t.value !== value);
+    try {
+      await saveCustomDataTypes(updated);
+      setCustomDataTypes(updated);
+      message.success('数据类型删除成功');
+    } catch (error) {
+      message.error('删除数据类型失败');
     }
   };
 
@@ -715,6 +812,83 @@ const Setting: React.FC = () => {
                   </Space>
                 </Form>
                 )
+              },
+              {
+                key: 'dataTypes',
+                label: '数据类型',
+                children: (
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Title level={4}>内置类型</Title>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {BUILT_IN_DATA_TYPES.map(dt => (
+                      <Tag key={dt.value} color="blue">{dt.label}</Tag>
+                    ))}
+                  </div>
+
+                  <Divider />
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Title level={4} style={{ margin: 0 }}>自定义类型</Title>
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={handleAddDataType}
+                    >
+                      添加类型
+                    </Button>
+                  </div>
+
+                  <List
+                    dataSource={customDataTypes}
+                    locale={{
+                      emptyText: (
+                        <div style={{ textAlign: 'center', padding: 40 }}>
+                          <Text type="secondary">暂无自定义数据类型，点击上方按钮添加</Text>
+                        </div>
+                      )
+                    }}
+                    renderItem={(dt) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            type="link"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEditDataType(dt)}
+                          >
+                            编辑
+                          </Button>,
+                          <Popconfirm
+                            title="确定要删除这个数据类型吗？"
+                            onConfirm={() => handleDeleteDataType(dt.value)}
+                            okText="确定"
+                            cancelText="取消"
+                          >
+                            <Button type="link" danger icon={<DeleteOutlined />}>
+                              删除
+                            </Button>
+                          </Popconfirm>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <Space>
+                              <Text strong>{dt.label}</Text>
+                              <Text type="secondary">({dt.value})</Text>
+                            </Space>
+                          }
+                          description={
+                            <Space>
+                              {dt.hasLength && <Tag>支持长度</Tag>}
+                              {dt.hasScale && <Tag>支持精度/小数位</Tag>}
+                              {!dt.hasLength && !dt.hasScale && <Text type="secondary">无长度/精度参数</Text>}
+                            </Space>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                  />
+                </Space>
+                )
               }
             ]} />
           </Card>
@@ -828,6 +1002,74 @@ const Setting: React.FC = () => {
                   setEditingConnection(null);
                 }}
               >
+                取消
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Drawer>
+
+      {/* 数据类型编辑 Drawer */}
+      <Drawer
+        title={editingDataType ? '编辑数据类型' : '添加数据类型'}
+        open={isDataTypeDrawerVisible}
+        onClose={() => {
+          setIsDataTypeDrawerVisible(false);
+          dataTypeForm.resetFields();
+          setEditingDataType(null);
+        }}
+        footer={null}
+        width={480}
+      >
+        <Form
+          form={dataTypeForm}
+          layout="vertical"
+          onFinish={handleSaveDataType}
+        >
+          <Form.Item
+            name="value"
+            label="类型标识"
+            rules={[{ required: true, message: '请输入类型标识' }]}
+            extra="存储用标识，如 enum、money（小写英文）"
+          >
+            <Input placeholder="请输入类型标识" disabled={!!editingDataType} />
+          </Form.Item>
+
+          <Form.Item
+            name="label"
+            label="显示名称"
+            rules={[{ required: true, message: '请输入显示名称' }]}
+            extra="下拉框中显示的名称，如 ENUM、MONEY"
+          >
+            <Input placeholder="请输入显示名称" />
+          </Form.Item>
+
+          <Form.Item
+            name="hasLength"
+            label="支持长度"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+
+          <Form.Item
+            name="hasScale"
+            label="支持精度/小数位"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
+                {editingDataType ? '更新' : '创建'}
+              </Button>
+              <Button onClick={() => {
+                setIsDataTypeDrawerVisible(false);
+                dataTypeForm.resetFields();
+                setEditingDataType(null);
+              }}>
                 取消
               </Button>
             </Space>
