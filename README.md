@@ -8,7 +8,7 @@ AI 智能设计表结构 / 多数据库支持 / 版本管理 / 结构同步
 
 [![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)]()
-[![Free](https://img.shields.io/badge/pricing-free-brightgreen?style=flat-square)]()
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
 
 **Windows** · **macOS** · **Linux**
 
