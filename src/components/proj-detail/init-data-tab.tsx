@@ -28,14 +28,14 @@ interface InitDataTabProps {
   selectedTable: TableDef | null;
 }
 
-// 一行初始数据 = { _key: string, [columnName]: value }
+// 一行元数据 = { _key: string, [columnName]: value }
 type DataRow = Record<string, any>;
 
 const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
   const [dataRows, setDataRows] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 当选中表变化时，从后端加载已保存的初始数据
+  // 当选中表变化时，从后端加载已保存的元数据
   useEffect(() => {
     if (selectedTable) {
       loadInitData();
@@ -58,7 +58,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       });
       setDataRows(rows);
     } catch (error) {
-      console.error('加载初始数据失败:', error);
+      console.error('加载元数据失败:', error);
     } finally {
       setLoading(false);
     }
@@ -102,10 +102,10 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         tableId: selectedTable.id,
         rows: rowJsons,
       });
-      message.success('初始数据保存成功');
+      message.success('元数据保存成功');
     } catch (error) {
-      console.error('保存初始数据失败:', error);
-      message.error('保存初始数据失败');
+      console.error('保存元数据失败:', error);
+      message.error('保存元数据失败');
     }
   };
 
@@ -244,7 +244,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
   if (!selectedTable) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text type="secondary">请从左侧选择一个表管理初始数据</Text>
+        <Text type="secondary">请从左侧选择一个表管理元数据</Text>
       </div>
     );
   }
@@ -261,7 +261,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     <div>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>初始数据管理</Title>
+          <Title level={4} style={{ margin: 0 }}>元数据管理</Title>
           <Space>
             <Upload
               accept=".xlsx,.xls,.csv"

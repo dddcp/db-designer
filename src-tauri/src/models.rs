@@ -115,7 +115,7 @@ pub struct UpdateDatabaseConnectionRequest {
     pub database: String,
 }
 
-// 初始数据结构
+// 元数据结构
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InitData {
     pub id: i64,

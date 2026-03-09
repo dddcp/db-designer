@@ -184,7 +184,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       const tableCount = snap.tables.length;
       const colCount = snap.tables.reduce((sum, t) => sum + t.columns.length, 0);
       const dataCount = snap.tables.reduce((sum, t) => sum + t.init_data.length, 0);
-      return `${tableCount} 张表, ${colCount} 个字段, ${dataCount} 条初始数据`;
+      return `${tableCount} 张表, ${colCount} 个字段, ${dataCount} 条元数据`;
     } catch {
       return '快照解析失败';
     }

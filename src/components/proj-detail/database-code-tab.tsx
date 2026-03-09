@@ -132,7 +132,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
 
         <div style={{ marginTop: 16 }}>
           <Text type="secondary">
-            提示：此代码基于当前表结构自动生成，包含表结构、索引和初始数据。
+            提示：此代码基于当前表结构自动生成，包含表结构、索引和元数据。
           </Text>
         </div>
       </Card>

@@ -92,7 +92,7 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
         </div>
 
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-          导出当前项目所有表的完整 SQL，包含表结构、索引和初始数据。
+          导出当前项目所有表的完整 SQL，包含表结构、索引和元数据。
         </Text>
 
         <TextArea

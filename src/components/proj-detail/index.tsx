@@ -1094,7 +1094,7 @@ const ProjectDetail: React.FC = () => {
                         label: (
                           <span>
                             <FileTextOutlined />
-                            初始数据
+                            元数据
                           </span>
                         ),
                         children: <InitDataTab selectedTable={selectedTable} />

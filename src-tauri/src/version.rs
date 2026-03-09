@@ -76,7 +76,7 @@ pub fn get_versions(project_id: i32) -> Result<Vec<Version>, String> {
     Ok(results)
 }
 
-// 创建版本（快照当前项目的全部表结构 + 初始数据）
+// 创建版本（快照当前项目的全部表结构 + 元数据）
 #[tauri::command]
 pub fn create_version(project_id: i32, name: String) -> Result<Version, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
@@ -141,7 +141,7 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
               .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error reading index fields: {}", e))?;
         }
 
-        // 4. 获取初始数据
+        // 4. 获取元数据
         let mut data_stmt = conn.prepare("SELECT data FROM t_init_data WHERE table_id = ?1 ORDER BY id")
             .map_err(|e| format!("Error preparing init data stmt: {}", e))?;
         let init_data: Vec<String> = data_stmt.query_map(params![table_id], |row| {
@@ -265,7 +265,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         // Init data INSERT
         if !table.init_data.is_empty() && !table.columns.is_empty() {
             let col_names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
-            sql.push_str(&format!("-- {} 初始数据\n", table.display_name));
+            sql.push_str(&format!("-- {} 元数据\n", table.display_name));
             for data_json in &table.init_data {
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
@@ -345,7 +345,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             // New table init data
             if !new_table.init_data.is_empty() && !new_table.columns.is_empty() {
                 let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
-                sql.push_str(&format!("-- {} 初始数据\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 元数据\n", new_table.display_name));
                 for data_json in &new_table.init_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
@@ -479,7 +479,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             if !added_data.is_empty() && !new_table.columns.is_empty() {
                 let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
-                sql.push_str(&format!("-- {} 新增初始数据\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 新增元数据\n", new_table.display_name));
                 for data_json in added_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
@@ -498,7 +498,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             }
 
             if !removed_data.is_empty() && !old_table.columns.is_empty() {
-                sql.push_str(&format!("-- {} 删除的初始数据（请根据实际情况调整 WHERE 条件）\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 删除的元数据（请根据实际情况调整 WHERE 条件）\n", new_table.display_name));
                 let pk_cols: Vec<&str> = old_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
                 for data_json in removed_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
@@ -526,7 +526,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
     Ok(sql)
 }
 
-// 导出当前项目的完整 SQL（从实时数据，包含表结构、索引、初始数据）
+// 导出当前项目的完整 SQL（从实时数据，包含表结构、索引、元数据）
 #[tauri::command]
 pub fn export_project_sql(project_id: i32, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
@@ -613,7 +613,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
         if !init_data.is_empty() && !cols.is_empty() {
             let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
-            sql.push_str(&format!("-- {} 初始数据\n", display_name));
+            sql.push_str(&format!("-- {} 元数据\n", display_name));
             for data_json in &init_data {
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
@@ -639,7 +639,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
     Ok(sql)
 }
 
-// 导出单个表的 SQL（从实时数据，包含表结构、索引、初始数据）
+// 导出单个表的 SQL（从实时数据，包含表结构、索引、元数据）
 #[tauri::command]
 pub fn export_table_sql(table_id: String, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
@@ -723,7 +723,7 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
 
     if !init_data.is_empty() && !cols.is_empty() {
         let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
-        sql.push_str(&format!("-- {} 初始数据\n", display_name));
+        sql.push_str(&format!("-- {} 元数据\n", display_name));
         for data_json in &init_data {
             if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                 let values: Vec<String> = col_names.iter().map(|cn| {

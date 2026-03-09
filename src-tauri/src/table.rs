@@ -184,7 +184,7 @@ pub fn get_table_indexes(table_id: String) -> Result<Vec<IndexDef>, String> {
     Ok(indexes)
 }
 
-// 获取表的初始数据
+// 获取表的元数据
 #[tauri::command]
 pub fn get_init_data(table_id: String) -> Result<Vec<InitData>, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
@@ -209,7 +209,7 @@ pub fn get_init_data(table_id: String) -> Result<Vec<InitData>, String> {
     Ok(results)
 }
 
-// 保存初始数据（全量覆盖）
+// 保存元数据（全量覆盖）
 #[tauri::command]
 pub fn save_init_data(table_id: String, rows: Vec<String>) -> Result<String, String> {
     let mut conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
@@ -227,10 +227,10 @@ pub fn save_init_data(table_id: String, rows: Vec<String>) -> Result<String, Str
 
     tx.commit().map_err(|e| format!("Error committing transaction: {}", e))?;
 
-    Ok("初始数据保存成功".to_string())
+    Ok("元数据保存成功".to_string())
 }
 
-// 删除初始数据
+// 删除元数据
 #[tauri::command]
 pub fn delete_init_data(id: i64) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
@@ -238,7 +238,7 @@ pub fn delete_init_data(id: i64) -> Result<String, String> {
     conn.execute("DELETE FROM t_init_data WHERE id = ?1", params![id])
         .map_err(|e| format!("Error deleting init data: {}", e))?;
 
-    Ok("初始数据删除成功".to_string())
+    Ok("元数据删除成功".to_string())
 }
 
 // 删除表
