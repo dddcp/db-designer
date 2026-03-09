@@ -8,7 +8,7 @@ use crate::models::{Project, CreateProjectRequest};
 pub fn get_projects() -> Result<Vec<Project>, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
-    let mut stmt = conn.prepare("SELECT * FROM t_proj ORDER BY created_at")
+    let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj ORDER BY created_at")
         .map_err(|e| format!("Error preparing statement: {}", e))?;
 
     let project_iter = stmt.query_map([], |row| {
@@ -16,9 +16,8 @@ pub fn get_projects() -> Result<Vec<Project>, String> {
             id: row.get(0)?,
             name: row.get(1)?,
             description: row.get(2)?,
-            database_type: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
+            created_at: row.get(3)?,
+            updated_at: row.get(4)?,
         })
     }).map_err(|e| format!("Error querying projects: {}", e))?;
 
@@ -36,13 +35,13 @@ pub fn create_project(project: CreateProjectRequest) -> Result<Project, String> 
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
     conn.execute(
-        "INSERT INTO t_proj (name, description, database_type) VALUES (?1, ?2, ?3)",
-        params![project.name, project.description, project.database_type],
+        "INSERT INTO t_proj (name, description) VALUES (?1, ?2)",
+        params![project.name, project.description],
     ).map_err(|e| format!("Error creating project: {}", e))?;
 
     let id = conn.last_insert_rowid() as i32;
 
-    let mut stmt = conn.prepare("SELECT * FROM t_proj WHERE id = ?1")
+    let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj WHERE id = ?1")
         .map_err(|e| format!("Error preparing statement: {}", e))?;
 
     let mut project_iter = stmt.query_map(params![id], |row| {
@@ -50,9 +49,8 @@ pub fn create_project(project: CreateProjectRequest) -> Result<Project, String> 
             id: row.get(0)?,
             name: row.get(1)?,
             description: row.get(2)?,
-            database_type: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
+            created_at: row.get(3)?,
+            updated_at: row.get(4)?,
         })
     }).map_err(|e| format!("Error fetching created project: {}", e))?;
 

@@ -49,7 +49,6 @@ interface AiDesignModalProps {
   open: boolean;
   onCancel: () => void;
   onTablesGenerated: (tables: GeneratedTable[]) => void;
-  databaseType: string;
 }
 
 const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
@@ -76,11 +75,12 @@ const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是
   }
 ]`;
 
-const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesGenerated, databaseType }) => {
+const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesGenerated }) => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedTables, setGeneratedTables] = useState<GeneratedTable[]>([]);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+  const [databaseType, setDatabaseType] = useState<string>('mysql');
 
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
@@ -297,6 +297,17 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       }
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <div>
+          <Text strong>数据库类型(仅让AI做命名参考)</Text>
+          <Select
+            style={{ width: '100%', marginTop: 4 }}
+            value={databaseType}
+            onChange={setDatabaseType}
+          >
+            <Option value="mysql">MySQL</Option>
+            <Option value="postgresql">PostgreSQL</Option>
+          </Select>
+        </div>
         <div>
           <Text strong>需求描述</Text>
           <TextArea

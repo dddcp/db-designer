@@ -64,6 +64,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
   const [sqlTitle, setSqlTitle] = useState('');
   const [upgradeOldId, setUpgradeOldId] = useState<number | undefined>();
   const [upgradeNewId, setUpgradeNewId] = useState<number | undefined>();
+  const [upgradeDatabaseType, setUpgradeDatabaseType] = useState<string>('mysql');
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -150,7 +151,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       const sql = await invoke<string>('export_upgrade_sql', {
         oldVersionId: upgradeOldId,
         newVersionId: upgradeNewId,
-        databaseType: project.database_type,
+        databaseType: upgradeDatabaseType,
       });
       setIsUpgradeModalVisible(false);
       const oldV = versions.find(v => v.id === upgradeOldId);
@@ -257,7 +258,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
                 title={
                   <Space>
                     <Text strong>{version.name}</Text>
-                    <Tag color="blue">v{version.id}</Tag>
+                    {/* <Tag color="blue">v{version.id}</Tag> */}
                   </Space>
                 }
                 description={
@@ -345,6 +346,17 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         }
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <Text strong>数据库类型</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              value={upgradeDatabaseType}
+              onChange={setUpgradeDatabaseType}
+            >
+              <Option value="mysql">MySQL</Option>
+              <Option value="postgresql">PostgreSQL</Option>
+            </Select>
+          </div>
           <div>
             <Text strong>旧版本（基准）</Text>
             <Select

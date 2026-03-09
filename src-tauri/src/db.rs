@@ -49,7 +49,6 @@ pub fn init_database() -> Result<String, String> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            database_type TEXT NOT NULL DEFAULT 'mysql',
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
         );

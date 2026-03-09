@@ -6,7 +6,6 @@ pub struct Project {
     pub id: i32,
     pub name: String,
     pub description: Option<String>,
-    pub database_type: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -16,7 +15,6 @@ pub struct Project {
 pub struct CreateProjectRequest {
     pub name: String,
     pub description: Option<String>,
-    pub database_type: String,
 }
 
 // 表结构数据结构

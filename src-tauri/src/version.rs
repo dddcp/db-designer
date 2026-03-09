@@ -312,7 +312,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
     let old_map: HashMap<String, &SnapshotTable> = old_snap.tables.iter().map(|t| (t.name.clone(), t)).collect();
     let new_map: HashMap<String, &SnapshotTable> = new_snap.tables.iter().map(|t| (t.name.clone(), t)).collect();
 
-    // 1. 新增的表
+    // 1. 新增的表（包含索引和初始数据）
     for new_table in &new_snap.tables {
         if !old_map.contains_key(&new_table.name) {
             sql.push_str(&format!("-- 新增表: {}\n", new_table.display_name));
@@ -334,6 +334,37 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
             sql.push_str(&col_defs.join(",\n"));
             sql.push_str("\n);\n\n");
+
+            // 新增表的索引
+            for idx in &new_table.indexes {
+                let col_names: Vec<&str> = idx.fields.iter().map(|f| {
+                    new_table.columns.iter().find(|c| c.id == f.column_id).map(|c| c.name.as_str()).unwrap_or("?")
+                }).collect();
+                let unique_str = if idx.index_type == "unique" { "UNIQUE " } else { "" };
+                sql.push_str(&format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx.name, new_table.name, col_names.join(", ")));
+            }
+            if !new_table.indexes.is_empty() { sql.push('\n'); }
+
+            // 新增表的初始数据
+            if !new_table.init_data.is_empty() && !new_table.columns.is_empty() {
+                let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
+                sql.push_str(&format!("-- {} 初始数据\n", new_table.display_name));
+                for data_json in &new_table.init_data {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
+                        let values: Vec<String> = col_names.iter().map(|cn| {
+                            match data.get(*cn) {
+                                Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                                Some(serde_json::Value::Number(n)) => n.to_string(),
+                                Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
+                                Some(serde_json::Value::Null) | None => "NULL".into(),
+                                Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                            }
+                        }).collect();
+                        sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", new_table.name, col_names.join(", "), values.join(", ")));
+                    }
+                }
+                sql.push('\n');
+            }
         }
     }
 
@@ -390,6 +421,105 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             if !changes.is_empty() {
                 sql.push_str(&format!("-- 修改表: {}\n", new_table.display_name));
                 sql.push_str(&format!("ALTER TABLE {}\n{};\n\n", new_table.name, changes.join(",\n")));
+            }
+
+            // 索引差异比较
+            let old_idx_map: HashMap<String, &IndexDef> = old_table.indexes.iter().map(|i| (i.name.clone(), i)).collect();
+            let new_idx_map: HashMap<String, &IndexDef> = new_table.indexes.iter().map(|i| (i.name.clone(), i)).collect();
+
+            // 辅助闭包：将索引字段解析为列名列表
+            let resolve_idx_cols = |idx: &IndexDef, table: &SnapshotTable| -> Vec<String> {
+                idx.fields.iter().map(|f| {
+                    table.columns.iter().find(|c| c.id == f.column_id)
+                        .map(|c| c.name.clone()).unwrap_or_else(|| "?".to_string())
+                }).collect()
+            };
+
+            let mut idx_changes = Vec::new();
+
+            // 删除的索引
+            for (idx_name, _old_idx) in &old_idx_map {
+                if !new_idx_map.contains_key(idx_name) {
+                    idx_changes.push(format!("DROP INDEX {};\n", idx_name));
+                }
+            }
+
+            // 新增的索引
+            for (idx_name, new_idx) in &new_idx_map {
+                if !old_idx_map.contains_key(idx_name) {
+                    let col_names = resolve_idx_cols(new_idx, new_table);
+                    let unique_str = if new_idx.index_type == "unique" { "UNIQUE " } else { "" };
+                    idx_changes.push(format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, new_table.name, col_names.join(", ")));
+                }
+            }
+
+            // 修改的索引（类型或字段变化 -> 先删后建）
+            for (idx_name, new_idx) in &new_idx_map {
+                if let Some(old_idx) = old_idx_map.get(idx_name) {
+                    let old_col_names = resolve_idx_cols(old_idx, old_table);
+                    let new_col_names = resolve_idx_cols(new_idx, new_table);
+                    if old_idx.index_type != new_idx.index_type || old_col_names != new_col_names {
+                        idx_changes.push(format!("DROP INDEX {};\n", idx_name));
+                        let unique_str = if new_idx.index_type == "unique" { "UNIQUE " } else { "" };
+                        idx_changes.push(format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, new_table.name, new_col_names.join(", ")));
+                    }
+                }
+            }
+
+            if !idx_changes.is_empty() {
+                sql.push_str(&format!("-- 索引变更: {}\n", new_table.display_name));
+                for change in &idx_changes {
+                    sql.push_str(change);
+                }
+                sql.push('\n');
+            }
+
+            // 初始数据差异比较
+            let old_data_set: HashSet<&String> = old_table.init_data.iter().collect();
+            let new_data_set: HashSet<&String> = new_table.init_data.iter().collect();
+
+            let added_data: Vec<&&String> = new_data_set.difference(&old_data_set).collect();
+            let removed_data: Vec<&&String> = old_data_set.difference(&new_data_set).collect();
+
+            if !added_data.is_empty() && !new_table.columns.is_empty() {
+                let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
+                sql.push_str(&format!("-- {} 新增初始数据\n", new_table.display_name));
+                for data_json in added_data {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
+                        let values: Vec<String> = col_names.iter().map(|cn| {
+                            match data.get(*cn) {
+                                Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                                Some(serde_json::Value::Number(n)) => n.to_string(),
+                                Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
+                                Some(serde_json::Value::Null) | None => "NULL".into(),
+                                Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                            }
+                        }).collect();
+                        sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", new_table.name, col_names.join(", "), values.join(", ")));
+                    }
+                }
+                sql.push('\n');
+            }
+
+            if !removed_data.is_empty() && !old_table.columns.is_empty() {
+                sql.push_str(&format!("-- {} 删除的初始数据（请根据实际情况调整 WHERE 条件）\n", new_table.display_name));
+                // 找主键列用于生成 DELETE 语句
+                let pk_cols: Vec<&str> = old_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
+                for data_json in removed_data {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
+                        if !pk_cols.is_empty() {
+                            let conditions: Vec<String> = pk_cols.iter().map(|pk| {
+                                match data.get(*pk) {
+                                    Some(serde_json::Value::String(s)) => format!("{} = '{}'", pk, s.replace('\'', "''")),
+                                    Some(serde_json::Value::Number(n)) => format!("{} = {}", pk, n),
+                                    _ => format!("{} = NULL", pk),
+                                }
+                            }).collect();
+                            sql.push_str(&format!("DELETE FROM {} WHERE {};\n", new_table.name, conditions.join(" AND ")));
+                        }
+                    }
+                }
+                sql.push('\n');
             }
         }
     }

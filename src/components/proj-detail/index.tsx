@@ -1182,7 +1182,6 @@ const ProjectDetail: React.FC = () => {
         open={isAiModalVisible}
         onCancel={() => setIsAiModalVisible(false)}
         onTablesGenerated={handleAiTablesGenerated}
-        databaseType={project.database_type}
       />
     </>
   );

@@ -90,7 +90,6 @@ const Main: React.FC = () => {
       const projectData = {
         name: values.name,
         description: values.description,
-        database_type: 'mysql'
       };
       await invoke('create_project', { project: projectData });
       message.success('项目创建成功');

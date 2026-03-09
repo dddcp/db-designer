@@ -3,7 +3,6 @@ export interface Project {
   id: number;
   name: string;
   description?: string;
-  database_type: string;
   created_at: string;
   updated_at: string;
 }

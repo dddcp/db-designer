@@ -102,9 +102,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
   const loadConnections = async () => {
     try {
       const result = await invoke<DatabaseConnection[]>('get_database_connections');
-      // 过滤出与项目数据库类型匹配的连接
-      const filtered = result.filter(c => c.type === project.database_type);
-      setConnections(filtered);
+      setConnections(result);
     } catch (error) {
       console.error('加载连接配置失败:', error);
     }
@@ -153,10 +151,11 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
     }
     setLoading(true);
     try {
+      const selectedConnection = connections.find(c => c.id === selectedConnectionId);
       const sql = await invoke<string>('generate_sync_sql', {
         projectId: project.id,
         remoteTablesJson: JSON.stringify(remoteTables),
-        databaseType: project.database_type,
+        databaseType: selectedConnection?.type || 'mysql',
       });
       setSqlContent(sql);
       setIsSqlModalVisible(true);
@@ -592,7 +591,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
         {connections.length === 0 && (
           <Alert
             message="暂无匹配的数据库连接"
-            description={`请先在设置页面添加 ${project.database_type === 'mysql' ? 'MySQL' : 'PostgreSQL'} 类型的数据库连接配置`}
+            description="请先在设置页面添加数据库连接配置"
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
