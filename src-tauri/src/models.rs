@@ -66,11 +66,11 @@ pub struct IndexField {
 }
 
 // 设置数据结构
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Setting {
-    pub key: String,
-    pub value: String,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct Setting {
+//     pub key: String,
+//     pub value: String,
+// }
 
 // 数据库连接配置数据结构
 #[derive(Debug, Serialize, Deserialize, Clone)]

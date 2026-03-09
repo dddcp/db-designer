@@ -102,15 +102,25 @@ impl DatabaseDialect for MysqlDialect {
 
 impl DatabaseConnector for MysqlDialect {
     fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String> {
-        let url = format!("mysql://{}:{}@{}:{}/{}", user, pass, host, port, db);
-        let pool = mysql::Pool::new(url.as_str()).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let opts = mysql::OptsBuilder::new()
+            .ip_or_hostname(Some(host))
+            .tcp_port(port as u16)
+            .user(Some(user))
+            .pass(Some(pass))
+            .db_name(Some(db));
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
         let _conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
         Ok(())
     }
 
     fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String> {
-        let url = format!("mysql://{}:{}@{}:{}/{}", user, pass, host, port, db);
-        let pool = mysql::Pool::new(url.as_str()).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let opts = mysql::OptsBuilder::new()
+            .ip_or_hostname(Some(host))
+            .tcp_port(port as u16)
+            .user(Some(user))
+            .pass(Some(pass))
+            .db_name(Some(db));
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
         let mut conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
 
         use mysql::prelude::*;
@@ -227,24 +237,34 @@ impl DatabaseDialect for PostgresDialect {
 
 impl DatabaseConnector for PostgresDialect {
     fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String> {
-        let conn_str = format!("host={} port={} user={} password={} dbname={}", host, port, user, pass, db);
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build().map_err(|e| format!("TLS 错误: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Client::connect(&conn_str, connector)
+        let mut client = postgres::Config::new()
+            .host(host)
+            .port(port as u16)
+            .user(user)
+            .password(pass)
+            .dbname(db)
+            .connect(connector)
             .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
         client.simple_query("SELECT 1").map_err(|e| format!("PostgreSQL 查询失败: {}", e))?;
         Ok(())
     }
 
     fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String> {
-        let conn_str = format!("host={} port={} user={} password={} dbname={}", host, port, user, pass, db);
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build().map_err(|e| format!("TLS 错误: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Client::connect(&conn_str, connector)
+        let mut client = postgres::Config::new()
+            .host(host)
+            .port(port as u16)
+            .user(user)
+            .password(pass)
+            .dbname(db)
+            .connect(connector)
             .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
 
         let table_rows = client.query(
