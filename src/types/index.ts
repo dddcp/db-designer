@@ -98,3 +98,10 @@ export interface GitConfig {
   repositoryName: string;
   isInitialized: boolean;
 }
+
+// 后端返回的数据库类型选项
+export interface DatabaseTypeOption {
+  value: string;
+  label: string;
+  color: string;
+}

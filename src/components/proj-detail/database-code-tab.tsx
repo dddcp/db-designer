@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getAllDataTypes, findDataType } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
+import type { DatabaseTypeOption } from '../../types';
 import {
   Card,
   Button,
@@ -57,11 +58,21 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
   const [indexes, setIndexes] = useState<IndexInfo[]>([]);
   const [initData, setInitData] = useState<InitData[]>([]);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
+  const [typeMappings, setTypeMappings] = useState<Record<string, string>>({});
 
-  // 加载数据类型
+  // Load data types and supported database types
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
+
+  // Load type mappings when databaseType changes
+  useEffect(() => {
+    invoke<Record<string, string>>('get_type_mappings', { databaseType }).then(setTypeMappings);
+  }, [databaseType]);
+
+  const mapType = (t: string): string => typeMappings[t.toLowerCase()] || t;
 
   // 加载索引和初始数据
   const loadExtraData = async (tableId: string) => {
@@ -94,7 +105,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     if (selectedTable && dataTypes.length > 0) {
       generateSQL();
     }
-  }, [selectedTable, databaseType, indexes, initData, dataTypes]);
+  }, [selectedTable, databaseType, indexes, initData, dataTypes, typeMappings]);
 
   /**
    * 根据 column_id 查找列名
@@ -124,7 +135,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     sql += `CREATE TABLE ${selectedTable.name} (\n`;
 
     const columnDefinitions = selectedTable.columns.map(column => {
-      let definition = `  ${column.name} ${column.type.toUpperCase()}`;
+      let definition = `  ${column.name} ${mapType(column.type).toUpperCase()}`;
       const dt = findDataType(dataTypes, column.type);
 
       if (column.length && dt?.hasScale) {
@@ -203,7 +214,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     sql += `CREATE TABLE ${selectedTable.name} (\n`;
 
     const columnDefinitions = selectedTable.columns.map(column => {
-      let definition = `  ${column.name} ${column.type.toUpperCase()}`;
+      let definition = `  ${column.name} ${mapType(column.type).toUpperCase()}`;
       const dt = findDataType(dataTypes, column.type);
 
       if (column.length && dt?.hasScale) {
@@ -311,8 +322,9 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
                 onChange={setDatabaseType}
                 style={{ width: 120 }}
               >
-                <Option value="mysql">MySQL</Option>
-                <Option value="postgresql">PostgreSQL</Option>
+                {dbTypes.map(t => (
+                  <Option key={t.value} value={t.value}>{t.label}</Option>
+                ))}
               </Select>
             </Col>
             <Col flex="auto">

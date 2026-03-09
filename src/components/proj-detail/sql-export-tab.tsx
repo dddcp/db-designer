@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -13,7 +13,7 @@ import {
   CopyOutlined,
   ExportOutlined,
 } from '@ant-design/icons';
-import type { Project } from '../../types';
+import type { Project, DatabaseTypeOption } from '../../types';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -27,6 +27,11 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
   const [databaseType, setDatabaseType] = useState('mysql');
   const [sqlContent, setSqlContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
+
+  useEffect(() => {
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
+  }, []);
 
   const handleExport = async () => {
     setLoading(true);
@@ -64,8 +69,9 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
               onChange={setDatabaseType}
               style={{ width: 150 }}
             >
-              <Option value="mysql">MySQL</Option>
-              <Option value="postgresql">PostgreSQL</Option>
+              {dbTypes.map(t => (
+                <Option key={t.value} value={t.value}>{t.label}</Option>
+              ))}
             </Select>
             <Button
               type="primary"

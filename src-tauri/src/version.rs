@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::params;
 
 use crate::db::init_db;
+use crate::dialect::get_dialect;
 use crate::models::*;
 
 /// 从内置默认 + t_setting 中 custom_data_types 读取动态类型配置。
@@ -207,25 +208,25 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         .map_err(|e| format!("Error parsing snapshot: {}", e))?;
 
     let mut sql = String::new();
-    let is_mysql = database_type == "mysql";
+    let dialect = get_dialect(&database_type);
 
     for table in &snapshot.tables {
         sql.push_str(&format!("-- {} ({})\n", table.display_name, table.name));
-        sql.push_str(&format!("CREATE TABLE {} (\n", table.name));
+        sql.push_str(&dialect.create_table_prefix(&table.name));
 
         let mut col_defs: Vec<String> = Vec::new();
         for col in &table.columns {
-            let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
+            let mapped_type = dialect.map_data_type(&col.data_type);
+            let mut def = format!("  {} {}", col.name, mapped_type.to_uppercase());
             append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
-            if !col.nullable { def.push_str(" NOT NULL"); }
+            if !col.nullable { def.push_str(dialect.not_null_clause()); }
             if col.auto_increment {
-                if is_mysql { def.push_str(" AUTO_INCREMENT"); }
-                else { def.push_str(" GENERATED ALWAYS AS IDENTITY"); }
+                def.push_str(dialect.auto_increment_suffix());
             }
             if let Some(dv) = &col.default_value {
-                if !dv.is_empty() { def.push_str(&format!(" DEFAULT '{}'", dv)); }
+                if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
             }
-            if is_mysql {
+            if dialect.supports_inline_comment() {
                 let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
                 if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
             }
@@ -234,37 +235,34 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
 
         let pks: Vec<&str> = table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
         if !pks.is_empty() {
-            col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", ")));
+            col_defs.push(dialect.primary_key_clause(&pks));
         }
 
         sql.push_str(&col_defs.join(",\n"));
         sql.push_str("\n);\n\n");
 
-        // 表注释
-        if is_mysql {
-            sql.push_str(&format!("ALTER TABLE {} COMMENT = '{}';\n\n", table.name, table.display_name));
-        } else {
-            sql.push_str(&format!("COMMENT ON TABLE {} IS '{}';\n", table.name, table.display_name));
-            for col in &table.columns {
-                let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
-                if !comment_text.is_empty() {
-                    sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table.name, col.name, comment_text));
-                }
+        // Table comment
+        sql.push_str(&dialect.table_comment_sql(&table.name, &table.display_name));
+        // Column comments (non-empty only for PG)
+        for col in &table.columns {
+            let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+            if !comment_text.is_empty() {
+                let cs = dialect.column_comment_sql(&table.name, &col.name, comment_text);
+                if !cs.is_empty() { sql.push_str(&cs); }
             }
-            sql.push('\n');
         }
+        sql.push('\n');
 
-        // 索引
+        // Indexes
         for idx in &table.indexes {
             let col_names: Vec<&str> = idx.fields.iter().map(|f| {
                 table.columns.iter().find(|c| c.id == f.column_id).map(|c| c.name.as_str()).unwrap_or("?")
             }).collect();
-            let unique_str = if idx.index_type == "unique" { "UNIQUE " } else { "" };
-            sql.push_str(&format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx.name, table.name, col_names.join(", ")));
+            sql.push_str(&dialect.create_index_sql(&idx.name, &table.name, &col_names, &idx.index_type));
         }
         if !table.indexes.is_empty() { sql.push('\n'); }
 
-        // 初始数据 INSERT
+        // Init data INSERT
         if !table.init_data.is_empty() && !table.columns.is_empty() {
             let col_names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
             sql.push_str(&format!("-- {} 初始数据\n", table.display_name));
@@ -272,14 +270,14 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
                         match data.get(*cn) {
-                            Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                            Some(serde_json::Value::String(s)) => dialect.string_literal(s),
                             Some(serde_json::Value::Number(n)) => n.to_string(),
-                            Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
-                            Some(serde_json::Value::Null) | None => "NULL".into(),
-                            Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                            Some(serde_json::Value::Bool(b)) => dialect.bool_literal(*b).into(),
+                            Some(serde_json::Value::Null) | None => dialect.null_literal().into(),
+                            Some(other) => dialect.string_literal(&other.to_string()),
                         }
                     }).collect();
-                    sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", table.name, col_names.join(", "), values.join(", ")));
+                    sql.push_str(&dialect.insert_sql(&table.name, &col_names, &values));
                 }
             }
             sql.push('\n');
@@ -305,47 +303,46 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
     let old_snap: Snapshot = serde_json::from_str(&old_json).map_err(|e| format!("Error parsing old snapshot: {}", e))?;
     let new_snap: Snapshot = serde_json::from_str(&new_json).map_err(|e| format!("Error parsing new snapshot: {}", e))?;
 
-    let is_mysql = database_type == "mysql";
+    let dialect = get_dialect(&database_type);
     let mut sql = String::new();
     sql.push_str("-- 升级脚本\n\n");
 
     let old_map: HashMap<String, &SnapshotTable> = old_snap.tables.iter().map(|t| (t.name.clone(), t)).collect();
     let new_map: HashMap<String, &SnapshotTable> = new_snap.tables.iter().map(|t| (t.name.clone(), t)).collect();
 
-    // 1. 新增的表（包含索引和初始数据）
+    // 1. New tables (with indexes and init data)
     for new_table in &new_snap.tables {
         if !old_map.contains_key(&new_table.name) {
             sql.push_str(&format!("-- 新增表: {}\n", new_table.display_name));
-            sql.push_str(&format!("CREATE TABLE {} (\n", new_table.name));
+            sql.push_str(&dialect.create_table_prefix(&new_table.name));
             let mut col_defs: Vec<String> = Vec::new();
             for col in &new_table.columns {
                 let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
                 append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
-                if !col.nullable { def.push_str(" NOT NULL"); }
+                if !col.nullable { def.push_str(dialect.not_null_clause()); }
                 if col.auto_increment {
-                    if is_mysql { def.push_str(" AUTO_INCREMENT"); } else { def.push_str(" GENERATED ALWAYS AS IDENTITY"); }
+                    def.push_str(dialect.auto_increment_suffix());
                 }
                 if let Some(dv) = &col.default_value {
-                    if !dv.is_empty() { def.push_str(&format!(" DEFAULT '{}'", dv)); }
+                    if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                 }
                 col_defs.push(def);
             }
             let pks: Vec<&str> = new_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
-            if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
+            if !pks.is_empty() { col_defs.push(dialect.primary_key_clause(&pks)); }
             sql.push_str(&col_defs.join(",\n"));
             sql.push_str("\n);\n\n");
 
-            // 新增表的索引
+            // New table indexes
             for idx in &new_table.indexes {
                 let col_names: Vec<&str> = idx.fields.iter().map(|f| {
                     new_table.columns.iter().find(|c| c.id == f.column_id).map(|c| c.name.as_str()).unwrap_or("?")
                 }).collect();
-                let unique_str = if idx.index_type == "unique" { "UNIQUE " } else { "" };
-                sql.push_str(&format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx.name, new_table.name, col_names.join(", ")));
+                sql.push_str(&dialect.create_index_sql(&idx.name, &new_table.name, &col_names, &idx.index_type));
             }
             if !new_table.indexes.is_empty() { sql.push('\n'); }
 
-            // 新增表的初始数据
+            // New table init data
             if !new_table.init_data.is_empty() && !new_table.columns.is_empty() {
                 let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
                 sql.push_str(&format!("-- {} 初始数据\n", new_table.display_name));
@@ -353,14 +350,14 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
                             match data.get(*cn) {
-                                Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                                Some(serde_json::Value::String(s)) => dialect.string_literal(s),
                                 Some(serde_json::Value::Number(n)) => n.to_string(),
-                                Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
-                                Some(serde_json::Value::Null) | None => "NULL".into(),
-                                Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                                Some(serde_json::Value::Bool(b)) => dialect.bool_literal(*b).into(),
+                                Some(serde_json::Value::Null) | None => dialect.null_literal().into(),
+                                Some(other) => dialect.string_literal(&other.to_string()),
                             }
                         }).collect();
-                        sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", new_table.name, col_names.join(", "), values.join(", ")));
+                        sql.push_str(&dialect.insert_sql(&new_table.name, &col_names, &values));
                     }
                 }
                 sql.push('\n');
@@ -368,15 +365,16 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
         }
     }
 
-    // 2. 删除的表
+    // 2. Dropped tables
     for old_table in &old_snap.tables {
         if !new_map.contains_key(&old_table.name) {
             sql.push_str(&format!("-- 删除表: {}\n", old_table.display_name));
-            sql.push_str(&format!("DROP TABLE IF EXISTS {};\n\n", old_table.name));
+            sql.push_str(&dialect.drop_table_sql(&old_table.name));
+            sql.push('\n');
         }
     }
 
-    // 3. 修改的表：比较列差异
+    // 3. Modified tables: column diff
     for new_table in &new_snap.tables {
         if let Some(old_table) = old_map.get(&new_table.name) {
             let old_cols: HashMap<String, &ColumnDef> = old_table.columns.iter().map(|c| (c.name.clone(), c)).collect();
@@ -386,19 +384,20 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             for col in &new_table.columns {
                 if !old_cols.contains_key(&col.name) {
-                    let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
+                    let mapped_type = dialect.map_data_type(&col.data_type);
+                    let mut def = format!("{} {}", col.name, mapped_type.to_uppercase());
                     append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
-                    if !col.nullable { def.push_str(" NOT NULL"); }
+                    if !col.nullable { def.push_str(dialect.not_null_clause()); }
                     if let Some(dv) = &col.default_value {
-                        if !dv.is_empty() { def.push_str(&format!(" DEFAULT '{}'", dv)); }
+                        if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                     }
-                    changes.push(format!("  ADD COLUMN {}", def));
+                    changes.push(dialect.add_column_clause(&def));
                 }
             }
 
             for col in &old_table.columns {
                 if !new_cols.contains_key(&col.name) {
-                    changes.push(format!("  DROP COLUMN {}", col.name));
+                    changes.push(dialect.drop_column_clause(&col.name));
                 }
             }
 
@@ -406,14 +405,12 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 if let Some(old_col) = old_cols.get(&col.name) {
                     let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.scale != old_col.scale || col.nullable != old_col.nullable;
                     if type_changed {
-                        let mut def = format!("{} {}", col.name, col.data_type.to_uppercase());
-                        append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
-                        if !col.nullable { def.push_str(" NOT NULL"); }
-                        if is_mysql {
-                            changes.push(format!("  MODIFY COLUMN {}", def));
-                        } else {
-                            changes.push(format!("  ALTER COLUMN {} TYPE {}", col.name, col.data_type.to_uppercase()));
-                        }
+                        let mapped_type = dialect.map_data_type(&col.data_type);
+                        let full_type = mapped_type.to_uppercase();
+                        let mut type_with_suffix = full_type.clone();
+                        append_type_suffix(&mut type_with_suffix, &col.data_type, col.length, col.scale, &length_types, &scale_types);
+                        if !col.nullable { type_with_suffix.push_str(dialect.not_null_clause()); }
+                        changes.push(dialect.modify_column_clause(&col.name, &type_with_suffix));
                     }
                 }
             }
@@ -423,11 +420,10 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 sql.push_str(&format!("ALTER TABLE {}\n{};\n\n", new_table.name, changes.join(",\n")));
             }
 
-            // 索引差异比较
+            // Index diff
             let old_idx_map: HashMap<String, &IndexDef> = old_table.indexes.iter().map(|i| (i.name.clone(), i)).collect();
             let new_idx_map: HashMap<String, &IndexDef> = new_table.indexes.iter().map(|i| (i.name.clone(), i)).collect();
 
-            // 辅助闭包：将索引字段解析为列名列表
             let resolve_idx_cols = |idx: &IndexDef, table: &SnapshotTable| -> Vec<String> {
                 idx.fields.iter().map(|f| {
                     table.columns.iter().find(|c| c.id == f.column_id)
@@ -437,31 +433,31 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             let mut idx_changes = Vec::new();
 
-            // 删除的索引
+            // Dropped indexes
             for (idx_name, _old_idx) in &old_idx_map {
                 if !new_idx_map.contains_key(idx_name) {
-                    idx_changes.push(format!("DROP INDEX {};\n", idx_name));
+                    idx_changes.push(dialect.drop_index_sql(idx_name, &new_table.name));
                 }
             }
 
-            // 新增的索引
+            // New indexes
             for (idx_name, new_idx) in &new_idx_map {
                 if !old_idx_map.contains_key(idx_name) {
                     let col_names = resolve_idx_cols(new_idx, new_table);
-                    let unique_str = if new_idx.index_type == "unique" { "UNIQUE " } else { "" };
-                    idx_changes.push(format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, new_table.name, col_names.join(", ")));
+                    let col_refs: Vec<&str> = col_names.iter().map(|s| s.as_str()).collect();
+                    idx_changes.push(dialect.create_index_sql(idx_name, &new_table.name, &col_refs, &new_idx.index_type));
                 }
             }
 
-            // 修改的索引（类型或字段变化 -> 先删后建）
+            // Modified indexes (type or columns changed -> drop + recreate)
             for (idx_name, new_idx) in &new_idx_map {
                 if let Some(old_idx) = old_idx_map.get(idx_name) {
                     let old_col_names = resolve_idx_cols(old_idx, old_table);
                     let new_col_names = resolve_idx_cols(new_idx, new_table);
                     if old_idx.index_type != new_idx.index_type || old_col_names != new_col_names {
-                        idx_changes.push(format!("DROP INDEX {};\n", idx_name));
-                        let unique_str = if new_idx.index_type == "unique" { "UNIQUE " } else { "" };
-                        idx_changes.push(format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, new_table.name, new_col_names.join(", ")));
+                        idx_changes.push(dialect.drop_index_sql(idx_name, &new_table.name));
+                        let col_refs: Vec<&str> = new_col_names.iter().map(|s| s.as_str()).collect();
+                        idx_changes.push(dialect.create_index_sql(idx_name, &new_table.name, &col_refs, &new_idx.index_type));
                     }
                 }
             }
@@ -474,7 +470,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 sql.push('\n');
             }
 
-            // 初始数据差异比较
+            // Init data diff
             let old_data_set: HashSet<&String> = old_table.init_data.iter().collect();
             let new_data_set: HashSet<&String> = new_table.init_data.iter().collect();
 
@@ -488,14 +484,14 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
                             match data.get(*cn) {
-                                Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                                Some(serde_json::Value::String(s)) => dialect.string_literal(s),
                                 Some(serde_json::Value::Number(n)) => n.to_string(),
-                                Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
-                                Some(serde_json::Value::Null) | None => "NULL".into(),
-                                Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                                Some(serde_json::Value::Bool(b)) => dialect.bool_literal(*b).into(),
+                                Some(serde_json::Value::Null) | None => dialect.null_literal().into(),
+                                Some(other) => dialect.string_literal(&other.to_string()),
                             }
                         }).collect();
-                        sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", new_table.name, col_names.join(", "), values.join(", ")));
+                        sql.push_str(&dialect.insert_sql(&new_table.name, &col_names, &values));
                     }
                 }
                 sql.push('\n');
@@ -503,19 +499,18 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             if !removed_data.is_empty() && !old_table.columns.is_empty() {
                 sql.push_str(&format!("-- {} 删除的初始数据（请根据实际情况调整 WHERE 条件）\n", new_table.display_name));
-                // 找主键列用于生成 DELETE 语句
                 let pk_cols: Vec<&str> = old_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
                 for data_json in removed_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         if !pk_cols.is_empty() {
                             let conditions: Vec<String> = pk_cols.iter().map(|pk| {
                                 match data.get(*pk) {
-                                    Some(serde_json::Value::String(s)) => format!("{} = '{}'", pk, s.replace('\'', "''")),
+                                    Some(serde_json::Value::String(s)) => format!("{} = {}", pk, dialect.string_literal(s)),
                                     Some(serde_json::Value::Number(n)) => format!("{} = {}", pk, n),
                                     _ => format!("{} = NULL", pk),
                                 }
                             }).collect();
-                            sql.push_str(&format!("DELETE FROM {} WHERE {};\n", new_table.name, conditions.join(" AND ")));
+                            sql.push_str(&dialect.delete_sql(&new_table.name, &conditions));
                         }
                     }
                 }
@@ -535,7 +530,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 #[tauri::command]
 pub fn export_project_sql(project_id: i32, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
-    let is_mysql = database_type == "mysql";
+    let dialect = get_dialect(&database_type);
     let (length_types, scale_types) = get_type_length_info(&conn);
     let mut sql = String::new();
 
@@ -554,42 +549,41 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
         }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
         sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
-        sql.push_str(&format!("CREATE TABLE {} (\n", table_name));
+        sql.push_str(&dialect.create_table_prefix(table_name));
         let mut col_defs = Vec::new();
         for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
-            let mut def = format!("  {} {}", name, dt.to_uppercase());
+            let mapped_type = dialect.map_data_type(dt);
+            let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
             append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
-            if !nullable { def.push_str(" NOT NULL"); }
+            if !nullable { def.push_str(dialect.not_null_clause()); }
             if *ai {
-                if is_mysql { def.push_str(" AUTO_INCREMENT"); }
-                else { def.push_str(" GENERATED ALWAYS AS IDENTITY"); }
+                def.push_str(dialect.auto_increment_suffix());
             }
-            if let Some(d) = dv { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
-            if is_mysql {
+            if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+            if dialect.supports_inline_comment() {
                 let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
                 if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
             }
             col_defs.push(def);
         }
         let pks: Vec<&str> = cols.iter().filter(|c| c.6).map(|c| c.0.as_str()).collect();
-        if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
+        if !pks.is_empty() { col_defs.push(dialect.primary_key_clause(&pks)); }
         sql.push_str(&col_defs.join(",\n"));
         sql.push_str("\n);\n\n");
 
-        if is_mysql {
-            sql.push_str(&format!("ALTER TABLE {} COMMENT = '{}';\n\n", table_name, display_name));
-        } else {
-            sql.push_str(&format!("COMMENT ON TABLE {} IS '{}';\n", table_name, display_name));
-            for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
-                let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
-                if !comment_text.is_empty() {
-                    sql.push_str(&format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table_name, name, comment_text));
-                }
+        // Table comment
+        sql.push_str(&dialect.table_comment_sql(table_name, display_name));
+        // Column comments (non-empty only for PG)
+        for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
+            let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
+            if !comment_text.is_empty() {
+                let cs = dialect.column_comment_sql(table_name, name, comment_text);
+                if !cs.is_empty() { sql.push_str(&cs); }
             }
-            sql.push('\n');
         }
+        sql.push('\n');
 
-        // 索引
+        // Indexes
         let mut idx_stmt = conn.prepare("SELECT id, name, index_type FROM t_index WHERE table_id = ?1")
             .map_err(|e| format!("Error: {}", e))?;
         let indexes: Vec<(String, String, String)> = idx_stmt.query_map(params![table_id], |row| {
@@ -606,12 +600,12 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             let resolved_names: Vec<String> = col_ids.iter().map(|cid| {
                 name_stmt.query_row(params![cid], |row| row.get(0)).unwrap_or_else(|_| "?".to_string())
             }).collect();
-            let unique_str = if idx_type == "unique" { "UNIQUE " } else { "" };
-            sql.push_str(&format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, table_name, resolved_names.join(", ")));
+            let col_refs: Vec<&str> = resolved_names.iter().map(|s| s.as_str()).collect();
+            sql.push_str(&dialect.create_index_sql(idx_name, table_name, &col_refs, idx_type));
         }
         if !indexes.is_empty() { sql.push('\n'); }
 
-        // 初始数据
+        // Init data
         let mut data_stmt = conn.prepare("SELECT data FROM t_init_data WHERE table_id = ?1 ORDER BY id")
             .map_err(|e| format!("Error: {}", e))?;
         let init_data: Vec<String> = data_stmt.query_map(params![table_id], |row| row.get(0))
@@ -624,14 +618,14 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
                         match data.get(*cn) {
-                            Some(serde_json::Value::String(s)) => format!("'{}'", s.replace('\'', "''")),
+                            Some(serde_json::Value::String(s)) => dialect.string_literal(s),
                             Some(serde_json::Value::Number(n)) => n.to_string(),
-                            Some(serde_json::Value::Bool(b)) => if *b { "1".into() } else { "0".into() },
-                            Some(serde_json::Value::Null) | None => "NULL".into(),
-                            Some(other) => format!("'{}'", other.to_string().replace('\'', "''")),
+                            Some(serde_json::Value::Bool(b)) => dialect.bool_literal(*b).into(),
+                            Some(serde_json::Value::Null) | None => dialect.null_literal().into(),
+                            Some(other) => dialect.string_literal(&other.to_string()),
                         }
                     }).collect();
-                    sql.push_str(&format!("INSERT INTO {} ({}) VALUES ({});\n", table_name, col_names.join(", "), values.join(", ")));
+                    sql.push_str(&dialect.insert_sql(table_name, &col_names, &values));
                 }
             }
             sql.push('\n');

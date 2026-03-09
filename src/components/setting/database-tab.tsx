@@ -21,7 +21,7 @@ import {
   DeleteOutlined,
   SaveOutlined,
 } from '@ant-design/icons';
-import type { DatabaseConnection } from '../../types';
+import type { DatabaseConnection, DatabaseTypeOption } from '../../types';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -32,9 +32,11 @@ const DatabaseTab: React.FC = () => {
   const [isDbModalVisible, setIsDbModalVisible] = useState(false);
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
 
   useEffect(() => {
     loadDatabaseConnections();
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
   const loadDatabaseConnections = async () => {
@@ -168,8 +170,8 @@ const DatabaseTab: React.FC = () => {
                 title={
                   <Space>
                     <Text strong>{connection.name}</Text>
-                    <Tag color={connection.type === 'mysql' ? 'green' : 'purple'}>
-                      {connection.type === 'mysql' ? 'MySQL' : 'PostgreSQL'}
+                    <Tag color={dbTypes.find(t => t.value === connection.type)?.color || 'blue'}>
+                      {dbTypes.find(t => t.value === connection.type)?.label || connection.type}
                     </Tag>
                   </Space>
                 }
@@ -202,8 +204,9 @@ const DatabaseTab: React.FC = () => {
             <Col span={12}>
               <Form.Item name="type" label="数据库类型" rules={[{ required: true, message: '请选择数据库类型' }]}>
                 <Select placeholder="请选择数据库类型">
-                  <Option value="mysql">MySQL</Option>
-                  <Option value="postgresql">PostgreSQL</Option>
+                  {dbTypes.map(t => (
+                    <Option key={t.value} value={t.value}>{t.label}</Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>

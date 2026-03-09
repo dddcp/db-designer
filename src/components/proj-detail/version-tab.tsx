@@ -12,7 +12,6 @@ import {
   Popconfirm,
   Select,
   Space,
-  Tag,
   Typography,
 } from 'antd';
 import {
@@ -23,7 +22,7 @@ import {
   CopyOutlined,
   DownOutlined,
 } from '@ant-design/icons';
-import type { Project } from '../../types';
+import type { Project, DatabaseTypeOption } from '../../types';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -65,10 +64,12 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
   const [upgradeOldId, setUpgradeOldId] = useState<number | undefined>();
   const [upgradeNewId, setUpgradeNewId] = useState<number | undefined>();
   const [upgradeDatabaseType, setUpgradeDatabaseType] = useState<string>('mysql');
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
   const [form] = Form.useForm();
 
   useEffect(() => {
     loadVersions();
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, [project.id]);
 
   const loadVersions = async () => {
@@ -117,7 +118,8 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         versionId: version.id,
         databaseType: dbType,
       });
-      setSqlTitle(`版本 "${version.name}" 完整 SQL (${dbType === 'mysql' ? 'MySQL' : 'PostgreSQL'})`);
+      const typeInfo = dbTypes.find(t => t.value === dbType);
+      setSqlTitle(`版本 "${version.name}" 完整 SQL (${typeInfo?.label || dbType})`);
       setSqlContent(sql);
       setIsSqlModalVisible(true);
     } catch (error) {
@@ -233,10 +235,11 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
                 <Dropdown
                   key="export"
                   menu={{
-                    items: [
-                      { key: 'mysql', label: 'MySQL', onClick: () => handleExportSQL(version, 'mysql') },
-                      { key: 'postgresql', label: 'PostgreSQL', onClick: () => handleExportSQL(version, 'postgresql') },
-                    ],
+                    items: dbTypes.map(t => ({
+                      key: t.value,
+                      label: t.label,
+                      onClick: () => handleExportSQL(version, t.value),
+                    })),
                   }}
                 >
                   <Button type="link" icon={<ExportOutlined />}>
@@ -353,8 +356,9 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
               value={upgradeDatabaseType}
               onChange={setUpgradeDatabaseType}
             >
-              <Option value="mysql">MySQL</Option>
-              <Option value="postgresql">PostgreSQL</Option>
+              {dbTypes.map(t => (
+                <Option key={t.value} value={t.value}>{t.label}</Option>
+              ))}
             </Select>
           </div>
           <div>

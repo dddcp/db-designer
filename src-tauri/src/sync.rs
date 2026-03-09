@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::params;
 
 use crate::db::init_db;
+use crate::dialect::{get_dialect, get_connector};
 use crate::models::*;
 use crate::version::{get_type_length_info, append_type_suffix};
 
@@ -17,20 +18,8 @@ pub fn connect_database(connection_id: i32) -> Result<String, String> {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
         }).map_err(|e| format!("连接配置不存在: {}", e))?;
 
-    if db_type == "mysql" {
-        let url = format!("mysql://{}:{}@{}:{}/{}", username, password, host, port, database);
-        let pool = mysql::Pool::new(url.as_str()).map_err(|e| format!("MySQL 连接失败: {}", e))?;
-        let _conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
-    } else {
-        let conn_str = format!("host={} port={} user={} password={} dbname={}", host, port, username, password, database);
-        let tls_connector = native_tls::TlsConnector::builder()
-            .danger_accept_invalid_certs(true)
-            .build().map_err(|e| format!("TLS 错误: {}", e))?;
-        let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Client::connect(&conn_str, connector)
-            .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
-        client.simple_query("SELECT 1").map_err(|e| format!("PostgreSQL 查询失败: {}", e))?;
-    }
+    let connector = get_connector(&db_type);
+    connector.test_connection(&host, port, &username, &password, &database)?;
 
     Ok("连接成功".to_string())
 }
@@ -46,156 +35,8 @@ pub fn get_remote_tables(connection_id: i32) -> Result<Vec<RemoteTable>, String>
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
         }).map_err(|e| format!("连接配置不存在: {}", e))?;
 
-    if db_type == "mysql" {
-        get_mysql_tables(&host, port, &username, &password, &database)
-    } else {
-        get_pg_tables(&host, port, &username, &password, &database)
-    }
-}
-
-fn get_mysql_tables(host: &str, port: i32, username: &str, password: &str, database: &str) -> Result<Vec<RemoteTable>, String> {
-    let url = format!("mysql://{}:{}@{}:{}/{}", username, password, host, port, database);
-    let pool = mysql::Pool::new(url.as_str()).map_err(|e| format!("MySQL 连接失败: {}", e))?;
-    let mut conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
-
-    use mysql::prelude::*;
-
-    let tables: Vec<(String, Option<String>)> = conn.query(
-        format!("SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{}' AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME", database)
-    ).map_err(|e| format!("查询表失败: {}", e))?;
-
-    let mut result = Vec::new();
-    for (table_name, table_comment) in &tables {
-        let columns: Vec<(String, String, Option<i64>, String, String, String, Option<String>, Option<String>)> = conn.query(
-            format!(
-                "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_KEY, EXTRA, COLUMN_DEFAULT, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' ORDER BY ORDINAL_POSITION",
-                database, table_name
-            )
-        ).map_err(|e| format!("查询列失败: {}", e))?;
-
-        let remote_cols: Vec<RemoteColumn> = columns.into_iter().map(|(name, data_type, length, nullable, column_key, extra, default_value, comment)| {
-            RemoteColumn {
-                name,
-                data_type,
-                length: length.map(|l| l as i32),
-                nullable: nullable == "YES",
-                column_key,
-                extra,
-                default_value,
-                comment: if comment.as_deref() == Some("") { None } else { comment },
-            }
-        }).collect();
-
-        // 查询索引（排除 PRIMARY KEY）
-        let idx_rows: Vec<(String, i32, String, i64, String)> = conn.query(
-            format!(
-                "SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX, INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' AND INDEX_NAME != 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
-                database, table_name
-            )
-        ).map_err(|e| format!("查询索引失败: {}", e))?;
-
-        let mut idx_map: HashMap<String, (bool, String, Vec<String>)> = HashMap::new();
-        for (idx_name, non_unique, col_name, _seq, idx_type) in idx_rows {
-            let entry = idx_map.entry(idx_name).or_insert_with(|| (non_unique == 0, idx_type, Vec::new()));
-            entry.2.push(col_name);
-        }
-
-        let remote_indexes: Vec<RemoteIndex> = idx_map.into_iter().map(|(name, (is_unique, idx_type, cols))| {
-            let index_type = if is_unique {
-                "unique".to_string()
-            } else if idx_type == "FULLTEXT" {
-                "fulltext".to_string()
-            } else {
-                "normal".to_string()
-            };
-            RemoteIndex { name, index_type, column_names: cols }
-        }).collect();
-
-        result.push(RemoteTable {
-            name: table_name.clone(),
-            comment: if table_comment.as_deref() == Some("") { None } else { table_comment.clone() },
-            columns: remote_cols,
-            indexes: remote_indexes,
-        });
-    }
-
-    Ok(result)
-}
-
-fn get_pg_tables(host: &str, port: i32, username: &str, password: &str, database: &str) -> Result<Vec<RemoteTable>, String> {
-    let conn_str = format!("host={} port={} user={} password={} dbname={}", host, port, username, password, database);
-    let tls_connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build().map_err(|e| format!("TLS 错误: {}", e))?;
-    let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-    let mut client = postgres::Client::connect(&conn_str, connector)
-        .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
-
-    let table_rows = client.query(
-        "SELECT c.relname, pg_catalog.obj_description(c.oid) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname",
-        &[],
-    ).map_err(|e| format!("查询表失败: {}", e))?;
-
-    let mut result = Vec::new();
-    for row in &table_rows {
-        let table_name: String = row.get(0);
-        let table_comment: Option<String> = row.get(1);
-
-        let col_rows = client.query(
-            "SELECT c.column_name, c.data_type, c.character_maximum_length::int, c.is_nullable, COALESCE((SELECT 'PRI' FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name WHERE tc.table_name = c.table_name AND kcu.column_name = c.column_name AND tc.constraint_type = 'PRIMARY KEY'), '') as column_key, c.column_default, pg_catalog.col_description((SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name), c.ordinal_position) FROM information_schema.columns c WHERE c.table_schema = 'public' AND c.table_name = $1 ORDER BY c.ordinal_position",
-            &[&table_name],
-        ).map_err(|e| format!("查询列失败: {}", e))?;
-
-        let remote_cols: Vec<RemoteColumn> = col_rows.iter().map(|r| {
-            let nullable_str: String = r.get(3);
-            let length: Option<i32> = r.get(2);
-            let default_val: Option<String> = r.get(5);
-            let extra = if default_val.as_deref().map(|d| d.starts_with("nextval(")).unwrap_or(false) {
-                "auto_increment".to_string()
-            } else {
-                String::new()
-            };
-            RemoteColumn {
-                name: r.get(0),
-                data_type: r.get(1),
-                length,
-                nullable: nullable_str == "YES",
-                column_key: r.get(4),
-                extra,
-                default_value: default_val,
-                comment: r.get(6),
-            }
-        }).collect();
-
-        // 查询索引（排除主键）
-        let idx_rows = client.query(
-            "SELECT i.relname as index_name, ix.indisunique, a.attname as column_name, array_position(ix.indkey, a.attnum) as col_pos FROM pg_class t JOIN pg_index ix ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND t.relname = $1 AND NOT ix.indisprimary ORDER BY i.relname, col_pos",
-            &[&table_name],
-        ).map_err(|e| format!("查询索引失败: {}", e))?;
-
-        let mut idx_map: HashMap<String, (bool, Vec<String>)> = HashMap::new();
-        for r in &idx_rows {
-            let idx_name: String = r.get(0);
-            let is_unique: bool = r.get(1);
-            let col_name: String = r.get(2);
-            let entry = idx_map.entry(idx_name).or_insert_with(|| (is_unique, Vec::new()));
-            entry.1.push(col_name);
-        }
-
-        let remote_indexes: Vec<RemoteIndex> = idx_map.into_iter().map(|(name, (is_unique, cols))| {
-            let index_type = if is_unique { "unique".to_string() } else { "normal".to_string() };
-            RemoteIndex { name, index_type, column_names: cols }
-        }).collect();
-
-        result.push(RemoteTable {
-            name: table_name,
-            comment: table_comment,
-            columns: remote_cols,
-            indexes: remote_indexes,
-        });
-    }
-
-    Ok(result)
+    let connector = get_connector(&db_type);
+    connector.get_remote_tables(&host, port, &username, &password, &database)
 }
 
 // 比较本地表结构和远程表结构
@@ -416,7 +257,7 @@ pub fn compare_tables(project_id: i32, remote_tables_json: String) -> Result<Vec
 #[tauri::command]
 pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_type: String) -> Result<String, String> {
     let diffs = compare_tables(project_id, remote_tables_json)?;
-    let is_mysql = database_type == "mysql";
+    let dialect = get_dialect(&database_type);
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
     let (length_types, scale_types) = get_type_length_info(&conn);
 
@@ -439,21 +280,22 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                   .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
                 sql.push_str(&format!("-- 新建表: {} ({})\n", diff.table_name, diff.local_display_name.as_deref().unwrap_or("")));
-                sql.push_str(&format!("CREATE TABLE {} (\n", diff.table_name));
+                sql.push_str(&dialect.create_table_prefix(&diff.table_name));
                 let mut col_defs = Vec::new();
                 for (name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
-                    let mut def = format!("  {} {}", name, dt.to_uppercase());
+                    let mapped_type = dialect.map_data_type(dt);
+                    let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
                     append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
-                    if !nullable { def.push_str(" NOT NULL"); }
+                    if !nullable { def.push_str(dialect.not_null_clause()); }
                     if *ai {
-                        if is_mysql { def.push_str(" AUTO_INCREMENT"); }
+                        def.push_str(dialect.auto_increment_suffix());
                     }
-                    if let Some(d) = dv { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
-                    if is_mysql { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c)); } } }
+                    if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+                    if dialect.supports_inline_comment() { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c)); } } }
                     col_defs.push(def);
                 }
                 let pks: Vec<&str> = cols.iter().filter(|c| c.5).map(|c| c.0.as_str()).collect();
-                if !pks.is_empty() { col_defs.push(format!("  PRIMARY KEY ({})", pks.join(", "))); }
+                if !pks.is_empty() { col_defs.push(dialect.primary_key_clause(&pks)); }
                 sql.push_str(&col_defs.join(",\n"));
                 sql.push_str("\n);\n\n");
             }
@@ -475,7 +317,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                             let col_info: (String, Option<i32>, Option<i32>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
                                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
                             }).map_err(|e| format!("Error: {}", e))?;
-                            let mut def = format!("{} {}", cd.column_name, col_info.0.to_uppercase());
+                            let mut def = format!("{} {}", cd.column_name, dialect.map_data_type(&col_info.0).to_uppercase());
                             append_type_suffix(&mut def, &col_info.0, col_info.1, col_info.2, &length_types, &scale_types);
                             if !col_info.3 { def.push_str(" NOT NULL"); }
                             if let Some(d) = &col_info.4 { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
@@ -486,11 +328,12 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                         }
                         "different" => {
                             if let Some(lt) = &cd.local_type {
-                                if is_mysql {
-                                    changes.push(format!("  MODIFY COLUMN {} {}", cd.column_name, lt.to_uppercase()));
-                                } else {
-                                    changes.push(format!("  ALTER COLUMN {} TYPE {}", cd.column_name, lt.to_uppercase()));
-                                }
+                                let (base, suffix) = match lt.find('(') {
+                                    Some(pos) => (&lt[..pos], &lt[pos..]),
+                                    None => (lt.as_str(), ""),
+                                };
+                                let mapped_full = format!("{}{}", dialect.map_data_type(base).to_uppercase(), suffix.to_uppercase());
+                                changes.push(dialect.modify_column_clause(&cd.column_name, &mapped_full));
                             }
                         }
                         _ => {}

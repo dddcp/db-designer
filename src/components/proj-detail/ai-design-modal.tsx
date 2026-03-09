@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
+import type { DatabaseTypeOption } from '../../types';
 import {
   Drawer,
   Input,
@@ -81,9 +82,11 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
   const [generatedTables, setGeneratedTables] = useState<GeneratedTable[]>([]);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
   const [databaseType, setDatabaseType] = useState<string>('mysql');
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
 
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
   const handleGenerate = async () => {
@@ -304,8 +307,9 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
             value={databaseType}
             onChange={setDatabaseType}
           >
-            <Option value="mysql">MySQL</Option>
-            <Option value="postgresql">PostgreSQL</Option>
+            {dbTypes.map(t => (
+              <Option key={t.value} value={t.value}>{t.label}</Option>
+            ))}
           </Select>
         </div>
         <div>
