@@ -638,3 +638,108 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
     Ok(sql)
 }
+
+// 导出单个表的 SQL（从实时数据，包含表结构、索引、初始数据）
+#[tauri::command]
+pub fn export_table_sql(table_id: String, database_type: String) -> Result<String, String> {
+    let conn = init_db().map_err(|e| format!("Error: {}", e))?;
+    let dialect = get_dialect(&database_type);
+    let (length_types, scale_types) = get_type_length_info(&conn);
+    let mut sql = String::new();
+
+    let (table_name, display_name): (String, String) = conn.query_row(
+        "SELECT name, display_name FROM t_table WHERE id = ?1", params![table_id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        }
+    ).map_err(|e| format!("Error: {}", e))?;
+
+    let mut col_stmt = conn.prepare(
+        "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
+    ).map_err(|e| format!("Error: {}", e))?;
+    let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?))
+    }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+    sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
+    sql.push_str(&dialect.create_table_prefix(&table_name));
+    let mut col_defs = Vec::new();
+    for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
+        let mapped_type = dialect.map_data_type(dt);
+        let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
+        append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
+        if !nullable { def.push_str(dialect.not_null_clause()); }
+        if *ai { def.push_str(dialect.auto_increment_suffix()); }
+        if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+        if dialect.supports_inline_comment() {
+            let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
+            if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
+        }
+        col_defs.push(def);
+    }
+    let pks: Vec<&str> = cols.iter().filter(|c| c.6).map(|c| c.0.as_str()).collect();
+    if !pks.is_empty() { col_defs.push(dialect.primary_key_clause(&pks)); }
+    sql.push_str(&col_defs.join(",\n"));
+    sql.push_str("\n);\n\n");
+
+    // Table comment
+    sql.push_str(&dialect.table_comment_sql(&table_name, &display_name));
+    // Column comments
+    for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
+        let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
+        if !comment_text.is_empty() {
+            let cs = dialect.column_comment_sql(&table_name, name, comment_text);
+            if !cs.is_empty() { sql.push_str(&cs); }
+        }
+    }
+    sql.push('\n');
+
+    // Indexes
+    let mut idx_stmt = conn.prepare("SELECT id, name, index_type FROM t_index WHERE table_id = ?1")
+        .map_err(|e| format!("Error: {}", e))?;
+    let indexes: Vec<(String, String, String)> = idx_stmt.query_map(params![table_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+    for (idx_id, idx_name, idx_type) in &indexes {
+        let mut field_stmt = conn.prepare("SELECT column_id FROM t_index_field WHERE index_id = ?1 ORDER BY sort_order")
+            .map_err(|e| format!("Error: {}", e))?;
+        let col_ids: Vec<String> = field_stmt.query_map(params![idx_id], |row| row.get(0))
+            .map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+        let mut name_stmt = conn.prepare("SELECT name FROM t_column WHERE id = ?1")
+            .map_err(|e| format!("Error: {}", e))?;
+        let resolved_names: Vec<String> = col_ids.iter().map(|cid| {
+            name_stmt.query_row(params![cid], |row| row.get(0)).unwrap_or_else(|_| "?".to_string())
+        }).collect();
+        let col_refs: Vec<&str> = resolved_names.iter().map(|s| s.as_str()).collect();
+        sql.push_str(&dialect.create_index_sql(idx_name, &table_name, &col_refs, idx_type));
+    }
+    if !indexes.is_empty() { sql.push('\n'); }
+
+    // Init data
+    let mut data_stmt = conn.prepare("SELECT data FROM t_init_data WHERE table_id = ?1 ORDER BY id")
+        .map_err(|e| format!("Error: {}", e))?;
+    let init_data: Vec<String> = data_stmt.query_map(params![table_id], |row| row.get(0))
+        .map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+    if !init_data.is_empty() && !cols.is_empty() {
+        let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
+        sql.push_str(&format!("-- {} 初始数据\n", display_name));
+        for data_json in &init_data {
+            if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
+                let values: Vec<String> = col_names.iter().map(|cn| {
+                    match data.get(*cn) {
+                        Some(serde_json::Value::String(s)) => dialect.string_literal(s),
+                        Some(serde_json::Value::Number(n)) => n.to_string(),
+                        Some(serde_json::Value::Bool(b)) => dialect.bool_literal(*b).into(),
+                        Some(serde_json::Value::Null) | None => dialect.null_literal().into(),
+                        Some(other) => dialect.string_literal(&other.to_string()),
+                    }
+                }).collect();
+                sql.push_str(&dialect.insert_sql(&table_name, &col_names, &values));
+            }
+        }
+        sql.push('\n');
+    }
+
+    Ok(sql)
+}

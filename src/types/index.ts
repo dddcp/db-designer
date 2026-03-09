@@ -72,7 +72,7 @@ export interface IndexDef {
 export interface DatabaseConnection {
   id: number;
   name: string;
-  type: 'mysql' | 'postgresql';
+  type: string;
   host: string;
   port: number;
   username: string;

@@ -53,6 +53,7 @@ pub fn run() {
             version::export_version_sql,
             version::export_upgrade_sql,
             version::export_project_sql,
+            version::export_table_sql,
             sync::connect_database,
             sync::get_remote_tables,
             sync::compare_tables,
