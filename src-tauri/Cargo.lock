@@ -915,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "db-designer"
-version = "0.3.0"
+version = "0.3.5"
 dependencies = [
  "dotenv",
  "mysql",
