@@ -1128,7 +1128,7 @@ const ProjectDetail: React.FC = () => {
                             索引
                           </span>
                         ),
-                        children: <IndexTab selectedTable={selectedTable} />
+                        children: <IndexTab selectedTable={selectedTable} tables={tables} />
                       },
                       {
                         key: 'initData',

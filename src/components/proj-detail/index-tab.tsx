@@ -19,8 +19,10 @@ import {
 import {
   PlusOutlined,
   DeleteOutlined,
-  EditOutlined
+  EditOutlined,
+  RobotOutlined
 } from '@ant-design/icons';
+import AiRecommendIndexModal from './ai-recommend-index-modal';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -29,6 +31,7 @@ import type { IndexDef, TableDef } from '../../types';
 
 interface IndexTabProps {
   selectedTable: TableDef | null;
+  tables: TableDef[];
 }
 
 // 后端索引数据结构
@@ -44,10 +47,11 @@ interface BackendIndexDef {
 /**
  * 索引管理组件
  */
-const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
+const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
   const [indexes, setIndexes] = useState<IndexDef[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<IndexDef | null>(null);
+  const [isAiRecommendVisible, setIsAiRecommendVisible] = useState(false);
   const [form] = Form.useForm();
 
   // 加载索引
@@ -266,13 +270,21 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Title level={4} style={{ margin: 0 }}>索引管理</Title>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAddIndex}
-          >
-            添加索引
-          </Button>
+          <Space>
+            <Button
+              icon={<RobotOutlined />}
+              onClick={() => setIsAiRecommendVisible(true)}
+            >
+              AI 推荐索引
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAddIndex}
+            >
+              添加索引
+            </Button>
+          </Space>
         </div>
 
         <Table
@@ -369,6 +381,22 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable }) => {
           </Form.Item>
         </Form>
       </Drawer>
+
+      {/* AI 推荐索引 */}
+      <AiRecommendIndexModal
+        open={isAiRecommendVisible}
+        onCancel={() => setIsAiRecommendVisible(false)}
+        selectedTable={selectedTable}
+        tables={tables}
+        existingIndexes={indexes}
+        onIndexesCreated={async (newIndexes) => {
+          const merged = [...indexes, ...newIndexes];
+          setIndexes(merged);
+          await saveIndexesToBackend(merged);
+          setIsAiRecommendVisible(false);
+          message.success(`成功创建 ${newIndexes.length} 个索引`);
+        }}
+      />
     </div>
   );
 };
