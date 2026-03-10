@@ -2,9 +2,9 @@
 
 # DB Designer
 
-**轻量级数据库模型设计工具**
+**AI 驱动的数据库模型设计工具**
 
-AI 智能设计表结构 / 多数据库支持 / 版本管理 / 结构同步
+自然语言建表 / AI 索引优化 / AI 表结构重构 / 多数据库适配 / 版本管理 / 结构同步
 
 [![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/dddcp/db-designer?tab=MIT-1-ov-file#readme)
@@ -14,13 +14,25 @@ AI 智能设计表结构 / 多数据库支持 / 版本管理 / 结构同步
 
 ---
 
+## AI 能力
+
+DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
+
+| 能力 | 说明 |
+|------|------|
+| **自然语言建表** | 用一句话描述业务需求，AI 自动生成完整的表结构、字段、类型与约束 |
+| **项目上下文感知** | AI 设计新表时自动注入已有表结构、索引、元数据，理解业务全貌后再设计，确保命名风格一致、关联关系合理 |
+| **AI 表结构重构** | 选中任意表，用自然语言描述修改意图，AI 生成调整后的完整结构 |
+| **AI 索引推荐** | 提供慢查询 SQL 或业务特征（数据量、读写比、性能痛点），AI 分析后推荐最优索引方案，支持一键创建 |
+
+> 兼容所有 OpenAI API 格式的模型服务（OpenAI / DeepSeek / 通义千问 / 本地 Ollama 等），在设置页面配置即可。
+
 ## 功能特性
 
 | 功能 | 说明 |
 |------|------|
 | 表结构设计 | 可视化设计表、列、索引，支持拖拽排序 |
-| AI 智能建表 | 接入 AI 大模型，自然语言描述即可生成表结构 |
-| 元数据管理 | 为表配置元数据，支持导出 INSERT 语句 |
+| 元数据管理 | 为表配置元数据，支持 Excel 导入与 INSERT 语句导出 |
 | 版本管理 | 对项目结构打快照，支持版本间差异对比和 SQL 导出 |
 | 数据库比对 | 连接远程 MySQL / PostgreSQL，对比本地设计与线上结构差异 |
 | 数据库同步 | 对比线上，生成增量脚本；一键同步线上到模型库 |
@@ -94,3 +106,7 @@ yarn tauri build
 | 后端 | Rust + SQLite (rusqlite) |
 | 数据库连接 | mysql / postgres crate |
 | 构建工具 | Vite |
+
+## 更新日志
+
+查看 [CHANGELOG.md](./CHANGELOG.md)。

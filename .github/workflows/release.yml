@@ -61,7 +61,7 @@ jobs:
           releaseName: 'DB Designer ${{ github.ref_name }}'
           releaseBody: |
             ### 🚀 自动发布
-            需要查看更新说明，请移步https://github.com/dddcp/db-designer/releases
+            查看完整更新说明：[CHANGELOG.md](https://github.com/dddcp/db-designer/blob/main/CHANGELOG.md)
             ---
             *此版本由 GitHub Actions 自动构建并发布*
           releaseDraft: false
