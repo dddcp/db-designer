@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
-import type { DatabaseTypeOption } from '../../types';
+import type { DatabaseTypeOption, TableDef, IndexDef } from '../../types';
 import {
   Drawer,
   Input,
@@ -97,9 +97,65 @@ interface AiDesignModalProps {
   open: boolean;
   onCancel: () => void;
   onTablesGenerated: (tables: GeneratedTable[]) => void;
+  tables: TableDef[];
 }
 
-const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
+/** 已有表的索引+元数据快照，用于 AI 上下文 */
+interface TableContext {
+  table: TableDef;
+  indexes: IndexDef[];
+  initDataSample: Record<string, any>[]; // 最多取几条元数据做示例
+}
+
+/**
+ * 将已有项目上下文精简为 prompt 片段
+ */
+function buildExistingContext(contexts: TableContext[]): string {
+  if (contexts.length === 0) return '';
+
+  const lines: string[] = ['以下是项目中已有的表结构，请在设计新表时充分考虑与这些表的关联关系、命名风格、字段规范保持一致，避免重复建表：', ''];
+
+  for (const ctx of contexts) {
+    const { table, indexes, initDataSample } = ctx;
+    lines.push(`### ${table.displayName} (${table.name})`);
+
+    // 字段
+    lines.push('字段:');
+    for (const col of table.columns) {
+      const attrs: string[] = [];
+      if (col.primaryKey) attrs.push('主键');
+      if (col.autoIncrement) attrs.push('自增');
+      if (!col.nullable) attrs.push('非空');
+      if (col.defaultValue) attrs.push(`默认=${col.defaultValue}`);
+      const attrStr = attrs.length > 0 ? ` [${attrs.join(', ')}]` : '';
+      const commentStr = col.comment ? ` -- ${col.comment}` : '';
+      lines.push(`  - ${col.name} ${col.type}${col.length ? `(${col.length})` : ''}${attrStr}${commentStr}`);
+    }
+
+    // 索引
+    if (indexes.length > 0) {
+      lines.push('索引:');
+      for (const idx of indexes) {
+        lines.push(`  - ${idx.name} (${idx.type}): [${idx.columns.join(', ')}]`);
+      }
+    }
+
+    // 元数据样例（最多 3 条，让 AI 理解业务含义）
+    if (initDataSample.length > 0) {
+      lines.push(`元数据样例 (共 ${initDataSample.length} 条):`);
+      for (const row of initDataSample.slice(0, 3)) {
+        lines.push(`  ${JSON.stringify(row)}`);
+      }
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+const buildSystemPrompt = (databaseType: string, typeNames: string[], existingContext: string) => {
+  let prompt = `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
 
 要求：
 1. 输出必须是合法 JSON 数组，不要包含任何其他文本、markdown标记或代码块标记
@@ -109,6 +165,7 @@ const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是
 5. 数据库类型为 ${databaseType}，请根据该数据库的命名惯例设计
 6. varchar 类型请给出合理的 length 值
 7. 每张表应包含 created_at 和 updated_at 时间字段
+8. 不要重复设计已有的表，新表如需关联已有表请通过字段命名体现关联关系（如 user_id 关联 users 表）
 
 输出格式示例：
 [
@@ -123,18 +180,76 @@ const buildSystemPrompt = (databaseType: string, typeNames: string[]) => `你是
   }
 ]`;
 
-const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesGenerated }) => {
+  if (existingContext) {
+    prompt += '\n\n' + existingContext;
+  }
+
+  return prompt;
+};
+
+const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesGenerated, tables }) => {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedTables, setGeneratedTables] = useState<GeneratedTable[]>([]);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
   const [databaseType, setDatabaseType] = useState<string>('mysql');
   const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
+  const [tableContexts, setTableContexts] = useState<TableContext[]>([]);
 
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
     invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
+
+  // Drawer 打开时加载已有表的索引和元数据
+  useEffect(() => {
+    if (!open || tables.length === 0) {
+      setTableContexts([]);
+      return;
+    }
+    loadTableContexts();
+  }, [open, tables]);
+
+  const loadTableContexts = async () => {
+    try {
+      const contexts: TableContext[] = await Promise.all(
+        tables.map(async (table) => {
+          // 加载索引
+          const backendIndexes = await invoke<Array<{
+            id: string; table_id: string; name: string; index_type: string; comment?: string;
+            fields: Array<{ column_id: string; sort_order: number }>;
+          }>>('get_table_indexes', { tableId: table.id });
+
+          const indexes: IndexDef[] = backendIndexes.map(idx => ({
+            id: idx.id,
+            name: idx.name,
+            type: idx.index_type as IndexDef['type'],
+            comment: idx.comment,
+            columns: idx.fields
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map(f => {
+                const col = table.columns.find(c => c.id === f.column_id);
+                return col ? col.name : f.column_id;
+              }),
+          }));
+
+          // 加载元数据（最多取 3 条做样例）
+          const initRows = await invoke<Array<{ id: number; table_id: string; data: string; created_at: string }>>(
+            'get_init_data',
+            { tableId: table.id }
+          );
+          const initDataSample = initRows.slice(0, 3).map(item => {
+            try { return JSON.parse(item.data); } catch { return {}; }
+          });
+
+          return { table, indexes, initDataSample };
+        })
+      );
+      setTableContexts(contexts);
+    } catch (error) {
+      console.error('加载项目上下文失败:', error);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -145,7 +260,8 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
     setLoading(true);
     try {
       const typeNames = dataTypes.map(t => t.value);
-      const systemPrompt = buildSystemPrompt(databaseType, typeNames);
+      const existingContext = buildExistingContext(tableContexts);
+      const systemPrompt = buildSystemPrompt(databaseType, typeNames, existingContext);
       const jsonStr = await callAiApi(systemPrompt, prompt);
       const parsed = JSON.parse(jsonStr);
 

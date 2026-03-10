@@ -1223,6 +1223,7 @@ const ProjectDetail: React.FC = () => {
         open={isAiCreateModalVisible}
         onCancel={() => setIsAiCreateModalVisible(false)}
         onTablesGenerated={handleAiTablesGenerated}
+        tables={tables}
       />
       {selectedTable && (
         <AiModifyTableModal
