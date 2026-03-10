@@ -50,6 +50,9 @@ DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
 <p align="center">
   <img src="./doc/images/ai_design.png" width="80%" />
 </p>
+<p align="center">
+  <img src="./doc/images/ai_index_design.png" width="80%" />
+</p>
 
 ### SQL 导出
 
