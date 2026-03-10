@@ -45,6 +45,7 @@ import VersionTab from './version-tab';
 import SyncTab from './sync-tab';
 import SqlExportTab from './sql-export-tab';
 import AiDesignModal from './ai-design-modal';
+import AiModifyTableModal from './ai-modify-table-modal';
 import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -111,7 +112,8 @@ const ProjectDetail: React.FC = () => {
   const [editingTable, setEditingTable] = useState<TableDef | null>(null);
   const [activeTab, setActiveTab] = useState('structure');
   const [projectView, setProjectView] = useState('design');
-  const [isAiModalVisible, setIsAiModalVisible] = useState(false);
+  const [isAiCreateModalVisible, setIsAiCreateModalVisible] = useState(false);
+  const [isAiModifyModalVisible, setIsAiModifyModalVisible] = useState(false);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
 
   // 加载数据类型
@@ -565,8 +567,8 @@ const ProjectDetail: React.FC = () => {
         nullable: column.nullable,
         primary_key: column.primaryKey,
         auto_increment: column.autoIncrement,
-        default_value: column.defaultValue || null,
-        comment: column.comment || null,
+        default_value: column.defaultValue != null ? String(column.defaultValue) : null,
+        comment: column.comment != null ? String(column.comment) : null,
         sort_order: column.order,
       }));
       
@@ -652,12 +654,43 @@ const ProjectDetail: React.FC = () => {
       if (newTables.length > 0) {
         setSelectedTable(newTables[0]);
       }
-      setIsAiModalVisible(false);
+      setIsAiCreateModalVisible(false);
       message.success(`成功创建 ${newTables.length} 张表`);
     } catch (error) {
       console.error('创建AI生成的表失败:', error);
       message.error('创建表失败: ' + error);
     }
+  };
+
+  /**
+   * AI修改表结构回调
+   */
+  const handleAiTableModified = (aiTable: GeneratedTable) => {
+    if (!selectedTable) return;
+
+    const updatedColumns = aiTable.columns.map((col, idx) => ({
+      id: Date.now().toString() + idx,
+      name: col.name,
+      displayName: col.displayName,
+      type: col.type,
+      length: col.length,
+      nullable: col.nullable,
+      primaryKey: col.primaryKey,
+      autoIncrement: col.autoIncrement,
+      defaultValue: col.defaultValue,
+      comment: col.comment,
+      order: idx + 1,
+    }));
+
+    const updatedTable: TableDef = {
+      ...selectedTable,
+      columns: updatedColumns,
+    };
+
+    setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
+    setSelectedTable(updatedTable);
+    setIsAiModifyModalVisible(false);
+    message.success('AI修改方案已应用，请检查后点击"保存表结构"持久化');
   };
 
   // 列定义
@@ -932,7 +965,7 @@ const ProjectDetail: React.FC = () => {
                   <Button
                     icon={<RobotOutlined />}
                     size="small"
-                    onClick={() => setIsAiModalVisible(true)}
+                    onClick={() => setIsAiCreateModalVisible(true)}
                   >
                     AI设计
                   </Button>
@@ -1040,15 +1073,23 @@ const ProjectDetail: React.FC = () => {
                         children: (
                           <div>
                             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Button 
-                                type="primary" 
-                                icon={<PlusOutlined />}
-                                onClick={handleAddColumn}
-                              >
-                                添加列
-                              </Button>
-                              <Button 
-                                type="primary" 
+                              <Space>
+                                <Button
+                                  type="primary"
+                                  icon={<PlusOutlined />}
+                                  onClick={handleAddColumn}
+                                >
+                                  添加列
+                                </Button>
+                                <Button
+                                  icon={<RobotOutlined />}
+                                  onClick={() => setIsAiModifyModalVisible(true)}
+                                >
+                                  AI 修改
+                                </Button>
+                              </Space>
+                              <Button
+                                type="primary"
                                 onClick={handleSaveStructure}
                               >
                                 保存表结构
@@ -1179,10 +1220,18 @@ const ProjectDetail: React.FC = () => {
 
       {/* AI设计弹窗 */}
       <AiDesignModal
-        open={isAiModalVisible}
-        onCancel={() => setIsAiModalVisible(false)}
+        open={isAiCreateModalVisible}
+        onCancel={() => setIsAiCreateModalVisible(false)}
         onTablesGenerated={handleAiTablesGenerated}
       />
+      {selectedTable && (
+        <AiModifyTableModal
+          open={isAiModifyModalVisible}
+          onCancel={() => setIsAiModifyModalVisible(false)}
+          selectedTable={selectedTable}
+          onTableModified={handleAiTableModified}
+        />
+      )}
     </>
   );
 };

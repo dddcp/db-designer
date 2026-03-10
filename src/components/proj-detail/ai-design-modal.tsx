@@ -46,6 +46,53 @@ export interface GeneratedTable {
   columns: GeneratedColumn[];
 }
 
+/**
+ * 封装 AI API 调用：读取 settings → 构建请求 → 发送 fetch → 提取 content → 剥离 markdown 代码块 → 返回纯 JSON 字符串
+ */
+export async function callAiApi(systemPrompt: string, userPrompt: string): Promise<string> {
+  const allSettings = await invoke<{ [key: string]: string }>('get_all_settings');
+  const baseUrl = allSettings['ai_base_url'];
+  const apiKey = allSettings['ai_api_key'];
+  const model = allSettings['ai_model'];
+
+  if (!baseUrl || !apiKey || !model) {
+    throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
+  }
+
+  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`API请求失败 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const content: string = data.choices?.[0]?.message?.content || '';
+
+  let jsonStr = content.trim();
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  }
+
+  return jsonStr;
+}
+
 interface AiDesignModalProps {
   open: boolean;
   onCancel: () => void;
@@ -97,60 +144,23 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
     setLoading(true);
     try {
-      const allSettings = await invoke<{ [key: string]: string }>('get_all_settings');
-      const baseUrl = allSettings['ai_base_url'];
-      const apiKey = allSettings['ai_api_key'];
-      const model = allSettings['ai_model'];
-
-      if (!baseUrl || !apiKey || !model) {
-        message.error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
-        return;
-      }
-
-      const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
       const typeNames = dataTypes.map(t => t.value);
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: buildSystemPrompt(databaseType, typeNames) },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.7
-        })
-      });
+      const systemPrompt = buildSystemPrompt(databaseType, typeNames);
+      const jsonStr = await callAiApi(systemPrompt, prompt);
+      const parsed = JSON.parse(jsonStr);
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`API请求失败 (${response.status}): ${errText}`);
-      }
-
-      const data = await response.json();
-      const content: string = data.choices?.[0]?.message?.content || '';
-
-      // Extract JSON from response (handle possible markdown code blocks)
-      let jsonStr = content.trim();
-      const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        jsonStr = codeBlockMatch[1].trim();
-      }
-
-      const tables: GeneratedTable[] = JSON.parse(jsonStr);
-
-      // Validate and normalize
-      if (!Array.isArray(tables) || tables.length === 0) {
+      if (!Array.isArray(parsed)) {
         throw new Error('AI返回的数据格式不正确，请重试');
       }
 
-      const normalizedTables = tables.map(table => ({
+      if (parsed.length === 0 || !parsed[0].columns) {
+        throw new Error('AI返回的数据格式不正确，请重试');
+      }
+
+      const normalizedTables = parsed.map(table => ({
         name: table.name,
         displayName: table.displayName,
-        columns: table.columns.map(col => ({
+        columns: table.columns.map((col: any) => ({
           name: col.name,
           displayName: col.displayName,
           type: typeNames.includes(col.type) ? col.type : 'varchar',
@@ -158,8 +168,8 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           nullable: col.nullable ?? true,
           primaryKey: col.primaryKey ?? false,
           autoIncrement: col.autoIncrement ?? false,
-          defaultValue: col.defaultValue,
-          comment: col.comment
+          defaultValue: col.defaultValue != null ? String(col.defaultValue) : undefined,
+          comment: col.comment != null ? String(col.comment) : undefined
         }))
       }));
 
@@ -199,11 +209,10 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
   const handleConfirm = () => {
     if (generatedTables.length === 0) {
-      message.warning('没有可创建的表');
+      message.warning('没有可用的数据');
       return;
     }
     onTablesGenerated(generatedTables);
-    // Reset state
     setPrompt('');
     setGeneratedTables([]);
   };
@@ -284,7 +293,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
   return (
     <Drawer
-      title={<Space><RobotOutlined /> AI 自动设计表结构</Space>}
+      title={
+        <Space>
+          <RobotOutlined />
+          AI 自动设计表结构
+        </Space>
+      }
       open={open}
       onClose={handleClose}
       width={900}
