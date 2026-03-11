@@ -4,91 +4,96 @@ on:
   push:
     branches:
       - dev
+  release:
+    types: [published]
 
 jobs:
-  sync:
+  sync-code:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Add Gitee remote
+      - name: Sync code and tags to Gitee
         run: |
-          git remote add gitee https://gitee.com/diaochangpeng/db-designer.git
-          
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add gitee https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/diaochangpeng/db-designer.git
+          git push gitee dev:master --force
+          git push gitee --tags --force
 
-      - name: Push to Gitee master branch
-        run: |
-          git push gitee master
-        continue-on-error: true
-
-  release:
-    needs: sync
+  sync-release:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-
-      - name: Get release info
-        id: release
-        run: |
-          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          echo "name=DB Designer ${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          
-          # Read changelog for release body
-          if [ -f CHANGELOG.md ]; then
-            body="### 更新内容\n查看完整更新说明：[CHANGELOG.md](https://gitee.com/diaochangpeng/db-designer/blob/main/CHANGELOG.md)\n\n---\n*此版本由 GitHub Actions 自动构建并发布*"
-            echo "body=$body" >> $GITHUB_OUTPUT
-          else
-            echo "body=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Gitee Release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: release } = await github.rest.repos.getRelease({
-              owner: 'dddcp',
-              repo: 'db-designer',
-              tag_name: '${{ github.ref_name }}'
-            });
-            
-            // Use Gitee API to create release
-            const giteeToken = process.env.GITEE_TOKEN;
-            if (!giteeToken) {
-              console.log('GITEE_TOKEN not set, skipping Gitee release creation');
-              return;
-            }
-            
-            const response = await fetch('https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases', {
-              method: 'POST',
-              headers: {
-                'Authorization': `token ${giteeToken}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-              },
-              body: JSON.stringify({
-                tag_name: '${{ github.ref_name }}',
-                name: '${{ github.ref_name }}',
-                body: release.body || 'Auto release from GitHub',
-                prerelease: ${{ toJson(github.ref != 'refs/heads/main') }},
-                target_commitish: 'main'
-              })
-            });
-            
-            if (response.ok) {
-              console.log('Gitee release created successfully');
-            } else {
-              const error = await response.text();
-              console.log('Failed to create Gitee release:', error);
-            }
+      - name: Create Gitee Release and upload assets
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          GH_REPO: ${{ github.repository }}
+          GH_RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          # Build JSON payload with jq to handle special characters
+          PAYLOAD=$(jq -n \
+            --arg token "$GITEE_TOKEN" \
+            --arg tag "$TAG_NAME" \
+            --arg name "$RELEASE_NAME" \
+            --arg body "$RELEASE_BODY" \
+            --argjson pre "$PRERELEASE" \
+            '{
+              access_token: $token,
+              tag_name: $tag,
+              name: $name,
+              body: $body,
+              prerelease: $pre,
+              target_commitish: "master"
+            }')
+
+          RESPONSE=$(curl -s -X POST \
+            "https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
+
+          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
+            echo "::error::Failed to create Gitee release"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "Created Gitee release ID: $RELEASE_ID"
+
+          # Download GitHub release assets and upload to Gitee
+          ASSETS=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GH_REPO}/releases/${GH_RELEASE_ID}/assets")
+
+          ASSET_COUNT=$(echo "$ASSETS" | jq 'length')
+          echo "Found $ASSET_COUNT assets to sync"
+
+          for i in $(seq 0 $((ASSET_COUNT - 1))); do
+            NAME=$(echo "$ASSETS" | jq -r ".[$i].name")
+            DOWNLOAD_URL=$(echo "$ASSETS" | jq -r ".[$i].url")
+
+            echo "Downloading $NAME ..."
+            curl -sL \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/octet-stream" \
+              "$DOWNLOAD_URL" -o "$NAME"
+
+            echo "Uploading $NAME to Gitee ..."
+            curl -s -X POST \
+              "https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${NAME}"
+
+            rm -f "$NAME"
+            echo "Done: $NAME"
+          done
+
+          echo "All assets synced successfully"
