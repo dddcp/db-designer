@@ -1,0 +1,94 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add Gitee remote
+        run: |
+          git remote add gitee https://gitee.com/diaochangpeng/db-designer.git
+          
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Push to Gitee main branch
+        run: |
+          git push gitee main
+        continue-on-error: true
+
+  release:
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Get release info
+        id: release
+        run: |
+          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "name=DB Designer ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          
+          # Read changelog for release body
+          if [ -f CHANGELOG.md ]; then
+            body="### 更新内容\n查看完整更新说明：[CHANGELOG.md](https://gitee.com/diaochangpeng/db-designer/blob/main/CHANGELOG.md)\n\n---\n*此版本由 GitHub Actions 自动构建并发布*"
+            echo "body=$body" >> $GITHUB_OUTPUT
+          else
+            echo "body=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Gitee Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: release } = await github.rest.repos.getRelease({
+              owner: 'dddcp',
+              repo: 'db-designer',
+              tag_name: '${{ github.ref_name }}'
+            });
+            
+            // Use Gitee API to create release
+            const giteeToken = process.env.GITEE_TOKEN;
+            if (!giteeToken) {
+              console.log('GITEE_TOKEN not set, skipping Gitee release creation');
+              return;
+            }
+            
+            const response = await fetch('https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases', {
+              method: 'POST',
+              headers: {
+                'Authorization': `token ${giteeToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify({
+                tag_name: '${{ github.ref_name }}',
+                name: '${{ github.ref_name }}',
+                body: release.body || 'Auto release from GitHub',
+                prerelease: ${{ toJson(github.ref != 'refs/heads/main') }},
+                target_commitish: 'main'
+              })
+            });
+            
+            if (response.ok) {
+              console.log('Gitee release created successfully');
+            } else {
+              const error = await response.text();
+              console.log('Failed to create Gitee release:', error);
+            }
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
