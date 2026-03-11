@@ -36,7 +36,15 @@ pub trait DatabaseDialect {
         format!("  DROP COLUMN {}", col)
     }
     fn default_value_clause(&self, value: &str) -> String {
-        format!(" DEFAULT '{}'", value)
+        let v = value.trim();
+        if v.eq_ignore_ascii_case("NULL") {
+            " DEFAULT NULL".to_string()
+        } else if v.starts_with('\'') && v.ends_with('\'') && v.len() >= 2 {
+            // Already a SQL literal like '1' — use as-is
+            format!(" DEFAULT {}", v)
+        } else {
+            format!(" DEFAULT '{}'", v.replace('\'', "''"))
+        }
     }
     fn not_null_clause(&self) -> &str {
         " NOT NULL"
@@ -84,7 +92,7 @@ impl DatabaseDialect for MysqlDialect {
     fn supports_inline_comment(&self) -> bool { true }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
-        format!("ALTER TABLE {} COMMENT = '{}';\n", table, comment)
+        format!("ALTER TABLE {} COMMENT = '{}';\n", table, comment.replace('\'', "''"))
     }
     fn column_comment_sql(&self, _table: &str, _col: &str, _comment: &str) -> String {
         String::new() // MySQL uses inline COMMENT in column definition
@@ -199,10 +207,10 @@ impl DatabaseDialect for PostgresDialect {
     fn supports_inline_comment(&self) -> bool { false }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
-        format!("COMMENT ON TABLE {} IS '{}';\n", table, comment)
+        format!("COMMENT ON TABLE {} IS '{}';\n", table, comment.replace('\'', "''"))
     }
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String {
-        format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table, col, comment)
+        format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table, col, comment.replace('\'', "''"))
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
         format!("  ALTER COLUMN {} TYPE {}", col, full_type)

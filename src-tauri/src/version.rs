@@ -228,7 +228,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
             }
             if dialect.supports_inline_comment() {
                 let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
-                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
+                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
             }
             col_defs.push(def);
         }
@@ -562,7 +562,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
             if dialect.supports_inline_comment() {
                 let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
-                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
+                if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
             }
             col_defs.push(def);
         }
@@ -672,7 +672,7 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
         if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
         if dialect.supports_inline_comment() {
             let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
-            if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text)); }
+            if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
         }
         col_defs.push(def);
     }

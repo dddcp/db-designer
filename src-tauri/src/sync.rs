@@ -291,7 +291,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                         def.push_str(dialect.auto_increment_suffix());
                     }
                     if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
-                    if dialect.supports_inline_comment() { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c)); } } }
+                    if dialect.supports_inline_comment() { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } } }
                     col_defs.push(def);
                 }
                 let pks: Vec<&str> = cols.iter().filter(|c| c.5).map(|c| c.0.as_str()).collect();
