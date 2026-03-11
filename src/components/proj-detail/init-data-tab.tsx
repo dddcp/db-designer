@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
   Card,
+  DatePicker,
   Input,
   InputNumber,
   message,
@@ -10,9 +11,11 @@ import {
   Space,
   Switch,
   Table,
+  TimePicker,
   Typography,
   Upload,
 } from 'antd';
+import dayjs from 'dayjs';
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -120,7 +123,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData: Record<string, any>[] = XLSX.utils.sheet_to_json(firstSheet);
 
@@ -129,17 +132,56 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           return;
         }
 
+        const DATE_TYPES = ['date', 'datetime', 'timestamp', 'time'];
+
+        const formatDateValue = (rawValue: any, colType: string): string => {
+          let d: dayjs.Dayjs | null = null;
+
+          if (rawValue instanceof Date) {
+            // cellDates: true 解析出的 JS Date 对象
+            d = dayjs(rawValue);
+          } else if (typeof rawValue === 'number') {
+            // Excel 日期序列号（如 45985.4667592593）
+            // Excel 序列号起始日期为 1899-12-30，需加 Excel 1900 闰年 bug 修正
+            const excelEpoch = dayjs('1899-12-30');
+            d = excelEpoch.add(rawValue, 'day');
+          } else if (typeof rawValue === 'string' && rawValue.trim() !== '') {
+            // 字符串格式的日期，尝试解析
+            const parsed = dayjs(rawValue);
+            if (parsed.isValid()) {
+              d = parsed;
+            } else {
+              return rawValue; // 无法解析，原样返回
+            }
+          }
+
+          if (!d || !d.isValid()) return String(rawValue);
+
+          if (colType === 'time') return d.format('HH:mm:ss');
+          if (colType === 'date') return d.format('YYYY-MM-DD');
+          return d.format('YYYY-MM-DD HH:mm:ss');
+        };
+
         // 将 Excel 列名映射到表字段
         const importedRows: DataRow[] = jsonData.map((excelRow, idx) => {
           const row: DataRow = { _key: `import_${idx}_${Date.now()}` };
           selectedTable!.columns.forEach(col => {
-            // 优先匹配字段名，其次匹配中文名
-            if (excelRow[col.name] !== undefined) {
-              row[col.name] = String(excelRow[col.name]);
-            } else if (excelRow[col.displayName] !== undefined) {
-              row[col.name] = String(excelRow[col.displayName]);
-            } else {
+            const rawValue = excelRow[col.name] !== undefined
+              ? excelRow[col.name]
+              : excelRow[col.displayName] !== undefined
+                ? excelRow[col.displayName]
+                : undefined;
+
+            if (rawValue === undefined || rawValue === null) {
               row[col.name] = '';
+              return;
+            }
+
+            const colType = col.type.toLowerCase();
+            if (DATE_TYPES.includes(colType)) {
+              row[col.name] = formatDateValue(rawValue, colType);
+            } else {
+              row[col.name] = String(rawValue);
             }
           });
           return row;
@@ -192,6 +234,46 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           style={{ width: '100%' }}
           step={0.01}
           placeholder={col.displayName}
+        />
+      );
+    }
+
+    if (['datetime', 'timestamp'].includes(type)) {
+      return (
+        <DatePicker
+          showTime
+          size="small"
+          value={value ? dayjs(value) : null}
+          onChange={(_d, dateStr) => handleCellChange(rowKey, col.name, dateStr as string)}
+          style={{ width: '100%' }}
+          placeholder={col.displayName}
+          format="YYYY-MM-DD HH:mm:ss"
+        />
+      );
+    }
+
+    if (type === 'date') {
+      return (
+        <DatePicker
+          size="small"
+          value={value ? dayjs(value) : null}
+          onChange={(_d, dateStr) => handleCellChange(rowKey, col.name, dateStr as string)}
+          style={{ width: '100%' }}
+          placeholder={col.displayName}
+          format="YYYY-MM-DD"
+        />
+      );
+    }
+
+    if (type === 'time') {
+      return (
+        <TimePicker
+          size="small"
+          value={value ? dayjs(value, 'HH:mm:ss') : null}
+          onChange={(_t, timeStr) => handleCellChange(rowKey, col.name, timeStr as string)}
+          style={{ width: '100%' }}
+          placeholder={col.displayName}
+          format="HH:mm:ss"
         />
       );
     }
