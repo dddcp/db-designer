@@ -23,9 +23,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Push to Gitee main branch
+      - name: Push to Gitee master branch
         run: |
-          git push gitee main
+          git push gitee master
         continue-on-error: true
 
   release:
