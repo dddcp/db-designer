@@ -17,6 +17,7 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
   Card,
+  Checkbox,
   Form,
   Input,
   Layout,
@@ -790,39 +791,36 @@ const ProjectDetail: React.FC = () => {
       title: '属性',
       key: 'properties',
       render: (_text: string, record: ColumnDef) => (
-        <Space size={[0, 4]} wrap>
-          <Switch
+        <Space size={[16, 4]} wrap>
+          <Checkbox
             checked={record.primaryKey}
-            onChange={(checked) => {
+            onChange={(e) => {
               // 如果设置为主键，则必须是非空的
-              handleSaveColumn(record.id, 'primaryKey', checked);
+              handleSaveColumn(record.id, 'primaryKey', e.target.checked);
             }}
-            size="small"
-            checkedChildren="主键"
-            unCheckedChildren="普通"
-          />
-          <Switch
+          >
+            主键
+          </Checkbox>
+          <Checkbox
             checked={!record.nullable}
-            onChange={(checked) => {
+            onChange={(e) => {
               // 如果已经是主键，则不能设置为可空
-              if (record.primaryKey && !checked) {
+              if (record.primaryKey && !e.target.checked) {
                 showNotification('warning', '主键字段不能设置为可空');
                 return;
               }
-              handleSaveColumn(record.id, 'nullable', !checked);
+              handleSaveColumn(record.id, 'nullable', !e.target.checked);
             }}
-            size="small"
-            checkedChildren="非空"
-            unCheckedChildren="可空"
             disabled={record.primaryKey}
-          />
-          <Switch
+          >
+            非空
+          </Checkbox>
+          <Checkbox
             checked={record.autoIncrement}
-            onChange={(checked) => handleSaveColumn(record.id, 'autoIncrement', checked)}
-            size="small"
-            checkedChildren="自增"
-            unCheckedChildren="非自增"
-          />
+            onChange={(e) => handleSaveColumn(record.id, 'autoIncrement', e.target.checked)}
+          >
+            自增
+          </Checkbox>
         </Space>
       ),
     },
