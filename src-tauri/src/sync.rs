@@ -394,12 +394,18 @@ pub fn sync_remote_table_to_local(project_id: i32, remote_table_json: String) ->
         let primary_key = rc.column_key == "PRI";
         let auto_increment = rc.extra.contains("auto_increment");
 
+        let default_value = match &rc.default_value {
+            Some(v) if v.to_uppercase() == "NULL" => Some("".to_string()),
+            Some(v) => Some(v.clone()),
+            None => Some("".to_string()),
+        };
+
         tx.execute(
             "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 col_id, table_id, rc.name, col_display_name, rc.data_type,
                 rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
-                rc.default_value, rc.comment, i as i32
+                default_value, rc.comment, i as i32
             ],
         ).map_err(|e| format!("创建列失败: {}", e))?;
 
@@ -463,11 +469,17 @@ pub fn sync_remote_columns_to_local(project_id: i32, table_name: String, remote_
             |row| row.get(0),
         ).ok();
 
+        let default_value = match &rc.default_value {
+            Some(v) if v.to_uppercase() == "NULL" => Some("".to_string()),
+            Some(v) => Some(v.clone()),
+            None => Some("".to_string()),
+        };
+
         if let Some(id) = existing_id {
             // UPDATE 已有字段
             conn.execute(
                 "UPDATE t_column SET data_type = ?1, length = ?2, nullable = ?3, default_value = ?4, display_name = ?5, primary_key = ?6, auto_increment = ?7, comment = ?8 WHERE id = ?9",
-                params![rc.data_type, rc.length, rc.nullable, rc.default_value, col_display_name, primary_key, auto_increment, rc.comment, id],
+                params![rc.data_type, rc.length, rc.nullable, default_value, col_display_name, primary_key, auto_increment, rc.comment, id],
             ).map_err(|e| format!("更新列失败: {}", e))?;
         } else {
             // INSERT 新字段
@@ -483,7 +495,7 @@ pub fn sync_remote_columns_to_local(project_id: i32, table_name: String, remote_
                 params![
                     col_id, table_id, rc.name, col_display_name, rc.data_type,
                     rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
-                    rc.default_value, rc.comment, max_sort + 1
+                    default_value, rc.comment, max_sort + 1
                 ],
             ).map_err(|e| format!("插入列失败: {}", e))?;
         }
