@@ -160,13 +160,12 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
 
         const hasNullPk = pkValues.some(v => v === null);
         if (hasNullPk) {
-          const nullPkIdx = pkValues.findIndex(v => v === null);
-          const nullPkCol = pkColumns[nullPkIdx];
-          
-          // 如果主键包含自增字段且为空，允许跳过非空校验（由数据库自动生成）
-          if (!nullPkCol.autoIncrement) {
-            message.error(`第 ${i + 1} 行主键字段 "${nullPkCol.displayName}" 不能为空`);
-            return;
+          // 校验所有为空的主键字段（自增字段允许为空，其余不允许）
+          for (let j = 0; j < pkValues.length; j++) {
+            if (pkValues[j] === null && !pkColumns[j].autoIncrement) {
+              message.error(`第 ${i + 1} 行主键字段 "${pkColumns[j].displayName}" 不能为空`);
+              return;
+            }
           }
         }
 
@@ -185,9 +184,19 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         const value = row[col.name];
         
         // 2. 非空校验 (非主键字段的非空校验)
-        if (!col.primaryKey && !col.nullable && (value === null || value === undefined)) {
-          message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空 (NULL)`);
-          return;
+        if (!col.primaryKey && !col.nullable) {
+          if (value === null || value === undefined) {
+            message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空 (NULL)`);
+            return;
+          }
+          // 数值类型不允许空字符串
+          const type = col.type.toLowerCase();
+          if (['int', 'integer', 'bigint', 'smallint', 'tinyint', 'decimal', 'float', 'double', 'numeric'].includes(type)) {
+            if (String(value).trim() === '') {
+              message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空`);
+              return;
+            }
+          }
         }
 
         // 3. 类型与规则校验
