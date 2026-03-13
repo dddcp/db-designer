@@ -160,7 +160,27 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
         });
     }
 
-    let snapshot = Snapshot { tables: snapshot_tables };
+    let snapshot = Snapshot { tables: snapshot_tables, routines: Vec::new() };
+
+    // 5. 获取编程对象
+    let mut routine_stmt = conn.prepare(
+        "SELECT id, project_id, name, type, body, comment, created_at, updated_at FROM t_routine WHERE project_id = ?1 ORDER BY type, name"
+    ).map_err(|e| format!("Error preparing routine stmt: {}", e))?;
+    let snapshot_routines: Vec<RoutineDef> = routine_stmt.query_map(params![project_id], |row| {
+        Ok(RoutineDef {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            name: row.get(2)?,
+            r#type: row.get(3)?,
+            body: row.get(4)?,
+            comment: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+        })
+    }).map_err(|e| format!("Error querying routines: {}", e))?
+      .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error reading routines: {}", e))?;
+
+    let snapshot = Snapshot { tables: snapshot.tables, routines: snapshot_routines };
     let snapshot_json = serde_json::to_string(&snapshot).map_err(|e| format!("Error serializing snapshot: {}", e))?;
 
     // 5. 插入版本
@@ -281,6 +301,22 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
                 }
             }
             sql.push('\n');
+        }
+    }
+
+    // 编程对象
+    if !snapshot.routines.is_empty() {
+        sql.push_str("-- 编程对象\n\n");
+        for routine in &snapshot.routines {
+            let type_label = match routine.r#type.as_str() {
+                "function" => "函数",
+                "procedure" => "存储过程",
+                "trigger" => "触发器",
+                _ => "编程对象",
+            };
+            sql.push_str(&format!("-- {} : {}\n", type_label, routine.name));
+            sql.push_str(routine.body.trim());
+            sql.push_str("\n\n");
         }
     }
 
@@ -519,6 +555,77 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
         }
     }
 
+    // 编程对象差异
+    {
+        let old_routine_map: HashMap<(String, String), &RoutineDef> = old_snap.routines.iter()
+            .map(|r| ((r.name.clone(), r.r#type.clone()), r)).collect();
+        let new_routine_map: HashMap<(String, String), &RoutineDef> = new_snap.routines.iter()
+            .map(|r| ((r.name.clone(), r.r#type.clone()), r)).collect();
+
+        let mut routine_changes = Vec::new();
+
+        // 新增的编程对象
+        for r in &new_snap.routines {
+            let key = (r.name.clone(), r.r#type.clone());
+            if !old_routine_map.contains_key(&key) {
+                routine_changes.push(format!("-- 新增{}: {}\n{}\n", match r.r#type.as_str() {
+                    "function" => "函数",
+                    "procedure" => "存储过程",
+                    "trigger" => "触发器",
+                    _ => "编程对象",
+                }, r.name, r.body.trim()));
+            }
+        }
+
+        // 删除的编程对象
+        for r in &old_snap.routines {
+            let key = (r.name.clone(), r.r#type.clone());
+            if !new_routine_map.contains_key(&key) {
+                let drop_keyword = match r.r#type.as_str() {
+                    "function" => "FUNCTION",
+                    "procedure" => "PROCEDURE",
+                    "trigger" => "TRIGGER",
+                    _ => "FUNCTION",
+                };
+                routine_changes.push(format!("-- 删除{}: {}\nDROP {} IF EXISTS {};\n", match r.r#type.as_str() {
+                    "function" => "函数",
+                    "procedure" => "存储过程",
+                    "trigger" => "触发器",
+                    _ => "编程对象",
+                }, r.name, drop_keyword, r.name));
+            }
+        }
+
+        // 变更的编程对象
+        for r in &new_snap.routines {
+            let key = (r.name.clone(), r.r#type.clone());
+            if let Some(old_r) = old_routine_map.get(&key) {
+                if old_r.body.trim() != r.body.trim() {
+                    let drop_keyword = match r.r#type.as_str() {
+                        "function" => "FUNCTION",
+                        "procedure" => "PROCEDURE",
+                        "trigger" => "TRIGGER",
+                        _ => "FUNCTION",
+                    };
+                    routine_changes.push(format!("-- 变更{}: {}\nDROP {} IF EXISTS {};\n{}\n", match r.r#type.as_str() {
+                        "function" => "函数",
+                        "procedure" => "存储过程",
+                        "trigger" => "触发器",
+                        _ => "编程对象",
+                    }, r.name, drop_keyword, r.name, r.body.trim()));
+                }
+            }
+        }
+
+        if !routine_changes.is_empty() {
+            sql.push_str("-- 编程对象变更\n\n");
+            for change in &routine_changes {
+                sql.push_str(change);
+                sql.push('\n');
+            }
+        }
+    }
+
     if sql.trim() == "-- 升级脚本" {
         sql.push_str("-- 无差异\n");
     }
@@ -634,6 +741,29 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
     if sql.is_empty() {
         sql.push_str("-- 项目中暂无表结构\n");
+    }
+
+    // 追加编程对象
+    let mut routine_stmt = conn.prepare(
+        "SELECT name, type, body FROM t_routine WHERE project_id = ?1 ORDER BY CASE type WHEN 'function' THEN 1 WHEN 'procedure' THEN 2 WHEN 'trigger' THEN 3 END, name"
+    ).map_err(|e| format!("Error: {}", e))?;
+    let routines: Vec<(String, String, String)> = routine_stmt.query_map(params![project_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
+
+    if !routines.is_empty() {
+        sql.push_str("-- 编程对象\n\n");
+        for (name, rtype, body) in &routines {
+            let type_label = match rtype.as_str() {
+                "function" => "函数",
+                "procedure" => "存储过程",
+                "trigger" => "触发器",
+                _ => "编程对象",
+            };
+            sql.push_str(&format!("-- {} : {}\n", type_label, name));
+            sql.push_str(body.trim());
+            sql.push_str("\n\n");
+        }
     }
 
     Ok(sql)

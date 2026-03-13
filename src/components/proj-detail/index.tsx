@@ -7,6 +7,7 @@ import {
   EditOutlined,
   ExportOutlined,
   FileTextOutlined,
+  FunctionOutlined,
   HistoryOutlined,
   PlusOutlined,
   RobotOutlined,
@@ -44,6 +45,7 @@ import InitDataTab from './init-data-tab';
 import VersionTab from './version-tab';
 import SyncTab from './sync-tab';
 import SqlExportTab from './sql-export-tab';
+import RoutineTab from './routine-tab';
 import AiDesignModal from './ai-design-modal';
 import AiModifyTableModal from './ai-modify-table-modal';
 import type { GeneratedTable } from './ai-design-modal';
@@ -928,6 +930,10 @@ const ProjectDetail: React.FC = () => {
                 label: <span><TableOutlined /> 表设计</span>,
               },
               {
+                key: 'routine',
+                label: <span><FunctionOutlined /> 编程对象</span>,
+              },
+              {
                 key: 'version',
                 label: <span><HistoryOutlined /> 版本管理</span>,
               },
@@ -1173,6 +1179,10 @@ const ProjectDetail: React.FC = () => {
             </div>
           </Content>
         </Layout>
+        ) : projectView === 'routine' ? (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <RoutineTab project={project} />
+          </div>
         ) : projectView === 'version' ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <VersionTab project={project} />

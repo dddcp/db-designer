@@ -134,10 +134,46 @@ pub struct Version {
     pub created_at: String,
 }
 
+// 编程对象（函数/存储过程/触发器）
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RoutineDef {
+    pub id: String,
+    pub project_id: i32,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String, // 'function' | 'procedure' | 'trigger'
+    pub body: String,
+    pub comment: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// 远程编程对象
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RemoteRoutine {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub body: String,
+}
+
+// 编程对象差异
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RoutineDiff {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub status: String, // 'only_local' | 'only_remote' | 'different' | 'same'
+    pub local_body: Option<String>,
+    pub remote_body: Option<String>,
+}
+
 // 快照内部结构（用于序列化/反序列化）
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Snapshot {
     pub tables: Vec<SnapshotTable>,
+    #[serde(default)]
+    pub routines: Vec<RoutineDef>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

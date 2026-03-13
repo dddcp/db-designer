@@ -105,3 +105,87 @@ export interface DatabaseTypeOption {
   label: string;
   color: string;
 }
+
+// 编程对象（函数/存储过程/触发器）
+export interface RoutineDef {
+  id: string;
+  project_id: number;
+  name: string;
+  type: 'function' | 'procedure' | 'trigger';
+  body: string;
+  comment?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 远程编程对象
+export interface RemoteRoutine {
+  name: string;
+  type: 'function' | 'procedure' | 'trigger';
+  body: string;
+}
+
+// 编程对象差异
+export interface RoutineDiff {
+  name: string;
+  type: 'function' | 'procedure' | 'trigger';
+  status: 'only_local' | 'only_remote' | 'different' | 'same';
+  local_body?: string;
+  remote_body?: string;
+}
+
+// 远程索引
+export interface RemoteIndex {
+  name: string;
+  index_type: string;
+  column_names: string[];
+}
+
+// 远程表
+export interface RemoteTable {
+  name: string;
+  comment: string | null;
+  columns: RemoteColumn[];
+  indexes: RemoteIndex[];
+}
+
+// 远程列
+export interface RemoteColumn {
+  name: string;
+  data_type: string;
+  length: number | null;
+  nullable: boolean;
+  column_key: string;
+  extra: string;
+  default_value: string | null;
+  comment: string | null;
+}
+
+// 表差异
+export interface TableDiff {
+  table_name: string;
+  status: string;
+  local_display_name: string | null;
+  column_diffs: ColumnDiff[];
+  index_diffs: IndexDiff[];
+}
+
+// 列差异
+export interface ColumnDiff {
+  column_name: string;
+  status: string;
+  local_type: string | null;
+  remote_type: string | null;
+  detail: string | null;
+}
+
+// 索引差异
+export interface IndexDiff {
+  index_name: string;
+  status: string;
+  local_type: string | null;
+  remote_type: string | null;
+  local_columns: string | null;
+  remote_columns: string | null;
+  detail: string | null;
+}

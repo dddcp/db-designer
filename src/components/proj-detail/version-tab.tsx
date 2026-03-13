@@ -51,6 +51,12 @@ interface SnapshotTable {
 
 interface Snapshot {
   tables: SnapshotTable[];
+  routines?: SnapshotRoutine[];
+}
+
+interface SnapshotRoutine {
+  name: string;
+  type: string;
 }
 
 const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
@@ -184,7 +190,18 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       const tableCount = snap.tables.length;
       const colCount = snap.tables.reduce((sum, t) => sum + t.columns.length, 0);
       const dataCount = snap.tables.reduce((sum, t) => sum + t.init_data.length, 0);
-      return `${tableCount} 张表, ${colCount} 个字段, ${dataCount} 条元数据`;
+      let summary = `${tableCount} 张表, ${colCount} 个字段, ${dataCount} 条元数据`;
+      if (snap.routines && snap.routines.length > 0) {
+        const funcCount = snap.routines.filter(r => r.type === 'function').length;
+        const procCount = snap.routines.filter(r => r.type === 'procedure').length;
+        const trigCount = snap.routines.filter(r => r.type === 'trigger').length;
+        const parts: string[] = [];
+        if (funcCount > 0) parts.push(`${funcCount} 个函数`);
+        if (procCount > 0) parts.push(`${procCount} 个存储过程`);
+        if (trigCount > 0) parts.push(`${trigCount} 个触发器`);
+        if (parts.length > 0) summary += `, ${parts.join(', ')}`;
+      }
+      return summary;
     } catch {
       return '快照解析失败';
     }

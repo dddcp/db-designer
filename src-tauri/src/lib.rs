@@ -7,6 +7,7 @@ mod git;
 mod db_connection;
 mod version;
 mod sync;
+mod routine;
 pub mod dialect;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -62,7 +63,14 @@ pub fn run() {
             sync::sync_remote_columns_to_local,
             sync::sync_remote_indexes_to_local,
             dialect::get_supported_database_types,
-            dialect::get_type_mappings
+            dialect::get_type_mappings,
+            routine::get_project_routines,
+            routine::save_routine,
+            routine::delete_routine,
+            routine::get_remote_routines_cmd,
+            routine::compare_routines,
+            routine::sync_remote_routine_to_local,
+            routine::export_routines_sql
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

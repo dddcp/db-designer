@@ -136,6 +136,18 @@ pub fn init_database() -> Result<String, String> {
             created_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (project_id) REFERENCES t_proj(id)
         );
+
+        CREATE TABLE IF NOT EXISTS t_routine (
+            id TEXT PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            body TEXT NOT NULL,
+            comment TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES t_proj(id)
+        );
     ").map_err(|e| format!("Error initializing database: {}", e))?;
 
     // 数据库迁移：为已存在的 t_column 表添加 scale 列

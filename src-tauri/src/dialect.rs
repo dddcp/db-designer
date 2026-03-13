@@ -78,6 +78,7 @@ pub trait DatabaseDialect {
 pub trait DatabaseConnector {
     fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String>;
     fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String>;
+    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String>;
 }
 
 // ─── MySQL implementation ───────────────────────────────────────────────────
@@ -192,6 +193,76 @@ impl DatabaseConnector for MysqlDialect {
         }
 
         Ok(result)
+    }
+
+    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String> {
+        let opts = mysql::OptsBuilder::new()
+            .ip_or_hostname(Some(host))
+            .tcp_port(port as u16)
+            .user(Some(user))
+            .pass(Some(pass))
+            .db_name(Some(db));
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let mut conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
+
+        use mysql::prelude::*;
+
+        let mut routines = Vec::new();
+
+        // 获取函数和存储过程
+        let routine_rows: Vec<(String, String)> = conn.query(
+            format!(
+                "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '{}' ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
+                db
+            )
+        ).map_err(|e| format!("查询编程对象失败: {}", e))?;
+
+        for (name, routine_type) in &routine_rows {
+            let rtype = if routine_type == "FUNCTION" { "function" } else { "procedure" };
+            let show_sql = if rtype == "function" {
+                format!("SHOW CREATE FUNCTION `{}`", name)
+            } else {
+                format!("SHOW CREATE PROCEDURE `{}`", name)
+            };
+            // SHOW CREATE FUNCTION 返回的列: Function, sql_mode, Create Function, ...
+            // SHOW CREATE PROCEDURE 返回的列: Procedure, sql_mode, Create Procedure, ...
+            let body: Option<String> = conn.query_first(show_sql)
+                .map_err(|e| format!("获取 {} 定义失败: {}", name, e))?
+                .map(|row: (String, String, String, String, String, String)| row.2);
+
+            if let Some(b) = body {
+                routines.push(RemoteRoutine {
+                    name: name.clone(),
+                    r#type: rtype.to_string(),
+                    body: b,
+                });
+            }
+        }
+
+        // 获取触发器
+        let trigger_rows: Vec<(String,)> = conn.query(
+            format!(
+                "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '{}' ORDER BY TRIGGER_NAME",
+                db
+            )
+        ).map_err(|e| format!("查询触发器失败: {}", e))?;
+
+        for (name,) in &trigger_rows {
+            let body: Option<String> = conn.query_first(
+                format!("SHOW CREATE TRIGGER `{}`", name)
+            ).map_err(|e| format!("获取触发器 {} 定义失败: {}", name, e))?
+              .map(|row: (String, String, String, String, String, String, String)| row.2);
+
+            if let Some(b) = body {
+                routines.push(RemoteRoutine {
+                    name: name.clone(),
+                    r#type: "trigger".to_string(),
+                    body: b,
+                });
+            }
+        }
+
+        Ok(routines)
     }
 }
 
@@ -339,6 +410,70 @@ impl DatabaseConnector for PostgresDialect {
         }
 
         Ok(result)
+    }
+
+    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String> {
+        let tls_connector = native_tls::TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .build().map_err(|e| format!("TLS 错误: {}", e))?;
+        let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
+        let mut client = postgres::Config::new()
+            .host(host)
+            .port(port as u16)
+            .user(user)
+            .password(pass)
+            .dbname(db)
+            .connect(connector)
+            .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
+
+        let mut routines = Vec::new();
+
+        // 获取函数和存储过程
+        let func_rows = client.query(
+            "SELECT p.proname, pg_get_functiondef(p.oid), \
+             CASE WHEN p.prokind = 'p' THEN 'procedure' ELSE 'function' END as kind \
+             FROM pg_proc p \
+             JOIN pg_namespace n ON n.oid = p.pronamespace \
+             WHERE n.nspname = 'public' \
+             AND p.prokind IN ('f', 'p') \
+             ORDER BY kind, p.proname",
+            &[],
+        ).map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+
+        for row in &func_rows {
+            let name: String = row.get(0);
+            let body: String = row.get(1);
+            let kind: String = row.get(2);
+            routines.push(RemoteRoutine {
+                name,
+                r#type: kind,
+                body,
+            });
+        }
+
+        // 获取触发器
+        let trig_rows = client.query(
+            "SELECT t.tgname, pg_get_triggerdef(t.oid, true) \
+             FROM pg_trigger t \
+             JOIN pg_class c ON c.oid = t.tgrelid \
+             JOIN pg_namespace n ON n.oid = c.relnamespace \
+             WHERE n.nspname = 'public' \
+             AND NOT t.tgisinternal \
+             ORDER BY t.tgname",
+            &[],
+        ).map_err(|e| format!("查询触发器失败: {}", e))?;
+
+        for row in &trig_rows {
+            let name: String = row.get(0);
+            let body: String = row.get(1);
+            routines.push(RemoteRoutine {
+                name,
+                r#type: "trigger".to_string(),
+                body,
+            });
+        }
+
+        Ok(routines)
     }
 }
 
