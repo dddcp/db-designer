@@ -51,9 +51,10 @@ All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri 
 | `db.rs` | SQLite connection, schema creation, migrations |
 | `models.rs` | All shared data structs (Rust side) |
 | `dialect.rs` | `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection) with MySQL/PostgreSQL implementations |
-| `version.rs` | Version snapshots + SQL export (`export_version_sql`, `export_upgrade_sql`, `export_project_sql`) |
+| `version.rs` | Version snapshots (tables + routines) + SQL export (`export_version_sql`, `export_upgrade_sql`, `export_project_sql`, `export_table_sql`) |
 | `sync.rs` | Remote DB comparison + sync SQL generation |
 | `table.rs` | Table/column/index/init-data CRUD |
+| `routine.rs` | Programmable objects (functions/procedures/triggers) CRUD, remote comparison, sync, SQL export |
 | `project.rs` | Project CRUD |
 | `setting.rs` | Key-value settings store |
 | `db_connection.rs` | DB connection config CRUD |
@@ -63,7 +64,7 @@ All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri 
 
 Three routes: `/` (project list), `/project/:id` (project detail), `/setting` (settings).
 
-The project detail page (`components/proj-detail/index.tsx`) is the core — left sidebar for table list, right pane with tabs for structure editing, indexes, init data, and SQL preview. Project-level tabs switch between table design, version management, DB sync, and SQL export.
+The project detail page (`components/proj-detail/index.tsx`) is the core — left sidebar for table list (with search), right pane with tabs for structure editing, indexes, init data, and SQL preview. Project-level tabs switch between table design, programmable objects (routines), version management, DB sync, and SQL export.
 
 Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). Data types are defined in `data-types.ts` (19 built-in + user-custom types stored in settings).
 
@@ -71,7 +72,7 @@ Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). 
 
 The `dialect.rs` file is the database abstraction layer:
 - `DatabaseDialect` trait: SQL generation methods (CREATE TABLE, ALTER, DROP, indexes, comments, type mapping)
-- `DatabaseConnector` trait: Remote connection testing + table introspection
+- `DatabaseConnector` trait: Remote connection testing + table introspection + routine (function/procedure/trigger) fetching
 - Factory functions: `get_dialect(db_type)` and `get_connector(db_type)`
 - Adding a new dialect: implement both traits, add match arms in factories, add to `get_supported_database_types()`
 
@@ -79,7 +80,7 @@ SQL generation flow: raw type → `dialect.map_data_type()` → uppercase → ap
 
 ### SQLite Schema
 
-Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
+Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
 
 ## Key Conventions
 

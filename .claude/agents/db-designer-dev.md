@@ -18,12 +18,13 @@ This is a Tauri v2 app: **React 18 + TypeScript + Ant Design 5** frontend, **Rus
 |------|---------------|
 | `lib.rs` | Registers all Tauri commands and plugins. **Every new command must be added here.** |
 | `db.rs` | SQLite connection, schema migration, data directory management |
-| `models.rs` | All data structs: `Project`, `TableDef`, `ColumnDef`, `IndexDef`, `Version`, `Snapshot`, `SnapshotTable`, `RemoteTable`, `RemoteColumn`, `RemoteIndex`, `DatabaseConnection`, etc. |
-| `dialect.rs` | **Database dialect abstraction** — `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection) + `MysqlDialect` / `PostgresDialect` implementations + factory functions `get_dialect()` / `get_connector()` + type mapping (`map_data_type`) |
+| `models.rs` | All data structs: `Project`, `TableDef`, `ColumnDef`, `IndexDef`, `Version`, `Snapshot`, `SnapshotTable`, `RoutineDef`, `RemoteRoutine`, `RoutineDiff`, `RemoteTable`, `RemoteColumn`, `RemoteIndex`, `DatabaseConnection`, etc. |
+| `dialect.rs` | **Database dialect abstraction** — `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection + routine fetching) + `MysqlDialect` / `PostgresDialect` implementations + factory functions `get_dialect()` / `get_connector()` + type mapping (`map_data_type`) |
 | `project.rs` | Project CRUD commands |
 | `table.rs` | Table/column/index/init-data CRUD commands |
-| `version.rs` | Version snapshot creation, SQL export (`export_version_sql`, `export_upgrade_sql`, `export_project_sql`). Uses `dialect.*` for all database-specific SQL. Key helpers: `get_type_length_info()`, `append_type_suffix()` |
+| `version.rs` | Version snapshot creation (tables + routines), SQL export (`export_version_sql`, `export_upgrade_sql`, `export_project_sql`, `export_table_sql`). Uses `dialect.*` for all database-specific SQL. Key helpers: `get_type_length_info()`, `append_type_suffix()` |
 | `sync.rs` | Remote DB sync: `connect_database`, `get_remote_tables` (via `DatabaseConnector`), `compare_tables`, `generate_sync_sql`. Uses `dialect.*` for SQL generation |
+| `routine.rs` | Programmable objects (functions/procedures/triggers): CRUD (`get_project_routines`, `save_routine`, `delete_routine`), remote comparison (`compare_routines`, `get_remote_routines_cmd`), sync (`sync_remote_routine_to_local`), SQL export (`export_routines_sql`) |
 | `setting.rs` | Key-value settings store |
 | `db_connection.rs` | Database connection config CRUD |
 | `git.rs` | Git integration |
@@ -35,12 +36,17 @@ This is a Tauri v2 app: **React 18 + TypeScript + Ant Design 5** frontend, **Rus
 | `App.tsx` | Routes: `/` → Main, `/project/:id` → ProjectDetail, `/setting` → Setting |
 | `data-types.ts` | 19 built-in data types + custom type loading/saving from `t_setting` |
 | `types/index.ts` | All TypeScript interfaces (must match Rust structs in `models.rs`) |
-| `components/proj-detail/index.tsx` | Project detail page: left table list + right multi-tab layout |
+| `components/proj-detail/index.tsx` | Project detail page: left table list (with search) + right multi-tab layout. Project-level tabs: table design, routines, version, sync, SQL export |
 | `components/proj-detail/database-code-tab.tsx` | Client-side SQL preview generation per table (uses `get_type_mappings` for type conversion) |
 | `components/proj-detail/sql-export-tab.tsx` | Full project SQL export (calls backend `export_project_sql`) |
-| `components/proj-detail/version-tab.tsx` | Version management (calls backend `export_version_sql`, `export_upgrade_sql`) |
-| `components/proj-detail/sync-tab.tsx` | Remote DB sync UI |
-| `components/proj-detail/ai-design-modal.tsx` | AI-powered table design |
+| `components/proj-detail/version-tab.tsx` | Version management (calls backend `export_version_sql`, `export_upgrade_sql`), snapshots include routines |
+| `components/proj-detail/sync-tab.tsx` | Remote DB sync UI: table diff + routine diff tabs |
+| `components/proj-detail/sync-table-diff.tsx` | Sync table/column/index diff display with one-click sync |
+| `components/proj-detail/sync-routine-diff.tsx` | Sync routine (function/procedure/trigger) diff display with sync support |
+| `components/proj-detail/routine-tab.tsx` | Programmable objects management: CRUD for functions/procedures/triggers + SQL export |
+| `components/proj-detail/ai-design-modal.tsx` | AI-powered table design (injects project context) |
+| `components/proj-detail/ai-modify-table-modal.tsx` | AI-powered table structure modification |
+| `components/proj-detail/ai-recommend-index-modal.tsx` | AI-powered index recommendation |
 | `components/proj-detail/index-tab.tsx` | Index management |
 | `components/proj-detail/init-data-tab.tsx` | Initial data management |
 | `components/setting/setting.tsx` | Settings page with tabs |
@@ -54,7 +60,8 @@ This is a Tauri v2 app: **React 18 + TypeScript + Ant Design 5** frontend, **Rus
 | `t_column` | Column definitions |
 | `t_index` + `t_index_field` | Indexes and their fields |
 | `t_init_data` | Initial data rows (JSON) |
-| `t_version` | Version snapshots (JSON blob) |
+| `t_version` | Version snapshots (JSON blob: tables + routines) |
+| `t_routine` | Programmable objects (functions/procedures/triggers) |
 | `t_setting` | Key-value settings |
 | `t_database_connection` | DB connection configs |
 
@@ -71,7 +78,7 @@ This is a Tauri v2 app: **React 18 + TypeScript + Ant Design 5** frontend, **Rus
 
 1. Create a struct (e.g., `SqliteDialect`) in `dialect.rs`
 2. Implement `DatabaseDialect` trait (required: `auto_increment_suffix`, `supports_inline_comment`, `table_comment_sql`, `column_comment_sql`, `modify_column_clause`, `drop_index_sql`, `bool_literal`, `map_data_type`, `type_mappings`)
-3. Implement `DatabaseConnector` trait (`test_connection`, `get_remote_tables`)
+3. Implement `DatabaseConnector` trait (`test_connection`, `get_remote_tables`, `get_remote_routines`)
 4. Add to factory functions `get_dialect()` and `get_connector()` match arms
 5. Add to `get_supported_database_types()` vector
 6. Frontend picks it up automatically (all selects are dynamic)
@@ -106,6 +113,7 @@ useEffect(() => {
 ## Debugging Tips
 
 - SQL generation bugs: Start from `version.rs` (backend export) or `database-code-tab.tsx` (frontend preview)
+- Routine bugs: Check `routine.rs` for CRUD/sync, `routine-tab.tsx` for UI, `sync-routine-diff.tsx` for diff display
 - Type mismatch errors: Check `models.rs` struct ↔ `types/index.ts` interface ↔ Tauri command parameter names
 - Missing data: Check SQLite schema in `db.rs` and the query in the relevant command
 - Dialect issues: All database-specific behavior should be in `dialect.rs` implementations

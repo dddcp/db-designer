@@ -226,7 +226,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
             children: (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text type="secondary">管理项目中的函数、存储过程和触发器</Text>
+                  <Text type="secondary">管理项目中的函数、存储过程和触发器。注意：此类结构并没有区分数据库类型，简单维护</Text>
                   <Dropdown
                     menu={{
                       items: [
