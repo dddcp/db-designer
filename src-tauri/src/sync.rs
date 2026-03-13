@@ -394,7 +394,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                             if dialect.supports_inline_comment() {
                                 if let Some(c) = &cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } }
                             }
-                            changes.push(format!("  ADD COLUMN {}", def));
+                            changes.push(dialect.add_column_clause(&def));
                             if !dialect.supports_inline_comment() {
                                 if let Some(c) = &cmt { if !c.is_empty() {
                                     extra_sql.push_str(&dialect.column_comment_sql(&diff.table_name, &cd.column_name, c));
@@ -414,17 +414,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                             let mut type_str = mapped_type.to_uppercase();
                             append_type_suffix(&mut type_str, &dt, len, scale, &length_types, &scale_types);
 
-                            if dialect.supports_inline_comment() {
-                                // MySQL: MODIFY COLUMN 需要完整列定义
-                                let mut full_def = type_str;
-                                if !nullable { full_def.push_str(dialect.not_null_clause()); }
-                                if ai { full_def.push_str(dialect.auto_increment_suffix()); }
-                                if dn {
-                                    full_def.push_str(" DEFAULT NULL");
-                                } else if let Some(d) = &dv { if !d.is_empty() { full_def.push_str(&dialect.default_value_clause(d)); } }
-                                if let Some(c) = &cmt { if !c.is_empty() { full_def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } }
-                                changes.push(dialect.modify_column_clause(&cd.column_name, &full_def));
-                            } else {
+                            if dialect.uses_alter_column_syntax() {
                                 // PostgreSQL: 需要分别设置各属性
                                 changes.push(format!("  ALTER COLUMN {} TYPE {}", cd.column_name, type_str));
                                 if !nullable {
@@ -446,6 +436,23 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                                 if let Some(c) = &cmt { if !c.is_empty() {
                                     extra_sql.push_str(&dialect.column_comment_sql(&diff.table_name, &cd.column_name, c));
                                 }}
+                            } else {
+                                // MySQL / Oracle: MODIFY 完整列定义
+                                let mut full_def = type_str;
+                                if !nullable { full_def.push_str(dialect.not_null_clause()); }
+                                if ai { full_def.push_str(dialect.auto_increment_suffix()); }
+                                if dn {
+                                    full_def.push_str(" DEFAULT NULL");
+                                } else if let Some(d) = &dv { if !d.is_empty() { full_def.push_str(&dialect.default_value_clause(d)); } }
+                                if dialect.supports_inline_comment() {
+                                    if let Some(c) = &cmt { if !c.is_empty() { full_def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } }
+                                }
+                                changes.push(dialect.modify_column_clause(&cd.column_name, &full_def));
+                                if !dialect.supports_inline_comment() {
+                                    if let Some(c) = &cmt { if !c.is_empty() {
+                                        extra_sql.push_str(&dialect.column_comment_sql(&diff.table_name, &cd.column_name, c));
+                                    }}
+                                }
                             }
                         }
                         _ => {}

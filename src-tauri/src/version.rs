@@ -307,22 +307,6 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         }
     }
 
-    // 编程对象
-    if !snapshot.routines.is_empty() {
-        sql.push_str("-- 编程对象\n\n");
-        for routine in &snapshot.routines {
-            let type_label = match routine.r#type.as_str() {
-                "function" => "函数",
-                "procedure" => "存储过程",
-                "trigger" => "触发器",
-                _ => "编程对象",
-            };
-            sql.push_str(&format!("-- {} : {}\n", type_label, routine.name));
-            sql.push_str(routine.body.trim());
-            sql.push_str("\n\n");
-        }
-    }
-
     Ok(sql)
 }
 
@@ -356,7 +340,8 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             sql.push_str(&dialect.create_table_prefix(&new_table.name));
             let mut col_defs: Vec<String> = Vec::new();
             for col in &new_table.columns {
-                let mut def = format!("  {} {}", col.name, col.data_type.to_uppercase());
+                let mapped_type = dialect.map_data_type(&col.data_type);
+                let mut def = format!("  {} {}", col.name, mapped_type.to_uppercase());
                 append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                 if !col.nullable { def.push_str(dialect.not_null_clause()); }
                 if col.auto_increment {
@@ -367,12 +352,27 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 } else if let Some(dv) = &col.default_value {
                     if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                 }
+                if dialect.supports_inline_comment() {
+                    let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                    if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
+                }
                 col_defs.push(def);
             }
             let pks: Vec<&str> = new_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
             if !pks.is_empty() { col_defs.push(dialect.primary_key_clause(&pks)); }
             sql.push_str(&col_defs.join(",\n"));
             sql.push_str("\n);\n\n");
+
+            // 表说明
+            sql.push_str(&dialect.table_comment_sql(&new_table.name, &new_table.display_name));
+            // 列说明（PG）
+            for col in &new_table.columns {
+                let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                if !comment_text.is_empty() {
+                    let cs = dialect.column_comment_sql(&new_table.name, &col.name, comment_text);
+                    if !cs.is_empty() { sql.push_str(&cs); }
+                }
+            }
 
             // New table indexes
             for idx in &new_table.indexes {
@@ -422,6 +422,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             let new_cols: HashMap<String, &ColumnDef> = new_table.columns.iter().map(|c| (c.name.clone(), c)).collect();
 
             let mut changes = Vec::new();
+            let mut comment_changes = Vec::new();
 
             for col in &new_table.columns {
                 if !old_cols.contains_key(&col.name) {
@@ -429,12 +430,25 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                     let mut def = format!("{} {}", col.name, mapped_type.to_uppercase());
                     append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                     if !col.nullable { def.push_str(dialect.not_null_clause()); }
+                    if col.auto_increment { def.push_str(dialect.auto_increment_suffix()); }
                     if col.default_null {
                         def.push_str(" DEFAULT NULL");
                     } else if let Some(dv) = &col.default_value {
                         if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                     }
+                    if dialect.supports_inline_comment() {
+                        let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                        if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
+                    }
                     changes.push(dialect.add_column_clause(&def));
+                    // PG 新增列说明
+                    if !dialect.supports_inline_comment() {
+                        let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                        if !comment_text.is_empty() {
+                            let cs = dialect.column_comment_sql(&new_table.name, &col.name, comment_text);
+                            if !cs.is_empty() { comment_changes.push(cs); }
+                        }
+                    }
                 }
             }
 
@@ -448,18 +462,31 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 if let Some(old_col) = old_cols.get(&col.name) {
                     let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.scale != old_col.scale || col.nullable != old_col.nullable;
                     let default_changed = col.default_null != old_col.default_null || col.default_value != old_col.default_value;
-                    if type_changed || default_changed {
+                    let ai_changed = col.auto_increment != old_col.auto_increment;
+                    let comment_text = col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&col.display_name);
+                    let old_comment_text = old_col.comment.as_deref().filter(|c| !c.is_empty()).unwrap_or(&old_col.display_name);
+                    let comment_changed = comment_text != old_comment_text;
+                    if type_changed || default_changed || ai_changed || comment_changed {
                         let mapped_type = dialect.map_data_type(&col.data_type);
                         let full_type = mapped_type.to_uppercase();
                         let mut type_with_suffix = full_type.clone();
                         append_type_suffix(&mut type_with_suffix, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                         if !col.nullable { type_with_suffix.push_str(dialect.not_null_clause()); }
+                        if col.auto_increment { type_with_suffix.push_str(dialect.auto_increment_suffix()); }
                         if col.default_null {
                             type_with_suffix.push_str(" DEFAULT NULL");
                         } else if let Some(dv) = &col.default_value {
                             if !dv.is_empty() { type_with_suffix.push_str(&dialect.default_value_clause(dv)); }
                         }
+                        if dialect.supports_inline_comment() {
+                            if !comment_text.is_empty() { type_with_suffix.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
+                        }
                         changes.push(dialect.modify_column_clause(&col.name, &type_with_suffix));
+                    }
+                    // PG 列说明变更
+                    if comment_changed && !dialect.supports_inline_comment() {
+                        let cs = dialect.column_comment_sql(&new_table.name, &col.name, comment_text);
+                        if !cs.is_empty() { comment_changes.push(cs); }
                     }
                 }
             }
@@ -467,6 +494,18 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             if !changes.is_empty() {
                 sql.push_str(&format!("-- 修改表: {}\n", new_table.display_name));
                 sql.push_str(&format!("ALTER TABLE {}\n{};\n\n", new_table.name, changes.join(",\n")));
+            }
+
+            // 表说明变更
+            if new_table.display_name != old_table.display_name {
+                sql.push_str(&dialect.table_comment_sql(&new_table.name, &new_table.display_name));
+            }
+
+            // PG 列说明变更
+            if !comment_changes.is_empty() {
+                for cs in &comment_changes {
+                    sql.push_str(cs);
+                }
             }
 
             // Index diff
@@ -563,77 +602,6 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                         }
                     }
                 }
-                sql.push('\n');
-            }
-        }
-    }
-
-    // 编程对象差异
-    {
-        let old_routine_map: HashMap<(String, String), &RoutineDef> = old_snap.routines.iter()
-            .map(|r| ((r.name.clone(), r.r#type.clone()), r)).collect();
-        let new_routine_map: HashMap<(String, String), &RoutineDef> = new_snap.routines.iter()
-            .map(|r| ((r.name.clone(), r.r#type.clone()), r)).collect();
-
-        let mut routine_changes = Vec::new();
-
-        // 新增的编程对象
-        for r in &new_snap.routines {
-            let key = (r.name.clone(), r.r#type.clone());
-            if !old_routine_map.contains_key(&key) {
-                routine_changes.push(format!("-- 新增{}: {}\n{}\n", match r.r#type.as_str() {
-                    "function" => "函数",
-                    "procedure" => "存储过程",
-                    "trigger" => "触发器",
-                    _ => "编程对象",
-                }, r.name, r.body.trim()));
-            }
-        }
-
-        // 删除的编程对象
-        for r in &old_snap.routines {
-            let key = (r.name.clone(), r.r#type.clone());
-            if !new_routine_map.contains_key(&key) {
-                let drop_keyword = match r.r#type.as_str() {
-                    "function" => "FUNCTION",
-                    "procedure" => "PROCEDURE",
-                    "trigger" => "TRIGGER",
-                    _ => "FUNCTION",
-                };
-                routine_changes.push(format!("-- 删除{}: {}\nDROP {} IF EXISTS {};\n", match r.r#type.as_str() {
-                    "function" => "函数",
-                    "procedure" => "存储过程",
-                    "trigger" => "触发器",
-                    _ => "编程对象",
-                }, r.name, drop_keyword, r.name));
-            }
-        }
-
-        // 变更的编程对象
-        for r in &new_snap.routines {
-            let key = (r.name.clone(), r.r#type.clone());
-            if let Some(old_r) = old_routine_map.get(&key) {
-                if old_r.body.trim() != r.body.trim() {
-                    let drop_keyword = match r.r#type.as_str() {
-                        "function" => "FUNCTION",
-                        "procedure" => "PROCEDURE",
-                        "trigger" => "TRIGGER",
-                        _ => "FUNCTION",
-                    };
-                    routine_changes.push(format!("-- 变更{}: {}\nDROP {} IF EXISTS {};\n{}\n", match r.r#type.as_str() {
-                        "function" => "函数",
-                        "procedure" => "存储过程",
-                        "trigger" => "触发器",
-                        _ => "编程对象",
-                    }, r.name, drop_keyword, r.name, r.body.trim()));
-                }
-            }
-        }
-
-        if !routine_changes.is_empty() {
-            sql.push_str("-- 编程对象变更\n\n");
-            for change in &routine_changes {
-                sql.push_str(change);
                 sql.push('\n');
             }
         }
@@ -756,29 +724,6 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
     if sql.is_empty() {
         sql.push_str("-- 项目中暂无表结构\n");
-    }
-
-    // 追加编程对象
-    let mut routine_stmt = conn.prepare(
-        "SELECT name, type, body FROM t_routine WHERE project_id = ?1 ORDER BY CASE type WHEN 'function' THEN 1 WHEN 'procedure' THEN 2 WHEN 'trigger' THEN 3 END, name"
-    ).map_err(|e| format!("Error: {}", e))?;
-    let routines: Vec<(String, String, String)> = routine_stmt.query_map(params![project_id], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-    }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
-
-    if !routines.is_empty() {
-        sql.push_str("-- 编程对象\n\n");
-        for (name, rtype, body) in &routines {
-            let type_label = match rtype.as_str() {
-                "function" => "函数",
-                "procedure" => "存储过程",
-                "trigger" => "触发器",
-                _ => "编程对象",
-            };
-            sql.push_str(&format!("-- {} : {}\n", type_label, name));
-            sql.push_str(body.trim());
-            sql.push_str("\n\n");
-        }
     }
 
     Ok(sql)
