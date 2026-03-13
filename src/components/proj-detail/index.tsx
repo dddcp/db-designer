@@ -115,6 +115,7 @@ const ProjectDetail: React.FC = () => {
   const [isAiCreateModalVisible, setIsAiCreateModalVisible] = useState(false);
   const [isAiModifyModalVisible, setIsAiModifyModalVisible] = useState(false);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+  const [tableSearchKeyword, setTableSearchKeyword] = useState('');
 
   // 加载数据类型
   useEffect(() => {
@@ -977,9 +978,22 @@ const ProjectDetail: React.FC = () => {
                 </Space>
               </div>
 
+              <Input.Search
+                placeholder="搜索表名或中文名"
+                allowClear
+                size="small"
+                style={{ marginBottom: 12, flexShrink: 0 }}
+                onSearch={(value) => setTableSearchKeyword(value)}
+                onClear={() => setTableSearchKeyword('')}
+              />
+
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <List
-                dataSource={tables}
+                dataSource={tables.filter(t => {
+                  if (!tableSearchKeyword) return true;
+                  const kw = tableSearchKeyword.toLowerCase();
+                  return t.name.toLowerCase().includes(kw) || t.displayName.toLowerCase().includes(kw);
+                })}
                 renderItem={(table) => (
                   <List.Item
                     style={{ 
