@@ -43,6 +43,8 @@ pub struct ColumnDef {
     pub primary_key: bool,
     pub auto_increment: bool,
     pub default_value: Option<String>,
+    #[serde(default)]
+    pub default_null: bool,
     pub comment: Option<String>,
     pub sort_order: i32,
 }

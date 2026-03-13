@@ -93,7 +93,7 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
 
     for (table_id, table_name, display_name, comment) in &tables {
         // 2. 获取列
-        let mut col_stmt = conn.prepare("SELECT id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+        let mut col_stmt = conn.prepare("SELECT id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment, sort_order FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
             .map_err(|e| format!("Error preparing column stmt: {}", e))?;
         let columns: Vec<ColumnDef> = col_stmt.query_map(params![table_id], |row| {
             Ok(ColumnDef {
@@ -108,8 +108,9 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
                 primary_key: row.get(8)?,
                 auto_increment: row.get(9)?,
                 default_value: row.get(10)?,
-                comment: row.get(11)?,
-                sort_order: row.get(12)?,
+                default_null: row.get::<_, bool>(11).unwrap_or(false),
+                comment: row.get(12)?,
+                sort_order: row.get(13)?,
             })
         }).map_err(|e| format!("Error querying columns: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error reading columns: {}", e))?;
@@ -243,7 +244,9 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
             if col.auto_increment {
                 def.push_str(dialect.auto_increment_suffix());
             }
-            if let Some(dv) = &col.default_value {
+            if col.default_null {
+                def.push_str(" DEFAULT NULL");
+            } else if let Some(dv) = &col.default_value {
                 if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
             }
             if dialect.supports_inline_comment() {
@@ -359,7 +362,9 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                 if col.auto_increment {
                     def.push_str(dialect.auto_increment_suffix());
                 }
-                if let Some(dv) = &col.default_value {
+                if col.default_null {
+                    def.push_str(" DEFAULT NULL");
+                } else if let Some(dv) = &col.default_value {
                     if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                 }
                 col_defs.push(def);
@@ -424,7 +429,9 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
                     let mut def = format!("{} {}", col.name, mapped_type.to_uppercase());
                     append_type_suffix(&mut def, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                     if !col.nullable { def.push_str(dialect.not_null_clause()); }
-                    if let Some(dv) = &col.default_value {
+                    if col.default_null {
+                        def.push_str(" DEFAULT NULL");
+                    } else if let Some(dv) = &col.default_value {
                         if !dv.is_empty() { def.push_str(&dialect.default_value_clause(dv)); }
                     }
                     changes.push(dialect.add_column_clause(&def));
@@ -440,12 +447,18 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             for col in &new_table.columns {
                 if let Some(old_col) = old_cols.get(&col.name) {
                     let type_changed = col.data_type != old_col.data_type || col.length != old_col.length || col.scale != old_col.scale || col.nullable != old_col.nullable;
-                    if type_changed {
+                    let default_changed = col.default_null != old_col.default_null || col.default_value != old_col.default_value;
+                    if type_changed || default_changed {
                         let mapped_type = dialect.map_data_type(&col.data_type);
                         let full_type = mapped_type.to_uppercase();
                         let mut type_with_suffix = full_type.clone();
                         append_type_suffix(&mut type_with_suffix, &col.data_type, col.length, col.scale, &length_types, &scale_types);
                         if !col.nullable { type_with_suffix.push_str(dialect.not_null_clause()); }
+                        if col.default_null {
+                            type_with_suffix.push_str(" DEFAULT NULL");
+                        } else if let Some(dv) = &col.default_value {
+                            if !dv.is_empty() { type_with_suffix.push_str(&dialect.default_value_clause(dv)); }
+                        }
                         changes.push(dialect.modify_column_clause(&col.name, &type_with_suffix));
                     }
                 }
@@ -649,16 +662,16 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
     for (table_id, table_name, display_name) in &tables {
         let mut col_stmt = conn.prepare(
-            "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
+            "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
         ).map_err(|e| format!("Error: {}", e))?;
-        let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?))
+        let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, bool, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get::<_, bool>(9).unwrap_or(false), row.get(10)?))
         }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
         sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
         sql.push_str(&dialect.create_table_prefix(table_name));
         let mut col_defs = Vec::new();
-        for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
+        for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {
             let mapped_type = dialect.map_data_type(dt);
             let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
             append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
@@ -666,7 +679,9 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             if *ai {
                 def.push_str(dialect.auto_increment_suffix());
             }
-            if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+            if *dn {
+                def.push_str(" DEFAULT NULL");
+            } else if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
             if dialect.supports_inline_comment() {
                 let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
                 if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
@@ -681,7 +696,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
         // Table comment
         sql.push_str(&dialect.table_comment_sql(table_name, display_name));
         // Column comments (non-empty only for PG)
-        for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
+        for (name, disp_name, _, _, _, _, _, _, _, _, cmt) in &cols {
             let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
             if !comment_text.is_empty() {
                 let cs = dialect.column_comment_sql(table_name, name, comment_text);
@@ -784,22 +799,24 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
     ).map_err(|e| format!("Error: {}", e))?;
 
     let mut col_stmt = conn.prepare(
-        "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
+        "SELECT name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order"
     ).map_err(|e| format!("Error: {}", e))?;
-    let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?))
+    let cols: Vec<(String, String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, bool, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get::<_, bool>(9).unwrap_or(false), row.get(10)?))
     }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
     sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
     sql.push_str(&dialect.create_table_prefix(&table_name));
     let mut col_defs = Vec::new();
-    for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
+    for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {
         let mapped_type = dialect.map_data_type(dt);
         let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
         append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
         if !nullable { def.push_str(dialect.not_null_clause()); }
         if *ai { def.push_str(dialect.auto_increment_suffix()); }
-        if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+        if *dn {
+            def.push_str(" DEFAULT NULL");
+        } else if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
         if dialect.supports_inline_comment() {
             let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
             if !comment_text.is_empty() { def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''"))); }
@@ -814,7 +831,7 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
     // Table comment
     sql.push_str(&dialect.table_comment_sql(&table_name, &display_name));
     // Column comments
-    for (name, disp_name, _, _, _, _, _, _, _, cmt) in &cols {
+    for (name, disp_name, _, _, _, _, _, _, _, _, cmt) in &cols {
         let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
         if !comment_text.is_empty() {
             let cs = dialect.column_comment_sql(&table_name, name, comment_text);

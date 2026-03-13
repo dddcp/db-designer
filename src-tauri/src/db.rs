@@ -153,5 +153,8 @@ pub fn init_database() -> Result<String, String> {
     // 数据库迁移：为已存在的 t_column 表添加 scale 列
     let _ = conn.execute_batch("ALTER TABLE t_column ADD COLUMN scale INTEGER");
 
+    // 数据库迁移：为已存在的 t_column 表添加 default_null 列
+    let _ = conn.execute_batch("ALTER TABLE t_column ADD COLUMN default_null BOOLEAN DEFAULT 0");
+
     Ok("Database initialized successfully".to_string())
 }

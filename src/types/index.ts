@@ -19,6 +19,7 @@ export interface ColumnDef {
   primaryKey: boolean; // 是否为主键
   autoIncrement: boolean; // 是否自增
   defaultValue?: string;  // 默认值
+  defaultNull: boolean;   // 是否 DEFAULT NULL
   comment?: string;    // 说明
   order: number;       // 排序
 }
@@ -55,6 +56,7 @@ export interface BackendColumnDef {
   primary_key: boolean;
   auto_increment: boolean;
   default_value?: string;
+  default_null: boolean;
   comment?: string;
   sort_order: number;
 }

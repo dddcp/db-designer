@@ -39,6 +39,33 @@ pub fn get_remote_tables(connection_id: i32) -> Result<Vec<RemoteTable>, String>
     connector.get_remote_tables(&host, port, &username, &password, &database)
 }
 
+/// 标准化远程数据库的默认值
+/// 返回 (default_null, default_value)
+fn normalize_remote_default(raw: Option<&str>) -> (bool, String) {
+    match raw {
+        None => (false, String::new()),
+        Some(v) => {
+            // 去除 PostgreSQL 类型转换后缀，如 'value'::character varying
+            let stripped = if let Some(pos) = v.find("::") {
+                &v[..pos]
+            } else {
+                v
+            };
+            // NULL 或 NULL::type → DEFAULT NULL
+            if stripped.eq_ignore_ascii_case("NULL") {
+                return (true, String::new());
+            }
+            // 去除包裹的单引号
+            let unquoted = if stripped.starts_with('\'') && stripped.ends_with('\'') && stripped.len() >= 2 {
+                &stripped[1..stripped.len()-1]
+            } else {
+                stripped
+            };
+            (false, unquoted.to_string())
+        }
+    }
+}
+
 // 比较本地表结构和远程表结构
 #[tauri::command]
 pub fn compare_tables(project_id: i32, remote_tables_json: String) -> Result<Vec<TableDiff>, String> {
@@ -88,19 +115,19 @@ pub fn compare_tables(project_id: i32, remote_tables_json: String) -> Result<Vec
     // 都有的，比较列
     for (table_id, table_name, display_name) in &local_tables {
         if let Some(remote_table) = remote_map.get(table_name) {
-            let mut col_stmt = conn.prepare("SELECT name, data_type, length, nullable FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+            let mut col_stmt = conn.prepare("SELECT name, data_type, length, nullable, default_value, default_null, comment, primary_key, auto_increment FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
                 .map_err(|e| format!("Error: {}", e))?;
-            let local_cols: Vec<(String, String, Option<i32>, bool)> = col_stmt.query_map(params![table_id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            let local_cols: Vec<(String, String, Option<i32>, bool, Option<String>, bool, Option<String>, bool, bool)> = col_stmt.query_map(params![table_id], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get::<_, bool>(5).unwrap_or(false), row.get(6)?, row.get(7)?, row.get(8)?))
             }).map_err(|e| format!("Error: {}", e))?
               .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
-            let local_col_map: HashMap<String, (String, Option<i32>, bool)> = local_cols.iter().map(|c| (c.0.clone(), (c.1.clone(), c.2, c.3))).collect();
+            let local_col_map: HashMap<String, (String, Option<i32>, bool, Option<String>, bool, Option<String>, bool, bool)> = local_cols.iter().map(|c| (c.0.clone(), (c.1.clone(), c.2, c.3, c.4.clone(), c.5, c.6.clone(), c.7, c.8))).collect();
             let remote_col_map: HashMap<String, &RemoteColumn> = remote_table.columns.iter().map(|c| (c.name.clone(), c)).collect();
 
             let mut col_diffs = Vec::new();
 
-            for (name, (dt, len, nullable)) in &local_col_map {
+            for (name, (dt, len, nullable, default_val, default_null, comment, pk, ai)) in &local_col_map {
                 if let Some(rc) = remote_col_map.get(name) {
                     let local_type_str = if let Some(l) = len {
                         format!("{}({})", dt, l)
@@ -114,10 +141,46 @@ pub fn compare_tables(project_id: i32, remote_tables_json: String) -> Result<Vec
                     };
                     let type_diff = local_type_str.to_lowercase() != remote_type_str.to_lowercase();
                     let nullable_diff = *nullable != rc.nullable;
-                    if type_diff || nullable_diff {
+
+                    // 默认值比较（自增列跳过，远程可能是 nextval(...) 等表达式）
+                    let remote_pk = rc.column_key == "PRI";
+                    let remote_ai = rc.extra.contains("auto_increment");
+                    let local_dv = default_val.as_deref().unwrap_or("");
+                    let (remote_dn, remote_dv) = normalize_remote_default(rc.default_value.as_deref());
+                    let dv_diff = !(*ai || remote_ai) && {
+                        let local_has_value = !local_dv.is_empty();
+                        let remote_has_value = !remote_dv.is_empty();
+                        if !local_has_value && !remote_has_value {
+                            // 双方都没有具体默认值：对可空列，DEFAULT NULL ≡ 无默认值
+                            if *nullable && rc.nullable { false } else { *default_null != remote_dn }
+                        } else {
+                            *default_null != remote_dn || local_dv != remote_dv
+                        }
+                    };
+
+                    // 说明/注释比较
+                    let local_cmt = comment.as_deref().unwrap_or("");
+                    let remote_cmt = rc.comment.as_deref().unwrap_or("");
+                    let cmt_diff = local_cmt != remote_cmt;
+
+                    // 主键比较
+                    let pk_diff = *pk != remote_pk;
+
+                    // 自增比较
+                    let ai_diff = *ai != remote_ai;
+
+                    if type_diff || nullable_diff || dv_diff || cmt_diff || pk_diff || ai_diff {
                         let mut details = Vec::new();
                         if type_diff { details.push(format!("类型: {} -> {}", local_type_str, remote_type_str)); }
                         if nullable_diff { details.push(format!("可空: {} -> {}", nullable, rc.nullable)); }
+                        if dv_diff {
+                            let local_desc = if *default_null { "NULL".to_string() } else { local_dv.to_string() };
+                            let remote_desc = if remote_dn { "NULL".to_string() } else { remote_dv.clone() };
+                            details.push(format!("默认值: [{}] -> [{}]", local_desc, remote_desc));
+                        }
+                        if cmt_diff { details.push(format!("说明: [{}] -> [{}]", local_cmt, remote_cmt)); }
+                        if pk_diff { details.push(format!("主键: {} -> {}", pk, remote_pk)); }
+                        if ai_diff { details.push(format!("自增: {} -> {}", ai, remote_ai)); }
                         col_diffs.push(ColumnDiff {
                             column_name: name.clone(),
                             status: "different".to_string(),
@@ -272,17 +335,17 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                 let table_id: String = table_stmt.query_row(params![project_id, diff.table_name], |row| row.get(0))
                     .map_err(|e| format!("Error: {}", e))?;
 
-                let mut col_stmt = conn.prepare("SELECT name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
+                let mut col_stmt = conn.prepare("SELECT name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment FROM t_column WHERE table_id = ?1 ORDER BY sort_order")
                     .map_err(|e| format!("Error: {}", e))?;
-                let cols: Vec<(String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?))
+                let cols: Vec<(String, String, Option<i32>, Option<i32>, bool, bool, bool, Option<String>, bool, Option<String>)> = col_stmt.query_map(params![table_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get::<_, bool>(8).unwrap_or(false), row.get(9)?))
                 }).map_err(|e| format!("Error: {}", e))?
                   .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
                 sql.push_str(&format!("-- 新建表: {} ({})\n", diff.table_name, diff.local_display_name.as_deref().unwrap_or("")));
                 sql.push_str(&dialect.create_table_prefix(&diff.table_name));
                 let mut col_defs = Vec::new();
-                for (name, dt, len, scale, nullable, _pk, ai, dv, cmt) in &cols {
+                for (name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {
                     let mapped_type = dialect.map_data_type(dt);
                     let mut def = format!("  {} {}", name, mapped_type.to_uppercase());
                     append_type_suffix(&mut def, dt, *len, *scale, &length_types, &scale_types);
@@ -290,7 +353,9 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                     if *ai {
                         def.push_str(dialect.auto_increment_suffix());
                     }
-                    if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+                    if *dn {
+                        def.push_str(" DEFAULT NULL");
+                    } else if let Some(d) = dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
                     if dialect.supports_inline_comment() { if let Some(c) = cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } } }
                     col_defs.push(def);
                 }
@@ -304,44 +369,95 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                 sql.push_str(&format!("-- DROP TABLE IF EXISTS {};\n\n", diff.table_name));
             }
             "different" => {
+                let mut table_stmt = conn.prepare("SELECT id FROM t_table WHERE project_id = ?1 AND name = ?2")
+                    .map_err(|e| format!("Error: {}", e))?;
+                let table_id: String = table_stmt.query_row(params![project_id, diff.table_name], |row| row.get(0))
+                    .map_err(|e| format!("Error: {}", e))?;
+
                 let mut changes = Vec::new();
+                let mut extra_sql = String::new();
                 for cd in &diff.column_diffs {
                     match cd.status.as_str() {
                         "only_local" => {
-                            let mut table_stmt = conn.prepare("SELECT id FROM t_table WHERE project_id = ?1 AND name = ?2")
+                            let mut c_stmt = conn.prepare("SELECT data_type, length, scale, nullable, auto_increment, default_value, default_null, comment FROM t_column WHERE table_id = ?1 AND name = ?2")
                                 .map_err(|e| format!("Error: {}", e))?;
-                            let table_id: String = table_stmt.query_row(params![project_id, diff.table_name], |row| row.get(0))
-                                .map_err(|e| format!("Error: {}", e))?;
-                            let mut c_stmt = conn.prepare("SELECT data_type, length, scale, nullable, default_value FROM t_column WHERE table_id = ?1 AND name = ?2")
-                                .map_err(|e| format!("Error: {}", e))?;
-                            let col_info: (String, Option<i32>, Option<i32>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
-                                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+                            let (dt, len, scale, nullable, ai, dv, dn, cmt): (String, Option<i32>, Option<i32>, bool, bool, Option<String>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
+                                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get::<_, bool>(6).unwrap_or(false), row.get(7)?))
                             }).map_err(|e| format!("Error: {}", e))?;
-                            let mut def = format!("{} {}", cd.column_name, dialect.map_data_type(&col_info.0).to_uppercase());
-                            append_type_suffix(&mut def, &col_info.0, col_info.1, col_info.2, &length_types, &scale_types);
-                            if !col_info.3 { def.push_str(" NOT NULL"); }
-                            if let Some(d) = &col_info.4 { if !d.is_empty() { def.push_str(&format!(" DEFAULT '{}'", d)); } }
+                            let mut def = format!("{} {}", cd.column_name, dialect.map_data_type(&dt).to_uppercase());
+                            append_type_suffix(&mut def, &dt, len, scale, &length_types, &scale_types);
+                            if !nullable { def.push_str(dialect.not_null_clause()); }
+                            if ai { def.push_str(dialect.auto_increment_suffix()); }
+                            if dn {
+                                def.push_str(" DEFAULT NULL");
+                            } else if let Some(d) = &dv { if !d.is_empty() { def.push_str(&dialect.default_value_clause(d)); } }
+                            if dialect.supports_inline_comment() {
+                                if let Some(c) = &cmt { if !c.is_empty() { def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } }
+                            }
                             changes.push(format!("  ADD COLUMN {}", def));
+                            if !dialect.supports_inline_comment() {
+                                if let Some(c) = &cmt { if !c.is_empty() {
+                                    extra_sql.push_str(&dialect.column_comment_sql(&diff.table_name, &cd.column_name, c));
+                                }}
+                            }
                         }
                         "only_remote" => {
                             changes.push(format!("  -- DROP COLUMN {} (远程多余列)", cd.column_name));
                         }
                         "different" => {
-                            if let Some(lt) = &cd.local_type {
-                                let (base, suffix) = match lt.find('(') {
-                                    Some(pos) => (&lt[..pos], &lt[pos..]),
-                                    None => (lt.as_str(), ""),
-                                };
-                                let mapped_full = format!("{}{}", dialect.map_data_type(base).to_uppercase(), suffix.to_uppercase());
-                                changes.push(dialect.modify_column_clause(&cd.column_name, &mapped_full));
+                            let mut c_stmt = conn.prepare("SELECT data_type, length, scale, nullable, auto_increment, default_value, default_null, comment FROM t_column WHERE table_id = ?1 AND name = ?2")
+                                .map_err(|e| format!("Error: {}", e))?;
+                            let (dt, len, scale, nullable, ai, dv, dn, cmt): (String, Option<i32>, Option<i32>, bool, bool, Option<String>, bool, Option<String>) = c_stmt.query_row(params![table_id, cd.column_name], |row| {
+                                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get::<_, bool>(6).unwrap_or(false), row.get(7)?))
+                            }).map_err(|e| format!("Error: {}", e))?;
+                            let mapped_type = dialect.map_data_type(&dt);
+                            let mut type_str = mapped_type.to_uppercase();
+                            append_type_suffix(&mut type_str, &dt, len, scale, &length_types, &scale_types);
+
+                            if dialect.supports_inline_comment() {
+                                // MySQL: MODIFY COLUMN 需要完整列定义
+                                let mut full_def = type_str;
+                                if !nullable { full_def.push_str(dialect.not_null_clause()); }
+                                if ai { full_def.push_str(dialect.auto_increment_suffix()); }
+                                if dn {
+                                    full_def.push_str(" DEFAULT NULL");
+                                } else if let Some(d) = &dv { if !d.is_empty() { full_def.push_str(&dialect.default_value_clause(d)); } }
+                                if let Some(c) = &cmt { if !c.is_empty() { full_def.push_str(&format!(" COMMENT '{}'", c.replace('\'', "''"))); } }
+                                changes.push(dialect.modify_column_clause(&cd.column_name, &full_def));
+                            } else {
+                                // PostgreSQL: 需要分别设置各属性
+                                changes.push(format!("  ALTER COLUMN {} TYPE {}", cd.column_name, type_str));
+                                if !nullable {
+                                    changes.push(format!("  ALTER COLUMN {} SET NOT NULL", cd.column_name));
+                                } else {
+                                    changes.push(format!("  ALTER COLUMN {} DROP NOT NULL", cd.column_name));
+                                }
+                                if dn {
+                                    changes.push(format!("  ALTER COLUMN {} SET DEFAULT NULL", cd.column_name));
+                                } else if let Some(d) = &dv {
+                                    if !d.is_empty() {
+                                        changes.push(format!("  ALTER COLUMN {} SET{}", cd.column_name, dialect.default_value_clause(d)));
+                                    } else {
+                                        changes.push(format!("  ALTER COLUMN {} DROP DEFAULT", cd.column_name));
+                                    }
+                                } else {
+                                    changes.push(format!("  ALTER COLUMN {} DROP DEFAULT", cd.column_name));
+                                }
+                                if let Some(c) = &cmt { if !c.is_empty() {
+                                    extra_sql.push_str(&dialect.column_comment_sql(&diff.table_name, &cd.column_name, c));
+                                }}
                             }
                         }
                         _ => {}
                     }
                 }
-                if !changes.is_empty() {
+                if !changes.is_empty() || !extra_sql.is_empty() {
                     sql.push_str(&format!("-- 修改表: {}\n", diff.table_name));
-                    sql.push_str(&format!("ALTER TABLE {}\n{};\n\n", diff.table_name, changes.join(",\n")));
+                    if !changes.is_empty() {
+                        sql.push_str(&format!("ALTER TABLE {}\n{};\n", diff.table_name, changes.join(",\n")));
+                    }
+                    sql.push_str(&extra_sql);
+                    sql.push('\n');
                 }
             }
             _ => {}
@@ -394,18 +510,15 @@ pub fn sync_remote_table_to_local(project_id: i32, remote_table_json: String) ->
         let primary_key = rc.column_key == "PRI";
         let auto_increment = rc.extra.contains("auto_increment");
 
-        let default_value = match &rc.default_value {
-            Some(v) if v.to_uppercase() == "NULL" => Some("".to_string()),
-            Some(v) => Some(v.clone()),
-            None => Some("".to_string()),
-        };
+        let (default_null, default_value_str) = normalize_remote_default(rc.default_value.as_deref());
+        let default_value = Some(default_value_str);
 
         tx.execute(
-            "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 col_id, table_id, rc.name, col_display_name, rc.data_type,
                 rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
-                default_value, rc.comment, i as i32
+                default_value, default_null, rc.comment, i as i32
             ],
         ).map_err(|e| format!("创建列失败: {}", e))?;
 
@@ -469,17 +582,14 @@ pub fn sync_remote_columns_to_local(project_id: i32, table_name: String, remote_
             |row| row.get(0),
         ).ok();
 
-        let default_value = match &rc.default_value {
-            Some(v) if v.to_uppercase() == "NULL" => Some("".to_string()),
-            Some(v) => Some(v.clone()),
-            None => Some("".to_string()),
-        };
+        let (default_null_val, default_value_str) = normalize_remote_default(rc.default_value.as_deref());
+        let default_value = Some(default_value_str);
 
         if let Some(id) = existing_id {
             // UPDATE 已有字段
             conn.execute(
-                "UPDATE t_column SET data_type = ?1, length = ?2, nullable = ?3, default_value = ?4, display_name = ?5, primary_key = ?6, auto_increment = ?7, comment = ?8 WHERE id = ?9",
-                params![rc.data_type, rc.length, rc.nullable, default_value, col_display_name, primary_key, auto_increment, rc.comment, id],
+                "UPDATE t_column SET data_type = ?1, length = ?2, nullable = ?3, default_value = ?4, default_null = ?5, display_name = ?6, primary_key = ?7, auto_increment = ?8, comment = ?9 WHERE id = ?10",
+                params![rc.data_type, rc.length, rc.nullable, default_value, default_null_val, col_display_name, primary_key, auto_increment, rc.comment, id],
             ).map_err(|e| format!("更新列失败: {}", e))?;
         } else {
             // INSERT 新字段
@@ -491,11 +601,11 @@ pub fn sync_remote_columns_to_local(project_id: i32, table_name: String, remote_
 
             let col_id = generate_id();
             conn.execute(
-                "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT INTO t_column (id, table_id, name, display_name, data_type, length, scale, nullable, primary_key, auto_increment, default_value, default_null, comment, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     col_id, table_id, rc.name, col_display_name, rc.data_type,
                     rc.length, Option::<i32>::None, rc.nullable, primary_key, auto_increment,
-                    default_value, rc.comment, max_sort + 1
+                    default_value, default_null_val, rc.comment, max_sort + 1
                 ],
             ).map_err(|e| format!("插入列失败: {}", e))?;
         }

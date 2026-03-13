@@ -37,6 +37,7 @@ export interface GeneratedColumn {
   primaryKey: boolean;
   autoIncrement: boolean;
   defaultValue?: string;
+  defaultNull?: boolean;
   comment?: string;
 }
 
@@ -285,6 +286,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           primaryKey: col.primaryKey ?? false,
           autoIncrement: col.autoIncrement ?? false,
           defaultValue: col.defaultValue != null ? String(col.defaultValue) : undefined,
+          defaultNull: false,
           comment: col.comment != null ? String(col.comment) : undefined
         }))
       }));

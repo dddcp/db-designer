@@ -103,8 +103,10 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       const type = col.type.toLowerCase();
       // 判断如果是可NULL且无默认值就是NULL，非NULL且无默认值就空字符串
       const hasDefaultValue = col.defaultValue !== undefined && col.defaultValue !== null && col.defaultValue !== '';
-      
-      if (hasDefaultValue) {
+
+      if (col.defaultNull) {
+        newRow[col.name] = null;
+      } else if (hasDefaultValue) {
         newRow[col.name] = col.defaultValue;
       } else {
         // 如果是日期类型且无默认值，默认为当前时间

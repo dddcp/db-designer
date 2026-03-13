@@ -119,6 +119,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
           primaryKey: col.primaryKey ?? false,
           autoIncrement: col.autoIncrement ?? false,
           defaultValue: col.defaultValue != null ? String(col.defaultValue) : undefined,
+          defaultNull: false,
           comment: col.comment != null ? String(col.comment) : undefined
         }))
       };

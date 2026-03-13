@@ -187,6 +187,7 @@ const ProjectDetail: React.FC = () => {
               primaryKey: col.primary_key,
               autoIncrement: col.auto_increment,
               defaultValue: col.default_value,
+              defaultNull: col.default_null ?? false,
               comment: col.comment,
               order: col.sort_order,
             })),
@@ -307,6 +308,7 @@ const ProjectDetail: React.FC = () => {
           primary_key: column.primaryKey,
           auto_increment: column.autoIncrement,
           default_value: column.defaultValue || null,
+          default_null: column.defaultNull ?? false,
           comment: column.comment || null,
           sort_order: column.order,
         }));
@@ -375,6 +377,7 @@ const ProjectDetail: React.FC = () => {
       nullable: true,
       primaryKey: false,
       autoIncrement: false,
+      defaultNull: false,
       order: selectedTable.columns.length + 1
     };
     
@@ -397,6 +400,11 @@ const ProjectDetail: React.FC = () => {
     const updateObj = {[field]: value };
     if (field === 'primaryKey'){
       updateObj.nullable = false;
+      updateObj.defaultNull = false;
+    }
+    // 非空字段不允许 DEFAULT NULL
+    if (field === 'nullable' && value === false) {
+      updateObj.defaultNull = false;
     }
     
     if (!selectedTable) return;
@@ -571,6 +579,7 @@ const ProjectDetail: React.FC = () => {
         primary_key: column.primaryKey,
         auto_increment: column.autoIncrement,
         default_value: column.defaultValue != null ? String(column.defaultValue) : null,
+        default_null: column.defaultNull ?? false,
         comment: column.comment != null ? String(column.comment) : null,
         sort_order: column.order,
       }));
@@ -613,6 +622,7 @@ const ProjectDetail: React.FC = () => {
           primary_key: col.primaryKey,
           auto_increment: col.autoIncrement,
           default_value: col.defaultValue || null,
+          default_null: col.defaultNull ?? false,
           comment: col.comment || null,
           sort_order: colIdx + 1,
         }));
@@ -647,6 +657,7 @@ const ProjectDetail: React.FC = () => {
             primaryKey: col.primaryKey,
             autoIncrement: col.autoIncrement,
             defaultValue: col.defaultValue,
+            defaultNull: col.defaultNull ?? false,
             comment: col.comment,
             order: colIdx + 1,
           }))
@@ -681,6 +692,7 @@ const ProjectDetail: React.FC = () => {
       primaryKey: col.primaryKey,
       autoIncrement: col.autoIncrement,
       defaultValue: col.defaultValue,
+      defaultNull: col.defaultNull ?? false,
       comment: col.comment,
       order: idx + 1,
     }));
@@ -831,12 +843,20 @@ const ProjectDetail: React.FC = () => {
       dataIndex: 'defaultValue',
       key: 'defaultValue',
       render: (text: string, record: ColumnDef) => (
-        <Input
-          value={text}
-          onChange={(e) => handleSaveColumn(record.id, 'defaultValue', e.target.value)}
-          placeholder="默认值"
-          size="small"
-        />
+        <Space size={4}>
+          <Checkbox
+            checked={record.defaultNull}
+            onChange={(e) => handleSaveColumn(record.id, 'defaultNull', e.target.checked)}
+            disabled={!record.nullable}
+          >NULL</Checkbox>
+          <Input
+            value={text}
+            onChange={(e) => handleSaveColumn(record.id, 'defaultValue', e.target.value)}
+            placeholder="默认值"
+            size="small"
+            disabled={record.defaultNull}
+          />
+        </Space>
       ),
     },
     {
