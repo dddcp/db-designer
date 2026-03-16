@@ -342,7 +342,7 @@ pub fn generate_sync_sql(project_id: i32, remote_tables_json: String, database_t
                 }).map_err(|e| format!("Error: {}", e))?
                   .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
-                sql.push_str(&format!("-- 新建表: {} ({})\n", diff.table_name, diff.local_display_name.as_deref().unwrap_or("")));
+                sql.push_str(&format!("-- 新建表: {}\n", diff.table_name));
                 sql.push_str(&dialect.create_table_prefix(&diff.table_name));
                 let mut col_defs = Vec::new();
                 for (name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {

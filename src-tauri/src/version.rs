@@ -232,7 +232,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
     let dialect = get_dialect(&database_type);
 
     for table in &snapshot.tables {
-        sql.push_str(&format!("-- {} ({})\n", table.display_name, table.name));
+        sql.push_str(&format!("-- {}\n", table.name));
         sql.push_str(&dialect.create_table_prefix(&table.name));
 
         let mut col_defs: Vec<String> = Vec::new();
@@ -288,7 +288,7 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
         // Init data INSERT
         if !table.init_data.is_empty() && !table.columns.is_empty() {
             let col_names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
-            sql.push_str(&format!("-- {} 元数据\n", table.display_name));
+            sql.push_str(&format!("-- {} 元数据\n", table.name));
             for data_json in &table.init_data {
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
@@ -336,7 +336,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
     // 1. New tables (with indexes and init data)
     for new_table in &new_snap.tables {
         if !old_map.contains_key(&new_table.name) {
-            sql.push_str(&format!("-- 新增表: {}\n", new_table.display_name));
+            sql.push_str(&format!("-- 新增表: {}\n", new_table.name));
             sql.push_str(&dialect.create_table_prefix(&new_table.name));
             let mut col_defs: Vec<String> = Vec::new();
             for col in &new_table.columns {
@@ -386,7 +386,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             // New table init data
             if !new_table.init_data.is_empty() && !new_table.columns.is_empty() {
                 let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
-                sql.push_str(&format!("-- {} 元数据\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 元数据\n", new_table.name));
                 for data_json in &new_table.init_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
@@ -409,7 +409,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
     // 2. Dropped tables
     for old_table in &old_snap.tables {
         if !new_map.contains_key(&old_table.name) {
-            sql.push_str(&format!("-- 删除表: {}\n", old_table.display_name));
+            sql.push_str(&format!("-- 删除表: {}\n", old_table.name));
             sql.push_str(&dialect.drop_table_sql(&old_table.name));
             sql.push('\n');
         }
@@ -492,7 +492,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             }
 
             if !changes.is_empty() {
-                sql.push_str(&format!("-- 修改表: {}\n", new_table.display_name));
+                sql.push_str(&format!("-- 修改表: {}\n", new_table.name));
                 sql.push_str(&format!("ALTER TABLE {}\n{};\n\n", new_table.name, changes.join(",\n")));
             }
 
@@ -551,7 +551,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             }
 
             if !idx_changes.is_empty() {
-                sql.push_str(&format!("-- 索引变更: {}\n", new_table.display_name));
+                sql.push_str(&format!("-- 索引变更: {}\n", new_table.name));
                 for change in &idx_changes {
                     sql.push_str(change);
                 }
@@ -567,7 +567,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
 
             if !added_data.is_empty() && !new_table.columns.is_empty() {
                 let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
-                sql.push_str(&format!("-- {} 新增元数据\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 新增元数据\n", new_table.name));
                 for data_json in added_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                         let values: Vec<String> = col_names.iter().map(|cn| {
@@ -586,7 +586,7 @@ pub fn export_upgrade_sql(old_version_id: i64, new_version_id: i64, database_typ
             }
 
             if !removed_data.is_empty() && !old_table.columns.is_empty() {
-                sql.push_str(&format!("-- {} 删除的元数据（请根据实际情况调整 WHERE 条件）\n", new_table.display_name));
+                sql.push_str(&format!("-- {} 删除的元数据（请根据实际情况调整 WHERE 条件）\n", new_table.name));
                 let pk_cols: Vec<&str> = old_table.columns.iter().filter(|c| c.primary_key).map(|c| c.name.as_str()).collect();
                 for data_json in removed_data {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
@@ -636,7 +636,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get::<_, bool>(9).unwrap_or(false), row.get(10)?))
         }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
-        sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
+        sql.push_str(&format!("-- {}\n", table_name));
         sql.push_str(&dialect.create_table_prefix(table_name));
         let mut col_defs = Vec::new();
         for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {
@@ -703,7 +703,7 @@ pub fn export_project_sql(project_id: i32, database_type: String) -> Result<Stri
 
         if !init_data.is_empty() && !cols.is_empty() {
             let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
-            sql.push_str(&format!("-- {} 元数据\n", display_name));
+            sql.push_str(&format!("-- {} 元数据\n", table_name));
             for data_json in &init_data {
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names.iter().map(|cn| {
@@ -750,7 +750,7 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
         Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get::<_, bool>(9).unwrap_or(false), row.get(10)?))
     }).map_err(|e| format!("Error: {}", e))?.collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
-    sql.push_str(&format!("-- {} ({})\n", display_name, table_name));
+    sql.push_str(&format!("-- {}\n",  table_name));
     sql.push_str(&dialect.create_table_prefix(&table_name));
     let mut col_defs = Vec::new();
     for (name, disp_name, dt, len, scale, nullable, _pk, ai, dv, dn, cmt) in &cols {
@@ -774,7 +774,8 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
     sql.push_str("\n);\n\n");
 
     // Table comment
-    sql.push_str(&dialect.table_comment_sql(&table_name, &display_name));
+    let temp = display_name.replace("\r\n","\\n").replace("\n","\\n");
+    sql.push_str(&dialect.table_comment_sql(&table_name, &temp));
     // Column comments
     for (name, disp_name, _, _, _, _, _, _, _, _, cmt) in &cols {
         let comment_text = cmt.as_deref().filter(|c| !c.is_empty()).unwrap_or(disp_name.as_str());
@@ -815,7 +816,7 @@ pub fn export_table_sql(table_id: String, database_type: String) -> Result<Strin
 
     if !init_data.is_empty() && !cols.is_empty() {
         let col_names: Vec<&str> = cols.iter().map(|c| c.0.as_str()).collect();
-        sql.push_str(&format!("-- {} 元数据\n", display_name));
+        sql.push_str(&format!("-- {} 元数据\n", table_name));
         for data_json in &init_data {
             if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                 let values: Vec<String> = col_names.iter().map(|cn| {
