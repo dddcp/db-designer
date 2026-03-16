@@ -42,6 +42,60 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
 }) => {
   const [routineDiffDrawerVisible, setRoutineDiffDrawerVisible] = useState(false);
   const [selectedRoutineDiff, setSelectedRoutineDiff] = useState<RoutineDiff | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [batchSyncing, setBatchSyncing] = useState(false);
+
+  // 刷新编程对象差异
+  const refreshRoutineDiffs = async () => {
+    if (!selectedConnectionId) return;
+    const remoteRoutines = await invoke<RemoteRoutine[]>('get_remote_routines_cmd', {
+      connectionId: selectedConnectionId,
+    });
+    const routineDiffResult = await invoke<RoutineDiff[]>('compare_routines', {
+      projectId: project.id,
+      remoteRoutinesJson: JSON.stringify(remoteRoutines),
+    });
+    onRoutineDiffsChange(routineDiffResult);
+  };
+
+  // 批量同步选中的编程对象到本地
+  const handleBatchSync = async () => {
+    if (selectedRowKeys.length === 0) return;
+    setBatchSyncing(true);
+    let successCount = 0;
+    let failCount = 0;
+    try {
+      for (const rowKey of selectedRowKeys) {
+        const diff = routineDiffs.find(d => `${d.name}_${d.type}` === rowKey);
+        if (!diff) continue;
+        try {
+          const remoteRoutine: RemoteRoutine = {
+            name: diff.name,
+            type: diff.type,
+            body: diff.remote_body || '',
+          };
+          await invoke('sync_remote_routine_to_local', {
+            projectId: project.id,
+            remoteRoutineJson: JSON.stringify(remoteRoutine),
+          });
+          successCount++;
+        } catch {
+          failCount++;
+        }
+      }
+      if (failCount === 0) {
+        message.success(`批量同步完成，共 ${successCount} 个编程对象`);
+      } else {
+        message.warning(`同步完成：成功 ${successCount} 个，失败 ${failCount} 个`);
+      }
+      setSelectedRowKeys([]);
+      await refreshRoutineDiffs();
+    } catch (error) {
+      message.error('批量同步失败: ' + error);
+    } finally {
+      setBatchSyncing(false);
+    }
+  };
 
   // 同步远程编程对象到本地
   const handleSyncRoutineToLocal = async (diff: RoutineDiff) => {
@@ -59,16 +113,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
       });
       message.success(`${diff.name} 同步成功`);
       // 重新比对编程对象
-      if (selectedConnectionId) {
-        const remoteRoutines = await invoke<RemoteRoutine[]>('get_remote_routines_cmd', {
-          connectionId: selectedConnectionId,
-        });
-        const routineDiffResult = await invoke<RoutineDiff[]>('compare_routines', {
-          projectId: project.id,
-          remoteRoutinesJson: JSON.stringify(remoteRoutines),
-        });
-        onRoutineDiffsChange(routineDiffResult);
-      }
+      await refreshRoutineDiffs();
     } catch (error) {
       message.error('同步失败: ' + error);
     } finally {
@@ -148,9 +193,19 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     },
   ];
 
+  // 可批量选中的行：仅远程和有差异的编程对象
+  const canSyncStatuses = new Set(['only_remote', 'different']);
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
+    getCheckboxProps: (record: RoutineDiff) => ({
+      disabled: !canSyncStatuses.has(record.status),
+    }),
+  };
+
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
           <Text>共 {routineDiffs.length} 个编程对象：</Text>
           <Space>
@@ -164,6 +219,20 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
             <Text>有差异 {routineDiffs.filter(d => d.status === 'different').length}</Text>
           </Space>
         </Space>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <Text type="secondary">已选 {selectedRowKeys.length} 个</Text>
+          )}
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            disabled={selectedRowKeys.length === 0}
+            loading={batchSyncing}
+            onClick={handleBatchSync}
+          >
+            批量同步到本地
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -172,6 +241,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         rowKey={(r) => `${r.name}_${r.type}`}
         pagination={false}
         size="small"
+        rowSelection={rowSelection}
       />
 
       {/* 编程对象差异查看弹窗 */}

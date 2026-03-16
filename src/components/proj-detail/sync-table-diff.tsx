@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -36,9 +36,73 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
   onRefreshDiffs,
   getStatusTag,
 }) => {
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [batchSyncing, setBatchSyncing] = useState(false);
+
   const getIndexTypeLabel = (type: string) => {
     const map: Record<string, string> = { normal: '普通', unique: '唯一', fulltext: '全文' };
     return map[type] || type;
+  };
+
+  // 批量同步选中的表到本地
+  const handleBatchSync = async () => {
+    if (selectedRowKeys.length === 0) return;
+    setBatchSyncing(true);
+    let successCount = 0;
+    let failCount = 0;
+    try {
+      for (const tableName of selectedRowKeys) {
+        const diff = diffs.find(d => d.table_name === tableName);
+        if (!diff) continue;
+        const remoteTable = remoteTables.find(t => t.name === tableName);
+        if (!remoteTable) { failCount++; continue; }
+        try {
+          if (diff.status === 'only_remote') {
+            await invoke('sync_remote_table_to_local', {
+              projectId: project.id,
+              remoteTableJson: JSON.stringify(remoteTable),
+            });
+          } else if (diff.status === 'different') {
+            const diffCols = diff.column_diffs
+              .filter(c => c.status === 'only_remote' || c.status === 'different')
+              .map(c => c.column_name);
+            const diffIdxs = diff.index_diffs
+              .filter(i => i.status === 'only_remote' || i.status === 'different')
+              .map(i => i.index_name);
+            if (diffCols.length > 0) {
+              await invoke('sync_remote_columns_to_local', {
+                projectId: project.id,
+                tableName,
+                remoteColumnsJson: JSON.stringify(remoteTable.columns),
+                columnNames: diffCols,
+              });
+            }
+            if (diffIdxs.length > 0) {
+              await invoke('sync_remote_indexes_to_local', {
+                projectId: project.id,
+                tableName,
+                remoteIndexesJson: JSON.stringify(remoteTable.indexes),
+                indexNames: diffIdxs,
+              });
+            }
+          }
+          successCount++;
+        } catch {
+          failCount++;
+        }
+      }
+      if (failCount === 0) {
+        message.success(`批量同步完成，共 ${successCount} 张表`);
+      } else {
+        message.warning(`同步完成：成功 ${successCount} 张，失败 ${failCount} 张`);
+      }
+      setSelectedRowKeys([]);
+      await onRefreshDiffs();
+    } catch (error) {
+      message.error('批量同步失败: ' + error);
+    } finally {
+      setBatchSyncing(false);
+    }
   };
 
   // 同步整张远程表到本地
@@ -372,9 +436,19 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     );
   };
 
+  // 可批量选中的行：仅远程和有差异的表
+  const canSyncStatuses = new Set(['only_remote', 'different']);
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
+    getCheckboxProps: (record: TableDiff) => ({
+      disabled: !canSyncStatuses.has(record.status),
+    }),
+  };
+
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
           <Text>共 {diffSummary.total} 张表：</Text>
           <Space>
@@ -392,6 +466,20 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
             <Text>有差异 {diffSummary.different}</Text>
           </Space>
         </Space>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <Text type="secondary">已选 {selectedRowKeys.length} 张表</Text>
+          )}
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            disabled={selectedRowKeys.length === 0}
+            loading={batchSyncing}
+            onClick={handleBatchSync}
+          >
+            批量同步到模型
+          </Button>
+        </Space>
       </div>
 
       <Table
@@ -400,6 +488,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         pagination={false}
         rowKey="table_name"
         size="small"
+        rowSelection={rowSelection}
         expandable={{
           expandedRowRender,
           rowExpandable: (record) => record.status === 'different',
