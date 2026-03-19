@@ -5,6 +5,8 @@ import {
   SyncOutlined
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import {
   Avatar,
   Button,
@@ -43,6 +45,8 @@ const Main: React.FC = () => {
   const [syncLoading, setSyncLoading] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState<any>(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
   const [form] = Form.useForm();
   const { token } = useToken();
   const navigate = useNavigate();
@@ -66,6 +70,9 @@ const Main: React.FC = () => {
       
       // 检查Git配置
       await checkGitConfig();
+      
+      // 检查应用更新
+      await checkForUpdates();
     } catch (error) {
       console.error('初始化失败:', error);
       message.error('应用初始化失败');
@@ -84,6 +91,38 @@ const Main: React.FC = () => {
     } catch (error) {
       console.error('检查Git配置失败:', error);
       setGitConfigSaved(false);
+    }
+  };
+
+  /**
+   * 检查应用更新
+   */
+  const checkForUpdates = async () => {
+    setUpdateLoading(true);
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateAvailable(update);
+      }
+    } catch (error) {
+      console.error('检查更新失败:', error);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  /**
+   * 下载并安装更新
+   */
+  const handleInstallUpdate = async () => {
+    if (!updateAvailable) return;
+    try {
+      await updateAvailable.downloadAndInstall();
+      message.success('更新下载完成，即将重启应用...');
+      await relaunch();
+    } catch (error) {
+      console.error('更新失败:', error);
+      message.error(`更新失败: ${error}`);
     }
   };
 
@@ -213,6 +252,17 @@ const Main: React.FC = () => {
                   onClick={handleSync}
                 >
                   同步
+                </Button>
+              </Tooltip>
+            )}
+            {updateAvailable && (
+              <Tooltip title={`发现新版本 ${updateAvailable.version}，点击更新`}>
+                <Button
+                  type="primary"
+                  onClick={handleInstallUpdate}
+                  loading={updateLoading}
+                >
+                  发现新版本
                 </Button>
               </Tooltip>
             )}
