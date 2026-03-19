@@ -35,6 +35,19 @@ pub fn save_setting(key: String, value: String) -> Result<String, String> {
     Ok("设置保存成功".to_string())
 }
 
+// 删除设置
+#[tauri::command]
+pub fn delete_setting(key: String) -> Result<String, String> {
+    let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+    conn.execute(
+        "DELETE FROM t_setting WHERE key = ?1",
+        params![key],
+    ).map_err(|e| format!("Error deleting setting: {}", e))?;
+
+    Ok("设置删除成功".to_string())
+}
+
 // 获取所有设置
 #[tauri::command]
 pub fn get_all_settings() -> Result<HashMap<String, String>, String> {

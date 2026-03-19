@@ -43,6 +43,7 @@ pub fn run() {
             table::delete_table,
             setting::get_setting,
             setting::save_setting,
+            setting::delete_setting,
             setting::get_all_settings,
             db_connection::get_database_connections,
             db_connection::create_database_connection,

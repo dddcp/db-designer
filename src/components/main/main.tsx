@@ -42,6 +42,7 @@ const Main: React.FC = () => {
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
+  const [gitConfigSaved, setGitConfigSaved] = useState(false);
   const [form] = Form.useForm();
   const { token } = useToken();
   const navigate = useNavigate();
@@ -62,9 +63,27 @@ const Main: React.FC = () => {
       
       // 加载项目列表
       await loadProjects();
+      
+      // 检查Git配置
+      await checkGitConfig();
     } catch (error) {
       console.error('初始化失败:', error);
       message.error('应用初始化失败');
+    }
+  };
+
+  /**
+   * 检查Git配置状态
+   */
+  const checkGitConfig = async () => {
+    try {
+      const settings = await invoke<{ [key: string]: string }>('get_all_settings');
+      const gitToken = settings['git_token'] || '';
+      const gitRepo = settings['git_repository'] || '';
+      setGitConfigSaved(!!(gitToken && gitRepo));
+    } catch (error) {
+      console.error('检查Git配置失败:', error);
+      setGitConfigSaved(false);
     }
   };
 
@@ -186,18 +205,20 @@ const Main: React.FC = () => {
           </Space>
           
           <Space>
-            <Tooltip title="同步数据">
-              <Button 
-                type="text" 
-                icon={<SyncOutlined />}
-                onClick={handleSync}
-              >
-                同步
-              </Button>
-            </Tooltip>
+            {gitConfigSaved && (
+              <Tooltip title="同步数据">
+                <Button
+                  type="text"
+                  icon={<SyncOutlined />}
+                  onClick={handleSync}
+                >
+                  同步
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip title="设置">
-              <Button 
-                type="text" 
+              <Button
+                type="text"
                 icon={<SettingOutlined />}
                 onClick={() => navigate('/setting')}
               >

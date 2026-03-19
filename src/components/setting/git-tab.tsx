@@ -5,6 +5,7 @@ import {
   Form,
   Input,
   message,
+  Popconfirm,
   Select,
   Space,
   Typography,
@@ -12,6 +13,7 @@ import {
 import {
   CodeOutlined,
   SaveOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 
 const { Title } = Typography;
@@ -71,6 +73,23 @@ const GitTab: React.FC = () => {
     } catch (error) {
       console.error('Git仓库初始化失败:', error);
       message.error(`Git仓库初始化失败: ${error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearGitConfig = async () => {
+    setLoading(true);
+    try {
+      await invoke('delete_setting', { key: 'git_platform' });
+      await invoke('delete_setting', { key: 'git_token' });
+      await invoke('delete_setting', { key: 'git_repository' });
+      gitForm.resetFields();
+      setGitConfigSaved(false);
+      message.success('Git配置已清除');
+    } catch (error) {
+      console.error('清除Git配置失败:', error);
+      message.error('清除Git配置失败');
     } finally {
       setLoading(false);
     }
@@ -145,6 +164,22 @@ const GitTab: React.FC = () => {
             >
               初始化仓库
             </Button>
+            <Popconfirm
+              title="确定要清除Git配置吗？"
+              description="清除后将无法进行Git同步"
+              onConfirm={handleClearGitConfig}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button
+                type="default"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={!gitConfigSaved}
+              >
+                清除配置
+              </Button>
+            </Popconfirm>
           </Space>
         </Form.Item>
       </Space>
