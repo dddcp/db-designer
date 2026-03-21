@@ -13,8 +13,8 @@ $root = Split-Path -Parent $PSScriptRoot
 
 $files = @(
     @{ Path = "$root\package.json";              Pattern = '"version":\s*"[^"]*"';          Replace = """version"": ""$Version""" },
-    @{ Path = "$root\src-tauri\Cargo.toml";      Pattern = '^version\s*=\s*"[^"]*"';       Replace = "version = ""$Version""" },
-    @{ Path = "$root\src-tauri\tauri.conf.json";  Pattern = '"version":\s*"[^"]*"';          Replace = """version"": ""$Version""" }
+    @{ Path = "$root\src-tauri\Cargo.toml";      Pattern = '(?m)^version\s*=\s*"[^"]*"';  Replace = "version = ""$Version""" },
+    @{ Path = "$root\src-tauri\tauri.conf.json"; Pattern = '"version":\s*"[^"]*"';          Replace = """version"": ""$Version""" }
 )
 
 foreach ($f in $files) {
