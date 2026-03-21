@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::Serialize;
+use std::collections::HashMap;
 
 use crate::models::*;
 
@@ -17,6 +17,7 @@ pub trait DatabaseDialect {
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String;
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String;
     fn drop_index_sql(&self, idx_name: &str, table: &str) -> String;
+    fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String;
     fn bool_literal(&self, value: bool) -> &str;
 
     // === Default implementations (currently same across databases) ===
@@ -49,15 +50,36 @@ pub trait DatabaseDialect {
     fn not_null_clause(&self) -> &str {
         " NOT NULL"
     }
-    fn create_index_sql(&self, idx_name: &str, table: &str, columns: &[&str], idx_type: &str) -> String {
+    fn create_index_sql(
+        &self,
+        idx_name: &str,
+        table: &str,
+        columns: &[&str],
+        idx_type: &str,
+    ) -> String {
         let unique_str = if idx_type == "unique" { "UNIQUE " } else { "" };
-        format!("CREATE {}INDEX {} ON {} ({});\n", unique_str, idx_name, table, columns.join(", "))
+        format!(
+            "CREATE {}INDEX {} ON {} ({});\n",
+            unique_str,
+            idx_name,
+            table,
+            columns.join(", ")
+        )
     }
     fn insert_sql(&self, table: &str, columns: &[&str], values: &[String]) -> String {
-        format!("INSERT INTO {} ({}) VALUES ({});\n", table, columns.join(", "), values.join(", "))
+        format!(
+            "INSERT INTO {} ({}) VALUES ({});\n",
+            table,
+            columns.join(", "),
+            values.join(", ")
+        )
     }
     fn delete_sql(&self, table: &str, conditions: &[String]) -> String {
-        format!("DELETE FROM {} WHERE {};\n", table, conditions.join(" AND "))
+        format!(
+            "DELETE FROM {} WHERE {};\n",
+            table,
+            conditions.join(" AND ")
+        )
     }
     fn string_literal(&self, value: &str) -> String {
         format!("'{}'", value.replace('\'', "''"))
@@ -73,15 +95,38 @@ pub trait DatabaseDialect {
     }
     /// PostgreSQL 使用 ALTER COLUMN ... TYPE 语法修改列，
     /// MySQL / Oracle 使用 MODIFY (COLUMN) col full_def 语法。
-    fn uses_alter_column_syntax(&self) -> bool { false }
+    fn uses_alter_column_syntax(&self) -> bool {
+        false
+    }
 }
 
 // ─── Trait 2: Database connection & remote table fetching ───────────────────
 
 pub trait DatabaseConnector {
-    fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String>;
-    fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String>;
-    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String>;
+    fn test_connection(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<(), String>;
+    fn get_remote_tables(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteTable>, String>;
+    fn get_remote_routines(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteRoutine>, String>;
 }
 
 // ─── MySQL implementation ───────────────────────────────────────────────────
@@ -89,14 +134,26 @@ pub trait DatabaseConnector {
 pub struct MysqlDialect;
 
 impl DatabaseDialect for MysqlDialect {
-    fn name(&self) -> &str { "mysql" }
-    fn display_name(&self) -> &str { "MySQL" }
+    fn name(&self) -> &str {
+        "mysql"
+    }
+    fn display_name(&self) -> &str {
+        "MySQL"
+    }
 
-    fn auto_increment_suffix(&self) -> &str { " AUTO_INCREMENT" }
-    fn supports_inline_comment(&self) -> bool { true }
+    fn auto_increment_suffix(&self) -> &str {
+        " AUTO_INCREMENT"
+    }
+    fn supports_inline_comment(&self) -> bool {
+        true
+    }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
-        format!("ALTER TABLE {} COMMENT = '{}';\n", table, comment.replace('\'', "''"))
+        format!(
+            "ALTER TABLE {} COMMENT = '{}';\n",
+            table,
+            comment.replace('\'', "''")
+        )
     }
     fn column_comment_sql(&self, _table: &str, _col: &str, _comment: &str) -> String {
         String::new() // MySQL uses inline COMMENT in column definition
@@ -107,13 +164,32 @@ impl DatabaseDialect for MysqlDialect {
     fn drop_index_sql(&self, idx_name: &str, table: &str) -> String {
         format!("DROP INDEX {} ON {};\n", idx_name, table)
     }
+    fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
+        match routine_type {
+            "function" => format!("DROP FUNCTION IF EXISTS {};\n", name),
+            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", name),
+            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", name),
+            _ => format!("DROP {} IF EXISTS {};\n", routine_type, name),
+        }
+    }
     fn bool_literal(&self, value: bool) -> &str {
-        if value { "1" } else { "0" }
+        if value {
+            "1"
+        } else {
+            "0"
+        }
     }
 }
 
 impl DatabaseConnector for MysqlDialect {
-    fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String> {
+    fn test_connection(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<(), String> {
         let opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
@@ -121,11 +197,20 @@ impl DatabaseConnector for MysqlDialect {
             .pass(Some(pass))
             .db_name(Some(db));
         let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
-        let _conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let _conn = pool
+            .get_conn()
+            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
         Ok(())
     }
 
-    fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String> {
+    fn get_remote_tables(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteTable>, String> {
         let opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
@@ -133,7 +218,9 @@ impl DatabaseConnector for MysqlDialect {
             .pass(Some(pass))
             .db_name(Some(db));
         let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
-        let mut conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let mut conn = pool
+            .get_conn()
+            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
 
         use mysql::prelude::*;
 
@@ -150,18 +237,36 @@ impl DatabaseConnector for MysqlDialect {
                 )
             ).map_err(|e| format!("查询列失败: {}", e))?;
 
-            let remote_cols: Vec<RemoteColumn> = columns.into_iter().map(|(name, data_type, length, nullable, column_key, extra, default_value, comment)| {
-                RemoteColumn {
-                    name,
-                    data_type,
-                    length: length.map(|l| l as i32),
-                    nullable: nullable == "YES",
-                    column_key,
-                    extra,
-                    default_value,
-                    comment: if comment.as_deref() == Some("") { None } else { comment },
-                }
-            }).collect();
+            let remote_cols: Vec<RemoteColumn> = columns
+                .into_iter()
+                .map(
+                    |(
+                        name,
+                        data_type,
+                        length,
+                        nullable,
+                        column_key,
+                        extra,
+                        default_value,
+                        comment,
+                    )| {
+                        RemoteColumn {
+                            name,
+                            data_type,
+                            length: length.map(|l| l as i32),
+                            nullable: nullable == "YES",
+                            column_key,
+                            extra,
+                            default_value,
+                            comment: if comment.as_deref() == Some("") {
+                                None
+                            } else {
+                                comment
+                            },
+                        }
+                    },
+                )
+                .collect();
 
             let idx_rows: Vec<(String, i32, String, i64, String)> = conn.query(
                 format!(
@@ -172,24 +277,37 @@ impl DatabaseConnector for MysqlDialect {
 
             let mut idx_map: HashMap<String, (bool, String, Vec<String>)> = HashMap::new();
             for (idx_name, non_unique, col_name, _seq, idx_type) in idx_rows {
-                let entry = idx_map.entry(idx_name).or_insert_with(|| (non_unique == 0, idx_type, Vec::new()));
+                let entry = idx_map
+                    .entry(idx_name)
+                    .or_insert_with(|| (non_unique == 0, idx_type, Vec::new()));
                 entry.2.push(col_name);
             }
 
-            let remote_indexes: Vec<RemoteIndex> = idx_map.into_iter().map(|(name, (is_unique, idx_type, cols))| {
-                let index_type = if is_unique {
-                    "unique".to_string()
-                } else if idx_type == "FULLTEXT" {
-                    "fulltext".to_string()
-                } else {
-                    "normal".to_string()
-                };
-                RemoteIndex { name, index_type, column_names: cols }
-            }).collect();
+            let remote_indexes: Vec<RemoteIndex> = idx_map
+                .into_iter()
+                .map(|(name, (is_unique, idx_type, cols))| {
+                    let index_type = if is_unique {
+                        "unique".to_string()
+                    } else if idx_type == "FULLTEXT" {
+                        "fulltext".to_string()
+                    } else {
+                        "normal".to_string()
+                    };
+                    RemoteIndex {
+                        name,
+                        index_type,
+                        column_names: cols,
+                    }
+                })
+                .collect();
 
             result.push(RemoteTable {
                 name: table_name.clone(),
-                comment: if table_comment.as_deref() == Some("") { None } else { table_comment.clone() },
+                comment: if table_comment.as_deref() == Some("") {
+                    None
+                } else {
+                    table_comment.clone()
+                },
                 columns: remote_cols,
                 indexes: remote_indexes,
             });
@@ -198,7 +316,14 @@ impl DatabaseConnector for MysqlDialect {
         Ok(result)
     }
 
-    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String> {
+    fn get_remote_routines(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteRoutine>, String> {
         let opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
@@ -206,7 +331,9 @@ impl DatabaseConnector for MysqlDialect {
             .pass(Some(pass))
             .db_name(Some(db));
         let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
-        let mut conn = pool.get_conn().map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let mut conn = pool
+            .get_conn()
+            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
 
         use mysql::prelude::*;
 
@@ -221,7 +348,11 @@ impl DatabaseConnector for MysqlDialect {
         ).map_err(|e| format!("查询编程对象失败: {}", e))?;
 
         for (name, routine_type) in &routine_rows {
-            let rtype = if routine_type == "FUNCTION" { "function" } else { "procedure" };
+            let rtype = if routine_type == "FUNCTION" {
+                "function"
+            } else {
+                "procedure"
+            };
             let show_sql = if rtype == "function" {
                 format!("SHOW CREATE FUNCTION `{}`", name)
             } else {
@@ -229,7 +360,8 @@ impl DatabaseConnector for MysqlDialect {
             };
             // SHOW CREATE FUNCTION 返回的列: Function, sql_mode, Create Function, ...
             // SHOW CREATE PROCEDURE 返回的列: Procedure, sql_mode, Create Procedure, ...
-            let body: Option<String> = conn.query_first(show_sql)
+            let body: Option<String> = conn
+                .query_first(show_sql)
                 .map_err(|e| format!("获取 {} 定义失败: {}", name, e))?
                 .map(|row: (String, String, String, String, String, String)| row.2);
 
@@ -251,10 +383,10 @@ impl DatabaseConnector for MysqlDialect {
         ).map_err(|e| format!("查询触发器失败: {}", e))?;
 
         for (name,) in &trigger_rows {
-            let body: Option<String> = conn.query_first(
-                format!("SHOW CREATE TRIGGER `{}`", name)
-            ).map_err(|e| format!("获取触发器 {} 定义失败: {}", name, e))?
-              .map(|row: (String, String, String, String, String, String, String)| row.2);
+            let body: Option<String> = conn
+                .query_first(format!("SHOW CREATE TRIGGER `{}`", name))
+                .map_err(|e| format!("获取触发器 {} 定义失败: {}", name, e))?
+                .map(|row: (String, String, String, String, String, String, String)| row.2);
 
             if let Some(b) = body {
                 routines.push(RemoteRoutine {
@@ -274,17 +406,34 @@ impl DatabaseConnector for MysqlDialect {
 pub struct PostgresDialect;
 
 impl DatabaseDialect for PostgresDialect {
-    fn name(&self) -> &str { "postgresql" }
-    fn display_name(&self) -> &str { "PostgreSQL" }
+    fn name(&self) -> &str {
+        "postgresql"
+    }
+    fn display_name(&self) -> &str {
+        "PostgreSQL"
+    }
 
-    fn auto_increment_suffix(&self) -> &str { " GENERATED ALWAYS AS IDENTITY" }
-    fn supports_inline_comment(&self) -> bool { false }
+    fn auto_increment_suffix(&self) -> &str {
+        " GENERATED ALWAYS AS IDENTITY"
+    }
+    fn supports_inline_comment(&self) -> bool {
+        false
+    }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
-        format!("COMMENT ON TABLE {} IS '{}';\n", table, comment.replace('\'', "''"))
+        format!(
+            "COMMENT ON TABLE {} IS '{}';\n",
+            table,
+            comment.replace('\'', "''")
+        )
     }
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String {
-        format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table, col, comment.replace('\'', "''"))
+        format!(
+            "COMMENT ON COLUMN {}.{} IS '{}';\n",
+            table,
+            col,
+            comment.replace('\'', "''")
+        )
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
         format!("  ALTER COLUMN {} TYPE {}", col, full_type)
@@ -292,8 +441,20 @@ impl DatabaseDialect for PostgresDialect {
     fn drop_index_sql(&self, idx_name: &str, _table: &str) -> String {
         format!("DROP INDEX {};\n", idx_name)
     }
+    fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
+        match routine_type {
+            "function" => format!("DROP FUNCTION IF EXISTS {};\n", name),
+            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", name),
+            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", name),
+            _ => format!("DROP {} IF EXISTS {};\n", routine_type, name),
+        }
+    }
     fn bool_literal(&self, value: bool) -> &str {
-        if value { "TRUE" } else { "FALSE" }
+        if value {
+            "TRUE"
+        } else {
+            "FALSE"
+        }
     }
     fn map_data_type(&self, dt: &str) -> String {
         match dt.to_lowercase().as_str() {
@@ -313,16 +474,29 @@ impl DatabaseDialect for PostgresDialect {
             ("datetime", "timestamp"),
             ("double", "double precision"),
             ("blob", "bytea"),
-        ].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
     }
-    fn uses_alter_column_syntax(&self) -> bool { true }
+    fn uses_alter_column_syntax(&self) -> bool {
+        true
+    }
 }
 
 impl DatabaseConnector for PostgresDialect {
-    fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String> {
+    fn test_connection(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<(), String> {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
-            .build().map_err(|e| format!("TLS 错误: {}", e))?;
+            .build()
+            .map_err(|e| format!("TLS 错误: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -332,14 +506,24 @@ impl DatabaseConnector for PostgresDialect {
             .dbname(db)
             .connect(connector)
             .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
-        client.simple_query("SELECT 1").map_err(|e| format!("PostgreSQL 查询失败: {}", e))?;
+        client
+            .simple_query("SELECT 1")
+            .map_err(|e| format!("PostgreSQL 查询失败: {}", e))?;
         Ok(())
     }
 
-    fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String> {
+    fn get_remote_tables(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteTable>, String> {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
-            .build().map_err(|e| format!("TLS 错误: {}", e))?;
+            .build()
+            .map_err(|e| format!("TLS 错误: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -365,26 +549,33 @@ impl DatabaseConnector for PostgresDialect {
                 &[&table_name],
             ).map_err(|e| format!("查询列失败: {}", e))?;
 
-            let remote_cols: Vec<RemoteColumn> = col_rows.iter().map(|r| {
-                let nullable_str: String = r.get(3);
-                let length: Option<i32> = r.get(2);
-                let default_val: Option<String> = r.get(5);
-                let extra = if default_val.as_deref().map(|d| d.starts_with("nextval(")).unwrap_or(false) {
-                    "auto_increment".to_string()
-                } else {
-                    String::new()
-                };
-                RemoteColumn {
-                    name: r.get(0),
-                    data_type: r.get(1),
-                    length,
-                    nullable: nullable_str == "YES",
-                    column_key: r.get(4),
-                    extra,
-                    default_value: default_val,
-                    comment: r.get(6),
-                }
-            }).collect();
+            let remote_cols: Vec<RemoteColumn> = col_rows
+                .iter()
+                .map(|r| {
+                    let nullable_str: String = r.get(3);
+                    let length: Option<i32> = r.get(2);
+                    let default_val: Option<String> = r.get(5);
+                    let extra = if default_val
+                        .as_deref()
+                        .map(|d| d.starts_with("nextval("))
+                        .unwrap_or(false)
+                    {
+                        "auto_increment".to_string()
+                    } else {
+                        String::new()
+                    };
+                    RemoteColumn {
+                        name: r.get(0),
+                        data_type: r.get(1),
+                        length,
+                        nullable: nullable_str == "YES",
+                        column_key: r.get(4),
+                        extra,
+                        default_value: default_val,
+                        comment: r.get(6),
+                    }
+                })
+                .collect();
 
             let idx_rows = client.query(
                 "SELECT i.relname as index_name, ix.indisunique, a.attname as column_name, array_position(ix.indkey, a.attnum) as col_pos FROM pg_class t JOIN pg_index ix ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND t.relname = $1 AND NOT ix.indisprimary ORDER BY i.relname, col_pos",
@@ -396,14 +587,27 @@ impl DatabaseConnector for PostgresDialect {
                 let idx_name: String = r.get(0);
                 let is_unique: bool = r.get(1);
                 let col_name: String = r.get(2);
-                let entry = idx_map.entry(idx_name).or_insert_with(|| (is_unique, Vec::new()));
+                let entry = idx_map
+                    .entry(idx_name)
+                    .or_insert_with(|| (is_unique, Vec::new()));
                 entry.1.push(col_name);
             }
 
-            let remote_indexes: Vec<RemoteIndex> = idx_map.into_iter().map(|(name, (is_unique, cols))| {
-                let index_type = if is_unique { "unique".to_string() } else { "normal".to_string() };
-                RemoteIndex { name, index_type, column_names: cols }
-            }).collect();
+            let remote_indexes: Vec<RemoteIndex> = idx_map
+                .into_iter()
+                .map(|(name, (is_unique, cols))| {
+                    let index_type = if is_unique {
+                        "unique".to_string()
+                    } else {
+                        "normal".to_string()
+                    };
+                    RemoteIndex {
+                        name,
+                        index_type,
+                        column_names: cols,
+                    }
+                })
+                .collect();
 
             result.push(RemoteTable {
                 name: table_name,
@@ -416,10 +620,18 @@ impl DatabaseConnector for PostgresDialect {
         Ok(result)
     }
 
-    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String> {
+    fn get_remote_routines(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteRoutine>, String> {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
-            .build().map_err(|e| format!("TLS 错误: {}", e))?;
+            .build()
+            .map_err(|e| format!("TLS 错误: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -433,16 +645,18 @@ impl DatabaseConnector for PostgresDialect {
         let mut routines = Vec::new();
 
         // 获取函数和存储过程
-        let func_rows = client.query(
-            "SELECT p.proname, pg_get_functiondef(p.oid), \
+        let func_rows = client
+            .query(
+                "SELECT p.proname, pg_get_functiondef(p.oid), \
              CASE WHEN p.prokind = 'p' THEN 'procedure' ELSE 'function' END as kind \
              FROM pg_proc p \
              JOIN pg_namespace n ON n.oid = p.pronamespace \
              WHERE n.nspname = 'public' \
              AND p.prokind IN ('f', 'p') \
              ORDER BY kind, p.proname",
-            &[],
-        ).map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+                &[],
+            )
+            .map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
 
         for row in &func_rows {
             let name: String = row.get(0);
@@ -456,16 +670,18 @@ impl DatabaseConnector for PostgresDialect {
         }
 
         // 获取触发器
-        let trig_rows = client.query(
-            "SELECT t.tgname, pg_get_triggerdef(t.oid, true) \
+        let trig_rows = client
+            .query(
+                "SELECT t.tgname, pg_get_triggerdef(t.oid, true) \
              FROM pg_trigger t \
              JOIN pg_class c ON c.oid = t.tgrelid \
              JOIN pg_namespace n ON n.oid = c.relnamespace \
              WHERE n.nspname = 'public' \
              AND NOT t.tgisinternal \
              ORDER BY t.tgname",
-            &[],
-        ).map_err(|e| format!("查询触发器失败: {}", e))?;
+                &[],
+            )
+            .map_err(|e| format!("查询触发器失败: {}", e))?;
 
         for row in &trig_rows {
             let name: String = row.get(0);
@@ -486,17 +702,34 @@ impl DatabaseConnector for PostgresDialect {
 pub struct OracleDialect;
 
 impl DatabaseDialect for OracleDialect {
-    fn name(&self) -> &str { "oracle" }
-    fn display_name(&self) -> &str { "Oracle" }
+    fn name(&self) -> &str {
+        "oracle"
+    }
+    fn display_name(&self) -> &str {
+        "Oracle"
+    }
 
-    fn auto_increment_suffix(&self) -> &str { " GENERATED ALWAYS AS IDENTITY" }
-    fn supports_inline_comment(&self) -> bool { false }
+    fn auto_increment_suffix(&self) -> &str {
+        " GENERATED ALWAYS AS IDENTITY"
+    }
+    fn supports_inline_comment(&self) -> bool {
+        false
+    }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
-        format!("COMMENT ON TABLE {} IS '{}';\n", table, comment.replace('\'', "''"))
+        format!(
+            "COMMENT ON TABLE {} IS '{}';\n",
+            table,
+            comment.replace('\'', "''")
+        )
     }
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String {
-        format!("COMMENT ON COLUMN {}.{} IS '{}';\n", table, col, comment.replace('\'', "''"))
+        format!(
+            "COMMENT ON COLUMN {}.{} IS '{}';\n",
+            table,
+            col,
+            comment.replace('\'', "''")
+        )
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
         format!("  MODIFY {} {}", col, full_type)
@@ -504,8 +737,20 @@ impl DatabaseDialect for OracleDialect {
     fn drop_index_sql(&self, idx_name: &str, _table: &str) -> String {
         format!("DROP INDEX {};\n", idx_name)
     }
+    fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
+        match routine_type {
+            "function" => format!("DROP FUNCTION {};\n", name),
+            "procedure" => format!("DROP PROCEDURE {};\n", name),
+            "trigger" => format!("DROP TRIGGER {};\n", name),
+            _ => format!("DROP {} {};\n", routine_type.to_uppercase(), name),
+        }
+    }
     fn bool_literal(&self, value: bool) -> &str {
-        if value { "1" } else { "0" }
+        if value {
+            "1"
+        } else {
+            "0"
+        }
     }
     fn map_data_type(&self, dt: &str) -> String {
         match dt.to_lowercase().as_str() {
@@ -547,7 +792,10 @@ impl DatabaseDialect for OracleDialect {
             ("timestamp", "timestamp"),
             ("blob", "blob"),
             ("boolean", "number(1)"),
-        ].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        ]
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
     }
 
     fn drop_table_sql(&self, table: &str) -> String {
@@ -564,7 +812,14 @@ impl DatabaseDialect for OracleDialect {
 }
 
 impl DatabaseConnector for OracleDialect {
-    fn test_connection(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<(), String> {
+    fn test_connection(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<(), String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
             .map_err(|e| format!("Oracle 连接失败: {}", e))?;
@@ -573,7 +828,14 @@ impl DatabaseConnector for OracleDialect {
         Ok(())
     }
 
-    fn get_remote_tables(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteTable>, String> {
+    fn get_remote_tables(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteTable>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
             .map_err(|e| format!("Oracle 连接失败: {}", e))?;
@@ -587,14 +849,19 @@ impl DatabaseConnector for OracleDialect {
         let mut result = Vec::new();
 
         // 预查询主键信息：table_name -> Vec<column_name>
-        let mut pk_stmt = conn.statement(
-            "SELECT cc.table_name, cc.column_name \
+        let mut pk_stmt = conn
+            .statement(
+                "SELECT cc.table_name, cc.column_name \
              FROM user_constraints c JOIN user_cons_columns cc \
              ON c.constraint_name = cc.constraint_name \
              WHERE c.constraint_type = 'P' \
-             ORDER BY cc.table_name, cc.position"
-        ).build().map_err(|e| format!("查询主键失败: {}", e))?;
-        let pk_rows = pk_stmt.query(&[]).map_err(|e| format!("查询主键失败: {}", e))?;
+             ORDER BY cc.table_name, cc.position",
+            )
+            .build()
+            .map_err(|e| format!("查询主键失败: {}", e))?;
+        let pk_rows = pk_stmt
+            .query(&[])
+            .map_err(|e| format!("查询主键失败: {}", e))?;
         let mut pk_map: HashMap<String, Vec<String>> = HashMap::new();
         for row_result in pk_rows {
             let row = row_result.map_err(|e| format!("读取主键行失败: {}", e))?;
@@ -605,9 +872,10 @@ impl DatabaseConnector for OracleDialect {
 
         // 预查询 Identity 列信息：table_name -> Vec<column_name>
         let mut identity_map: HashMap<String, Vec<String>> = HashMap::new();
-        if let Ok(mut id_stmt) = conn.statement(
-            "SELECT table_name, column_name FROM user_tab_identity_cols"
-        ).build() {
+        if let Ok(mut id_stmt) = conn
+            .statement("SELECT table_name, column_name FROM user_tab_identity_cols")
+            .build()
+        {
             if let Ok(id_rows) = id_stmt.query(&[]) {
                 for row_result in id_rows {
                     if let Ok(row) = row_result {
@@ -639,17 +907,23 @@ impl DatabaseConnector for OracleDialect {
                  WHERE c.table_name = :1 ORDER BY c.column_id"
             ).build().map_err(|e| format!("查询列失败: {}", e))?;
 
-            let col_rows = col_stmt.query(&[&table_name]).map_err(|e| format!("查询列失败: {}", e))?;
+            let col_rows = col_stmt
+                .query(&[&table_name])
+                .map_err(|e| format!("查询列失败: {}", e))?;
             let mut remote_cols = Vec::new();
 
             for col_row_result in col_rows {
                 let col_row = col_row_result.map_err(|e| format!("读取列行失败: {}", e))?;
                 let name: String = col_row.get(0).map_err(|e| format!("获取列名失败: {}", e))?;
-                let data_type: String = col_row.get(1).map_err(|e| format!("获取数据类型失败: {}", e))?;
+                let data_type: String = col_row
+                    .get(1)
+                    .map_err(|e| format!("获取数据类型失败: {}", e))?;
                 let char_length: Option<u32> = col_row.get(2).ok();
                 let data_precision: Option<u32> = col_row.get(3).ok();
                 let _data_scale: Option<u32> = col_row.get(4).ok();
-                let nullable: String = col_row.get(5).map_err(|e| format!("获取nullable失败: {}", e))?;
+                let nullable: String = col_row
+                    .get(5)
+                    .map_err(|e| format!("获取nullable失败: {}", e))?;
                 let default_value: Option<String> = col_row.get(6).ok();
                 let _column_id: u32 = col_row.get(7).map_err(|e| format!("获取列ID失败: {}", e))?;
                 let comment: Option<String> = col_row.get(8).ok();
@@ -666,11 +940,19 @@ impl DatabaseConnector for OracleDialect {
 
                 // 检测主键
                 let is_pk = pk_cols.map_or(false, |cols| cols.contains(&name));
-                let column_key = if is_pk { "PRI".to_string() } else { String::new() };
+                let column_key = if is_pk {
+                    "PRI".to_string()
+                } else {
+                    String::new()
+                };
 
                 // 检测自增（Identity 列）
                 let is_identity = id_cols.map_or(false, |cols| cols.contains(&name));
-                let extra = if is_identity { "auto_increment".to_string() } else { String::new() };
+                let extra = if is_identity {
+                    "auto_increment".to_string()
+                } else {
+                    String::new()
+                };
 
                 remote_cols.push(RemoteColumn {
                     name,
@@ -685,8 +967,9 @@ impl DatabaseConnector for OracleDialect {
             }
 
             // 查询索引（排除主键）
-            let mut idx_stmt = conn.statement(
-                "SELECT i.index_name, i.uniqueness, ic.column_name, ic.column_position \
+            let mut idx_stmt = conn
+                .statement(
+                    "SELECT i.index_name, i.uniqueness, ic.column_name, ic.column_position \
                  FROM user_indexes i JOIN user_ind_columns ic \
                  ON i.index_name = ic.index_name \
                  WHERE i.table_name = :1 AND i.index_type != 'LOB' \
@@ -694,27 +977,52 @@ impl DatabaseConnector for OracleDialect {
                      SELECT 1 FROM user_constraints c \
                      WHERE c.constraint_name = i.index_name AND c.constraint_type = 'P' \
                  ) \
-                 ORDER BY i.index_name, ic.column_position"
-            ).build().map_err(|e| format!("查询索引失败: {}", e))?;
+                 ORDER BY i.index_name, ic.column_position",
+                )
+                .build()
+                .map_err(|e| format!("查询索引失败: {}", e))?;
 
-            let idx_rows = idx_stmt.query(&[&table_name]).map_err(|e| format!("查询索引失败: {}", e))?;
+            let idx_rows = idx_stmt
+                .query(&[&table_name])
+                .map_err(|e| format!("查询索引失败: {}", e))?;
 
             let mut idx_map: HashMap<String, (bool, Vec<String>)> = HashMap::new();
             for idx_row_result in idx_rows {
                 let idx_row = idx_row_result.map_err(|e| format!("读取索引行失败: {}", e))?;
-                let idx_name: String = idx_row.get(0).map_err(|e| format!("获取索引名失败: {}", e))?;
-                let uniqueness: String = idx_row.get(1).map_err(|e| format!("获取唯一性失败: {}", e))?;
-                let col_name: String = idx_row.get(2).map_err(|e| format!("获取索引列名失败: {}", e))?;
-                let _col_pos: u32 = idx_row.get(3).map_err(|e| format!("获取列位置失败: {}", e))?;
+                let idx_name: String = idx_row
+                    .get(0)
+                    .map_err(|e| format!("获取索引名失败: {}", e))?;
+                let uniqueness: String = idx_row
+                    .get(1)
+                    .map_err(|e| format!("获取唯一性失败: {}", e))?;
+                let col_name: String = idx_row
+                    .get(2)
+                    .map_err(|e| format!("获取索引列名失败: {}", e))?;
+                let _col_pos: u32 = idx_row
+                    .get(3)
+                    .map_err(|e| format!("获取列位置失败: {}", e))?;
 
-                let entry = idx_map.entry(idx_name).or_insert_with(|| (uniqueness == "UNIQUE", Vec::new()));
+                let entry = idx_map
+                    .entry(idx_name)
+                    .or_insert_with(|| (uniqueness == "UNIQUE", Vec::new()));
                 entry.1.push(col_name);
             }
 
-            let remote_indexes: Vec<RemoteIndex> = idx_map.into_iter().map(|(name, (is_unique, cols))| {
-                let index_type = if is_unique { "unique".to_string() } else { "normal".to_string() };
-                RemoteIndex { name, index_type, column_names: cols }
-            }).collect();
+            let remote_indexes: Vec<RemoteIndex> = idx_map
+                .into_iter()
+                .map(|(name, (is_unique, cols))| {
+                    let index_type = if is_unique {
+                        "unique".to_string()
+                    } else {
+                        "normal".to_string()
+                    };
+                    RemoteIndex {
+                        name,
+                        index_type,
+                        column_names: cols,
+                    }
+                })
+                .collect();
 
             result.push(RemoteTable {
                 name: table_name,
@@ -727,7 +1035,14 @@ impl DatabaseConnector for OracleDialect {
         Ok(result)
     }
 
-    fn get_remote_routines(&self, host: &str, port: i32, user: &str, pass: &str, db: &str) -> Result<Vec<RemoteRoutine>, String> {
+    fn get_remote_routines(
+        &self,
+        host: &str,
+        port: i32,
+        user: &str,
+        pass: &str,
+        db: &str,
+    ) -> Result<Vec<RemoteRoutine>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
             .map_err(|e| format!("Oracle 连接失败: {}", e))?;
@@ -742,7 +1057,9 @@ impl DatabaseConnector for OracleDialect {
              ORDER BY object_type, object_name"
         ).build().map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
 
-        let rows = stmt.query(&[]).map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+        let rows = stmt
+            .query(&[])
+            .map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
 
         for row_result in rows {
             let row = row_result.map_err(|e| format!("读取行失败: {}", e))?;
@@ -751,7 +1068,11 @@ impl DatabaseConnector for OracleDialect {
             let ddl: Option<String> = row.get(2).ok();
 
             if let Some(body) = ddl {
-                let rtype = if obj_type == "FUNCTION" { "function" } else { "procedure" };
+                let rtype = if obj_type == "FUNCTION" {
+                    "function"
+                } else {
+                    "procedure"
+                };
                 routines.push(RemoteRoutine {
                     name,
                     r#type: rtype.to_string(),
@@ -761,13 +1082,18 @@ impl DatabaseConnector for OracleDialect {
         }
 
         // 获取触发器
-        let mut trig_stmt = conn.statement(
-            "SELECT trigger_name, dbms_metadata.get_ddl('TRIGGER', trigger_name) as ddl \
+        let mut trig_stmt = conn
+            .statement(
+                "SELECT trigger_name, dbms_metadata.get_ddl('TRIGGER', trigger_name) as ddl \
              FROM user_triggers \
-             ORDER BY trigger_name"
-        ).build().map_err(|e| format!("查询触发器失败: {}", e))?;
+             ORDER BY trigger_name",
+            )
+            .build()
+            .map_err(|e| format!("查询触发器失败: {}", e))?;
 
-        let trig_rows = trig_stmt.query(&[]).map_err(|e| format!("查询触发器失败: {}", e))?;
+        let trig_rows = trig_stmt
+            .query(&[])
+            .map_err(|e| format!("查询触发器失败: {}", e))?;
 
         for row_result in trig_rows {
             let row = row_result.map_err(|e| format!("读取触发器行失败: {}", e))?;
@@ -817,9 +1143,21 @@ pub struct DatabaseTypeInfo {
 #[tauri::command]
 pub fn get_supported_database_types() -> Vec<DatabaseTypeInfo> {
     vec![
-        DatabaseTypeInfo { value: "mysql".to_string(), label: "MySQL".to_string(), color: "green".to_string() },
-        DatabaseTypeInfo { value: "postgresql".to_string(), label: "PostgreSQL".to_string(), color: "purple".to_string() },
-        DatabaseTypeInfo { value: "oracle".to_string(), label: "Oracle".to_string(), color: "red".to_string() },
+        DatabaseTypeInfo {
+            value: "mysql".to_string(),
+            label: "MySQL".to_string(),
+            color: "green".to_string(),
+        },
+        DatabaseTypeInfo {
+            value: "postgresql".to_string(),
+            label: "PostgreSQL".to_string(),
+            color: "purple".to_string(),
+        },
+        DatabaseTypeInfo {
+            value: "oracle".to_string(),
+            label: "Oracle".to_string(),
+            color: "red".to_string(),
+        },
     ]
 }
 
