@@ -41,7 +41,11 @@ All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri 
 2. Registered in `lib.rs` → `tauri::generate_handler![...]`
 3. Called from frontend: `invoke<ReturnType>('command_name', { params })`
 
-**Naming convention:** Rust structs use `snake_case` fields; TypeScript interfaces use `camelCase`. Tauri handles the conversion automatically. When a Rust field conflicts with a keyword (e.g., `type`), use `#[serde(rename = "type")] pub r#type: String`.
+**Naming convention:** 
+- Rust 后端命令参数使用 `snake_case`（如 `project_id`, `table_id`, `database_type`）
+- 前端 invoke 调用参数使用 `camelCase`（如 `projectId`, `tableId`, `databaseType`）
+- Tauri 自动转换，无需手动处理
+- Rust struct 字段与 keyword 冲突时（如 `type`），使用 `#[serde(rename = "type")] pub r#type: String`
 
 ### Backend Modules (`src-tauri/src/`)
 

@@ -36,11 +36,17 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const sql = await invoke<string>('export_project_sql', {
-        projectId: project.id,
-        databaseType,
-      });
-      setSqlContent(sql);
+      const [tableSql, routineSql] = await Promise.all([
+        invoke<string>('export_project_sql', {
+          projectId: project.id,
+          databaseType,
+        }),
+        invoke<string>('export_routines_sql', {
+          projectId: project.id,
+          databaseType,
+        }),
+      ]);
+      setSqlContent(tableSql + '\n' + routineSql);
     } catch (error) {
       console.error('导出SQL失败:', error);
       message.error('导出SQL失败: ' + error);
@@ -92,7 +98,7 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
         </div>
 
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-          导出当前项目所有表的完整 SQL，包含表结构、索引和元数据。
+          导出当前项目所有表和编程对象的完整 SQL，包含表结构、索引、元数据和函数/存储过程/触发器。按数据库类型过滤，只导出兼容的编程对象。
         </Text>
 
         <TextArea
