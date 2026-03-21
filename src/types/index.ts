@@ -116,6 +116,7 @@ export interface RoutineDef {
   type: 'function' | 'procedure' | 'trigger';
   body: string;
   comment?: string;
+  db_type?: string;
   created_at: string;
   updated_at: string;
 }

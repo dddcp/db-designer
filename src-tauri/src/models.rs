@@ -146,6 +146,8 @@ pub struct RoutineDef {
     pub r#type: String, // 'function' | 'procedure' | 'trigger'
     pub body: String,
     pub comment: Option<String>,
+    #[serde(default)]
+    pub db_type: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

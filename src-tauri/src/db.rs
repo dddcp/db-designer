@@ -156,5 +156,8 @@ pub fn init_database() -> Result<String, String> {
     // 数据库迁移：为已存在的 t_column 表添加 default_null 列
     let _ = conn.execute_batch("ALTER TABLE t_column ADD COLUMN default_null BOOLEAN DEFAULT 0");
 
+    // 数据库迁移：为已存在的 t_routine 表添加 db_type 列
+    let _ = conn.execute_batch("ALTER TABLE t_routine ADD COLUMN db_type TEXT");
+
     Ok("Database initialized successfully".to_string())
 }

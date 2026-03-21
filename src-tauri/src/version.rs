@@ -165,7 +165,7 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
 
     // 5. 获取编程对象
     let mut routine_stmt = conn.prepare(
-        "SELECT id, project_id, name, type, body, comment, created_at, updated_at FROM t_routine WHERE project_id = ?1 ORDER BY type, name"
+        "SELECT id, project_id, name, type, body, comment, created_at, updated_at, db_type FROM t_routine WHERE project_id = ?1 ORDER BY type, name"
     ).map_err(|e| format!("Error preparing routine stmt: {}", e))?;
     let snapshot_routines: Vec<RoutineDef> = routine_stmt.query_map(params![project_id], |row| {
         Ok(RoutineDef {
@@ -175,6 +175,7 @@ pub fn create_version(project_id: i32, name: String) -> Result<Version, String> 
             r#type: row.get(3)?,
             body: row.get(4)?,
             comment: row.get(5)?,
+            db_type: row.get(8)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
         })
@@ -304,6 +305,29 @@ pub fn export_version_sql(version_id: i64, database_type: String) -> Result<Stri
                 }
             }
             sql.push('\n');
+        }
+    }
+
+    // 编程对象（按 db_type 过滤）
+    let filtered_routines: Vec<&RoutineDef> = snapshot.routines.iter()
+        .filter(|r| r.db_type.as_deref() == Some(&database_type) || r.db_type.is_none())
+        .collect();
+    if !filtered_routines.is_empty() {
+        sql.push_str("-- 编程对象\n\n");
+        for r in &filtered_routines {
+            let type_label = match r.r#type.as_str() {
+                "function" => "函数",
+                "procedure" => "存储过程",
+                "trigger" => "触发器",
+                _ => "编程对象",
+            };
+            if r.db_type.is_none() {
+                sql.push_str(&format!("-- {} : {} (未指定数据库类型)\n", type_label, r.name));
+            } else {
+                sql.push_str(&format!("-- {} : {}\n", type_label, r.name));
+            }
+            sql.push_str(r.body.trim());
+            sql.push_str("\n\n");
         }
     }
 

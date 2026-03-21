@@ -9,7 +9,10 @@
       "Bash(rustc:*)",
       "Bash(rustup show:*)",
       "Bash(cargo build:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(npx openspec:*)",
+      "Bash(openspec status:*)",
+      "Bash(openspec instructions:*)"
     ]
   }
 }

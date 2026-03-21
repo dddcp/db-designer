@@ -24,7 +24,7 @@ import {
   ExportOutlined,
   DownOutlined,
 } from '@ant-design/icons';
-import type { Project, RoutineDef } from '../../types';
+import type { Project, RoutineDef, DatabaseTypeOption } from '../../types';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -53,9 +53,18 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
   const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<Partial<RoutineDef> | null>(null);
 
+  // 数据库类型
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
+  const [filterDbType, setFilterDbType] = useState<string>('');
+
   // SQL导出相关
   const [sqlContent, setSqlContent] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [exportDbType, setExportDbType] = useState('mysql');
+
+  useEffect(() => {
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
+  }, []);
 
   useEffect(() => {
     loadRoutines();
@@ -73,6 +82,11 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
       setLoading(false);
     }
   };
+
+  // 过滤后的列表
+  const filteredRoutines = filterDbType
+    ? routines.filter(r => r.db_type === filterDbType)
+    : routines;
 
   // ─── 编程对象维护 ─────────────────────────────────────────────────
 
@@ -113,6 +127,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
           type: editingRoutine.type,
           body: editingRoutine.body,
           comment: editingRoutine.comment || null,
+          db_type: editingRoutine.db_type || null,
           created_at: editingRoutine.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -142,7 +157,10 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
   const handleExport = async () => {
     setExportLoading(true);
     try {
-      const sql = await invoke<string>('export_routines_sql', { projectId: project.id });
+      const sql = await invoke<string>('export_routines_sql', {
+        projectId: project.id,
+        databaseType: exportDbType,
+      });
       setSqlContent(sql);
     } catch (error) {
       console.error('导出失败:', error);
@@ -159,6 +177,16 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
     } catch {
       message.error('复制失败');
     }
+  };
+
+  // ─── 辅助函数 ───────────────────────────────────────────────────
+
+  const getDbTypeTag = (dbType?: string) => {
+    if (!dbType) {
+      return <Tag color="default">未指定</Tag>;
+    }
+    const info = dbTypes.find(t => t.value === dbType);
+    return <Tag color={info?.color || 'default'}>{info?.label || dbType}</Tag>;
   };
 
   // ─── 列定义 ───────────────────────────────────────────────────────
@@ -180,6 +208,13 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
           {ROUTINE_TYPE_LABELS[type] || type}
         </Tag>
       ),
+    },
+    {
+      title: '数据库',
+      dataIndex: 'db_type',
+      key: 'db_type',
+      width: 120,
+      render: (db_type: string) => getDbTypeTag(db_type),
     },
     {
       title: '说明',
@@ -226,7 +261,21 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
             children: (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text type="secondary">管理项目中的函数、存储过程和触发器。注意：此类结构并没有区分数据库类型，简单维护</Text>
+                  <Space>
+                    <Text type="secondary">管理项目中的函数、存储过程和触发器</Text>
+                    <Select
+                      style={{ width: 140 }}
+                      value={filterDbType}
+                      onChange={setFilterDbType}
+                      placeholder="数据库类型"
+                      allowClear
+                    >
+                      <Option value="">全部</Option>
+                      {dbTypes.map(t => (
+                        <Option key={t.value} value={t.value}>{t.label}</Option>
+                      ))}
+                    </Select>
+                  </Space>
                   <Dropdown
                     menu={{
                       items: [
@@ -243,7 +292,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                   </Dropdown>
                 </div>
                 <Table
-                  dataSource={routines}
+                  dataSource={filteredRoutines}
                   columns={manageColumns}
                   rowKey="id"
                   loading={loading}
@@ -263,8 +312,17 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
             children: (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text type="secondary">导出当前项目所有编程对象的 SQL</Text>
+                  <Text type="secondary">导出当前项目编程对象的 SQL</Text>
                   <Space>
+                    <Select
+                      style={{ width: 140 }}
+                      value={exportDbType}
+                      onChange={setExportDbType}
+                    >
+                      {dbTypes.map(t => (
+                        <Option key={t.value} value={t.value}>{t.label}</Option>
+                      ))}
+                    </Select>
                     <Button
                       type="primary"
                       icon={<ExportOutlined />}
@@ -320,6 +378,20 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                 <Option value="function">函数</Option>
                 <Option value="procedure">存储过程</Option>
                 <Option value="trigger">触发器</Option>
+              </Select>
+            </div>
+            <div>
+              <Text strong>数据库类型</Text>
+              <Select
+                style={{ width: '100%', marginTop: 4 }}
+                value={editingRoutine.db_type || undefined}
+                onChange={(v) => setEditingRoutine({ ...editingRoutine, db_type: v || undefined })}
+                placeholder="未指定"
+                allowClear
+              >
+                {dbTypes.map(t => (
+                  <Option key={t.value} value={t.value}>{t.label}</Option>
+                ))}
               </Select>
             </div>
             <div>

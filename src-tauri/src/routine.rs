@@ -10,7 +10,7 @@ pub fn get_project_routines(project_id: i32) -> Result<Vec<RoutineDef>, String> 
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, name, type, body, comment, created_at, updated_at FROM t_routine WHERE project_id = ?1 ORDER BY type, name"
+        "SELECT id, project_id, name, type, body, comment, created_at, updated_at, db_type FROM t_routine WHERE project_id = ?1 ORDER BY type, name"
     ).map_err(|e| format!("Error preparing statement: {}", e))?;
 
     let iter = stmt.query_map(params![project_id], |row| {
@@ -21,6 +21,7 @@ pub fn get_project_routines(project_id: i32) -> Result<Vec<RoutineDef>, String> 
             r#type: row.get(3)?,
             body: row.get(4)?,
             comment: row.get(5)?,
+            db_type: row.get(8)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
         })
@@ -40,10 +41,10 @@ pub fn save_routine(routine: RoutineDef) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
     conn.execute(
-        "INSERT INTO t_routine (id, project_id, name, type, body, comment, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now')) \
-         ON CONFLICT(id) DO UPDATE SET name=excluded.name, type=excluded.type, body=excluded.body, comment=excluded.comment, updated_at=datetime('now')",
-        params![routine.id, routine.project_id, routine.name, routine.r#type, routine.body, routine.comment],
+        "INSERT INTO t_routine (id, project_id, name, type, body, comment, db_type, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), datetime('now')) \
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, type=excluded.type, body=excluded.body, comment=excluded.comment, db_type=excluded.db_type, updated_at=datetime('now')",
+        params![routine.id, routine.project_id, routine.name, routine.r#type, routine.body, routine.comment, routine.db_type],
     ).map_err(|e| format!("Error saving routine: {}", e))?;
 
     Ok("编程对象保存成功".to_string())
@@ -77,16 +78,16 @@ pub fn get_remote_routines_cmd(connection_id: i32) -> Result<Vec<RemoteRoutine>,
 
 // 比较本地和远程编程对象
 #[tauri::command]
-pub fn compare_routines(project_id: i32, remote_routines_json: String) -> Result<Vec<RoutineDiff>, String> {
+pub fn compare_routines(project_id: i32, remote_routines_json: String, db_type: String) -> Result<Vec<RoutineDiff>, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
 
     let remote_routines: Vec<RemoteRoutine> = serde_json::from_str(&remote_routines_json)
         .map_err(|e| format!("解析远程编程对象数据失败: {}", e))?;
 
     let mut stmt = conn.prepare(
-        "SELECT name, type, body FROM t_routine WHERE project_id = ?1"
+        "SELECT name, type, body FROM t_routine WHERE project_id = ?1 AND (db_type = ?2 OR db_type IS NULL)"
     ).map_err(|e| format!("Error: {}", e))?;
-    let local_routines: Vec<(String, String, String)> = stmt.query_map(params![project_id], |row| {
+    let local_routines: Vec<(String, String, String)> = stmt.query_map(params![project_id, db_type], |row| {
         Ok((row.get(0)?, row.get(1)?, row.get(2)?))
     }).map_err(|e| format!("Error: {}", e))?
       .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
@@ -156,16 +157,16 @@ pub fn compare_routines(project_id: i32, remote_routines_json: String) -> Result
 
 // 将远程编程对象同步到本地
 #[tauri::command]
-pub fn sync_remote_routine_to_local(project_id: i32, remote_routine_json: String) -> Result<String, String> {
+pub fn sync_remote_routine_to_local(project_id: i32, remote_routine_json: String, db_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
 
     let remote: RemoteRoutine = serde_json::from_str(&remote_routine_json)
         .map_err(|e| format!("解析远程编程对象数据失败: {}", e))?;
 
-    // 检查本地是否已有同 name+type 的记录
+    // 检查本地是否已有同 name+type+db_type 的记录
     let existing_id: Option<String> = conn.query_row(
-        "SELECT id FROM t_routine WHERE project_id = ?1 AND name = ?2 AND type = ?3",
-        params![project_id, remote.name, remote.r#type],
+        "SELECT id FROM t_routine WHERE project_id = ?1 AND name = ?2 AND type = ?3 AND db_type = ?4",
+        params![project_id, remote.name, remote.r#type, db_type],
         |row| row.get(0),
     ).ok();
 
@@ -181,8 +182,8 @@ pub fn sync_remote_routine_to_local(project_id: i32, remote_routine_json: String
         let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
         let new_id = format!("routine_{}", ts);
         conn.execute(
-            "INSERT INTO t_routine (id, project_id, name, type, body, comment, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, datetime('now'), datetime('now'))",
-            params![new_id, project_id, remote.name, remote.r#type, remote.body],
+            "INSERT INTO t_routine (id, project_id, name, type, body, comment, db_type, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, datetime('now'), datetime('now'))",
+            params![new_id, project_id, remote.name, remote.r#type, remote.body, db_type],
         ).map_err(|e| format!("创建编程对象失败: {}", e))?;
     }
 
@@ -191,15 +192,15 @@ pub fn sync_remote_routine_to_local(project_id: i32, remote_routine_json: String
 
 // 导出项目所有编程对象的 SQL
 #[tauri::command]
-pub fn export_routines_sql(project_id: i32) -> Result<String, String> {
+pub fn export_routines_sql(project_id: i32, database_type: String) -> Result<String, String> {
     let conn = init_db().map_err(|e| format!("Error: {}", e))?;
 
     let mut stmt = conn.prepare(
-        "SELECT name, type, body FROM t_routine WHERE project_id = ?1 ORDER BY CASE type WHEN 'function' THEN 1 WHEN 'procedure' THEN 2 WHEN 'trigger' THEN 3 END, name"
+        "SELECT name, type, body, db_type FROM t_routine WHERE project_id = ?1 AND (db_type = ?2 OR db_type IS NULL) ORDER BY CASE type WHEN 'function' THEN 1 WHEN 'procedure' THEN 2 WHEN 'trigger' THEN 3 END, name"
     ).map_err(|e| format!("Error: {}", e))?;
 
-    let routines: Vec<(String, String, String)> = stmt.query_map(params![project_id], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    let routines: Vec<(String, String, String, Option<String>)> = stmt.query_map(params![project_id, database_type], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
     }).map_err(|e| format!("Error: {}", e))?
       .collect::<Result<Vec<_>, _>>().map_err(|e| format!("Error: {}", e))?;
 
@@ -210,14 +211,18 @@ pub fn export_routines_sql(project_id: i32) -> Result<String, String> {
     let mut sql = String::new();
     sql.push_str("-- 编程对象\n\n");
 
-    for (name, rtype, body) in &routines {
+    for (name, rtype, body, db_type) in &routines {
         let type_label = match rtype.as_str() {
             "function" => "函数",
             "procedure" => "存储过程",
             "trigger" => "触发器",
             _ => "编程对象",
         };
-        sql.push_str(&format!("-- {} : {}\n", type_label, name));
+        if db_type.is_none() {
+            sql.push_str(&format!("-- {} : {} (未指定数据库类型)\n", type_label, name));
+        } else {
+            sql.push_str(&format!("-- {} : {}\n", type_label, name));
+        }
         sql.push_str(body.trim());
         sql.push_str("\n\n");
     }

@@ -16,7 +16,7 @@ import {
   CopyOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
-import type { Project, RemoteRoutine, RoutineDiff } from '../../types';
+import type { Project, RemoteRoutine, RoutineDiff, DatabaseTypeOption } from '../../types';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -25,6 +25,7 @@ interface SyncRoutineDiffProps {
   project: Project;
   routineDiffs: RoutineDiff[];
   selectedConnectionId: number | undefined;
+  dbType: string;
   syncingKeys: Set<string>;
   onSyncingKeysChange: (updater: (prev: Set<string>) => Set<string>) => void;
   onRoutineDiffsChange: (diffs: RoutineDiff[]) => void;
@@ -35,6 +36,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
   project,
   routineDiffs,
   selectedConnectionId,
+  dbType,
   syncingKeys,
   onSyncingKeysChange,
   onRoutineDiffsChange,
@@ -44,6 +46,11 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
   const [selectedRoutineDiff, setSelectedRoutineDiff] = useState<RoutineDiff | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [batchSyncing, setBatchSyncing] = useState(false);
+  const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
+
+  React.useEffect(() => {
+    invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
+  }, []);
 
   // 刷新编程对象差异
   const refreshRoutineDiffs = async () => {
@@ -54,6 +61,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     const routineDiffResult = await invoke<RoutineDiff[]>('compare_routines', {
       projectId: project.id,
       remoteRoutinesJson: JSON.stringify(remoteRoutines),
+      dbType,
     });
     onRoutineDiffsChange(routineDiffResult);
   };
@@ -77,6 +85,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
           await invoke('sync_remote_routine_to_local', {
             projectId: project.id,
             remoteRoutineJson: JSON.stringify(remoteRoutine),
+            dbType,
           });
           successCount++;
         } catch {
@@ -110,6 +119,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
       await invoke('sync_remote_routine_to_local', {
         projectId: project.id,
         remoteRoutineJson: JSON.stringify(remoteRoutine),
+        dbType,
       });
       message.success(`${diff.name} 同步成功`);
       // 重新比对编程对象
@@ -207,7 +217,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     <>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
-          <Text>共 {routineDiffs.length} 个编程对象：</Text>
+          <Text>共 {routineDiffs.length} 个编程对象（{dbTypes.find(t => t.value === dbType)?.label || dbType}）：</Text>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <Text>一致 {routineDiffs.filter(d => d.status === 'same').length}</Text>

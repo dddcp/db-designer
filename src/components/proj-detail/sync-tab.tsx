@@ -96,6 +96,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
         const routineDiffResult = await invoke<RoutineDiff[]>('compare_routines', {
           projectId: project.id,
           remoteRoutinesJson: JSON.stringify(remoteRoutines),
+          dbType: connections.find(c => c.id === selectedConnectionId)?.type || 'mysql',
         });
         setRoutineDiffs(routineDiffResult);
       } catch (routineError) {
@@ -255,6 +256,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
                   project={project}
                   routineDiffs={routineDiffs}
                   selectedConnectionId={selectedConnectionId}
+                  dbType={connections.find(c => c.id === selectedConnectionId)?.type || 'mysql'}
                   syncingKeys={syncingKeys}
                   onSyncingKeysChange={setSyncingKeys}
                   onRoutineDiffsChange={setRoutineDiffs}
