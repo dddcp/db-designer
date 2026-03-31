@@ -51,7 +51,7 @@ export interface GeneratedTable {
  * 封装 AI API 调用：读取 settings → 构建请求 → 发送 fetch → 提取 content → 剥离 markdown 代码块 → 返回纯 JSON 字符串
  */
 export async function callAiApi(systemPrompt: string, userPrompt: string): Promise<string> {
-  const allSettings = await invoke<{ [key: string]: string }>('get_all_settings');
+  const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
   const baseUrl = allSettings['ai_base_url'];
   const apiKey = allSettings['ai_api_key'];
   const model = allSettings['ai_model'];

@@ -84,7 +84,7 @@ const Main: React.FC = () => {
    */
   const checkGitConfig = async () => {
     try {
-      const settings = await invoke<{ [key: string]: string }>('get_all_settings');
+      const settings = await invoke<{ [key: string]: string }>('get_local_settings');
       const gitToken = settings['git_token'] || '';
       const gitRepo = settings['git_repository'] || '';
       setGitConfigSaved(!!(gitToken && gitRepo));

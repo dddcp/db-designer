@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use rusqlite::{Connection, params};
 
-use crate::db::{get_data_dir, get_database_path};
+use crate::db::get_data_dir;
+use crate::setting::load_local_settings;
 
 // 获取Git分支信息
 #[tauri::command]
@@ -54,22 +54,11 @@ pub fn init_git_repository() -> Result<String, String> {
         return Err(format!("git init 失败: {}", stderr));
     }
 
-    // 2. 从 settings 读取 git 配置
-    let db_path = get_database_path();
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("无法打开数据库: {}", e))?;
-
-    let get_setting = |key: &str| -> Option<String> {
-        conn.query_row(
-            "SELECT value FROM t_setting WHERE key = ?1",
-            params![key],
-            |row| row.get(0),
-        ).ok()
-    };
-
-    let platform = get_setting("git_platform").unwrap_or_default();
-    let token = get_setting("git_token").unwrap_or_default();
-    let repo = get_setting("git_repository").unwrap_or_default();
+    // 2. 从本地 settings.json 读取 git 配置
+    let settings = load_local_settings()?;
+    let platform = settings.get("git_platform").cloned().unwrap_or_default();
+    let token = settings.get("git_token").cloned().unwrap_or_default();
+    let repo = settings.get("git_repository").cloned().unwrap_or_default();
 
     if token.is_empty() || repo.is_empty() {
         return Err("请先在设置中配置 Git Token 和仓库名称".to_string());

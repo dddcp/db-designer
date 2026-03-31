@@ -22,7 +22,7 @@ const AiTab: React.FC = () => {
 
   const loadAiConfig = async () => {
     try {
-      const settings = await invoke<{ [key: string]: string }>('get_all_settings');
+      const settings = await invoke<{ [key: string]: string }>('get_local_settings');
       aiForm.setFieldsValue({
         ai_base_url: settings['ai_base_url'] || '',
         ai_api_key: settings['ai_api_key'] || '',
@@ -36,9 +36,9 @@ const AiTab: React.FC = () => {
   const handleSaveAiConfig = async (values: any) => {
     setLoading(true);
     try {
-      await invoke('save_setting', { key: 'ai_base_url', value: values.ai_base_url });
-      await invoke('save_setting', { key: 'ai_api_key', value: values.ai_api_key });
-      await invoke('save_setting', { key: 'ai_model', value: values.ai_model });
+      await invoke('save_local_setting', { key: 'ai_base_url', value: values.ai_base_url });
+      await invoke('save_local_setting', { key: 'ai_api_key', value: values.ai_api_key });
+      await invoke('save_local_setting', { key: 'ai_model', value: values.ai_model });
       message.success('AI配置保存成功');
     } catch (error) {
       console.error('保存AI配置失败:', error);

@@ -30,7 +30,7 @@ const GitTab: React.FC = () => {
 
   const loadGitConfig = async () => {
     try {
-      const settings = await invoke<{ [key: string]: string }>('get_all_settings');
+      const settings = await invoke<{ [key: string]: string }>('get_local_settings');
       const gitPlatform = settings['git_platform'] || 'github';
       const gitToken = settings['git_token'] || '';
       const gitRepo = settings['git_repository'] || '';
@@ -52,9 +52,9 @@ const GitTab: React.FC = () => {
   const handleSaveGitConfig = async (values: any) => {
     setLoading(true);
     try {
-      await invoke('save_setting', { key: 'git_platform', value: values.platform });
-      await invoke('save_setting', { key: 'git_token', value: values.token });
-      await invoke('save_setting', { key: 'git_repository', value: values.repositoryName });
+      await invoke('save_local_setting', { key: 'git_platform', value: values.platform });
+      await invoke('save_local_setting', { key: 'git_token', value: values.token });
+      await invoke('save_local_setting', { key: 'git_repository', value: values.repositoryName });
       message.success('Git配置保存成功');
       setGitConfigSaved(true);
     } catch (error) {
@@ -81,9 +81,9 @@ const GitTab: React.FC = () => {
   const handleClearGitConfig = async () => {
     setLoading(true);
     try {
-      await invoke('delete_setting', { key: 'git_platform' });
-      await invoke('delete_setting', { key: 'git_token' });
-      await invoke('delete_setting', { key: 'git_repository' });
+      await invoke('delete_local_setting', { key: 'git_platform' });
+      await invoke('delete_local_setting', { key: 'git_token' });
+      await invoke('delete_local_setting', { key: 'git_repository' });
       gitForm.resetFields();
       setGitConfigSaved(false);
       message.success('Git配置已清除');

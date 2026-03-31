@@ -12,7 +12,9 @@
       "Bash(powershell:*)",
       "Bash(npx openspec:*)",
       "Bash(openspec status:*)",
-      "Bash(openspec instructions:*)"
+      "Bash(openspec instructions:*)",
+      "Bash(cd /d D:/workspace/react/db-designer)",
+      "Bash(openspec list:*)"
     ]
   }
 }
