@@ -1,0 +1,108 @@
+use rusqlite::params;
+
+use crate::db::init_db;
+use crate::models::{CreateProjectRequest, Project};
+use crate::storage::ProjectStore;
+
+pub struct SqliteProjectStore;
+
+impl SqliteProjectStore {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl ProjectStore for SqliteProjectStore {
+    fn get_projects(&self) -> Result<Vec<Project>, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+        let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj ORDER BY created_at")
+            .map_err(|e| format!("Error preparing statement: {}", e))?;
+
+        let project_iter = stmt.query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        }).map_err(|e| format!("Error querying projects: {}", e))?;
+
+        let mut projects = Vec::new();
+        for project in project_iter {
+            projects.push(project.map_err(|e| format!("Error reading project: {}", e))?);
+        }
+
+        Ok(projects)
+    }
+
+    fn create_project(&self, project: CreateProjectRequest) -> Result<Project, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+        conn.execute(
+            "INSERT INTO t_proj (name, description) VALUES (?1, ?2)",
+            params![project.name, project.description],
+        ).map_err(|e| format!("Error creating project: {}", e))?;
+
+        let id = conn.last_insert_rowid() as i32;
+
+        let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj WHERE id = ?1")
+            .map_err(|e| format!("Error preparing statement: {}", e))?;
+
+        let mut project_iter = stmt.query_map(params![id], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        }).map_err(|e| format!("Error fetching created project: {}", e))?;
+
+        if let Some(project) = project_iter.next() {
+            project.map_err(|e| format!("Error reading project: {}", e))
+        } else {
+            Err("Failed to fetch created project".to_string())
+        }
+    }
+
+    fn delete_project(&self, id: i32) -> Result<(), String> {
+        let mut conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+        let tx = conn.transaction().map_err(|e| format!("Error starting transaction: {}", e))?;
+
+        let table_ids: Vec<String> = {
+            let mut stmt = tx.prepare("SELECT id FROM t_table WHERE project_id = ?1")
+                .map_err(|e| format!("Error preparing statement: {}", e))?;
+            let rows = stmt.query_map(params![id], |row| row.get(0))
+                .map_err(|e| format!("Error querying tables: {}", e))?;
+            let mut ids = Vec::new();
+            for row in rows {
+                ids.push(row.map_err(|e| format!("Error reading table id: {}", e))?);
+            }
+            ids
+        };
+
+        for table_id in &table_ids {
+            tx.execute("DELETE FROM t_init_data WHERE table_id = ?1", params![table_id])
+                .map_err(|e| format!("Error deleting init data: {}", e))?;
+            tx.execute("DELETE FROM t_index_field WHERE index_id IN (SELECT id FROM t_index WHERE table_id = ?1)", params![table_id])
+                .map_err(|e| format!("Error deleting index fields: {}", e))?;
+            tx.execute("DELETE FROM t_index WHERE table_id = ?1", params![table_id])
+                .map_err(|e| format!("Error deleting indexes: {}", e))?;
+            tx.execute("DELETE FROM t_column WHERE table_id = ?1", params![table_id])
+                .map_err(|e| format!("Error deleting columns: {}", e))?;
+        }
+
+        tx.execute("DELETE FROM t_table WHERE project_id = ?1", params![id])
+            .map_err(|e| format!("Error deleting tables: {}", e))?;
+        tx.execute("DELETE FROM t_version WHERE project_id = ?1", params![id])
+            .map_err(|e| format!("Error deleting versions: {}", e))?;
+        tx.execute("DELETE FROM t_proj WHERE id = ?1", params![id])
+            .map_err(|e| format!("Error deleting project: {}", e))?;
+
+        tx.commit().map_err(|e| format!("Error committing transaction: {}", e))?;
+
+        Ok(())
+    }
+}

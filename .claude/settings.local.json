@@ -14,7 +14,8 @@
       "Bash(openspec status:*)",
       "Bash(openspec instructions:*)",
       "Bash(cd /d D:/workspace/react/db-designer)",
-      "Bash(openspec list:*)"
+      "Bash(openspec list:*)",
+      "Bash(openspec new:*)"
     ]
   }
 }

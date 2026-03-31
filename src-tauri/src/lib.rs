@@ -8,6 +8,8 @@ mod db_connection;
 mod version;
 mod sync;
 mod routine;
+mod services;
+mod storage;
 pub mod dialect;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
