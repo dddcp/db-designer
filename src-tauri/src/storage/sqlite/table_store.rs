@@ -39,6 +39,31 @@ impl TableStore for SqliteTableStore {
         Ok(tables)
     }
 
+    fn get_table_by_id(&self, table_id: &str) -> Result<Option<TableDef>, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+        let mut stmt = conn.prepare("SELECT * FROM t_table WHERE id = ?1")
+            .map_err(|e| format!("Error preparing statement: {}", e))?;
+
+        let mut table_iter = stmt.query_map(params![table_id], |row| {
+            Ok(TableDef {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                name: row.get(2)?,
+                display_name: row.get(3)?,
+                comment: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        }).map_err(|e| format!("Error querying table: {}", e))?;
+
+        if let Some(table) = table_iter.next() {
+            Ok(Some(table.map_err(|e| format!("Error reading table: {}", e))?))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn save_table_structure(&self, project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<(), String> {
         let mut conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 

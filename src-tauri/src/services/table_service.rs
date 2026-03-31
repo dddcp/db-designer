@@ -17,6 +17,10 @@ impl TableService {
         self.store.get_project_tables(project_id)
     }
 
+    pub fn get_table_by_id(&self, table_id: String) -> Result<Option<TableDef>, String> {
+        self.store.get_table_by_id(&table_id)
+    }
+
     pub fn save_table_structure(&self, project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<String, String> {
         self.store.save_table_structure(project_id, table, columns)?;
         Ok("表结构保存成功".to_string())
