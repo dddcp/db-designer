@@ -18,5 +18,5 @@ jobs:
       - name: Sync code and tags to Gitee
         run: |
           git remote add gitee https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/diaochangpeng/db-designer.git
-          git push gitee dev:master --force
+          git push gitee main:master --force
           git push gitee --tags --force
