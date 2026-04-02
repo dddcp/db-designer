@@ -3,9 +3,7 @@ name: Sync to Gitee
 on:
   push:
     branches:
-      - dev
-  release:
-    types: [published]
+      - main
 
 jobs:
   sync-code:
@@ -22,78 +20,3 @@ jobs:
           git remote add gitee https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/diaochangpeng/db-designer.git
           git push gitee dev:master --force
           git push gitee --tags --force
-
-  sync-release:
-    if: github.event_name == 'release'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create Gitee Release and upload assets
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.event.release.tag_name }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
-          GH_REPO: ${{ github.repository }}
-          GH_RELEASE_ID: ${{ github.event.release.id }}
-        run: |
-          # Build JSON payload with jq to handle special characters
-          PAYLOAD=$(jq -n \
-            --arg token "$GITEE_TOKEN" \
-            --arg tag "$TAG_NAME" \
-            --arg name "$RELEASE_NAME" \
-            --arg body "$RELEASE_BODY" \
-            --argjson pre "$PRERELEASE" \
-            '{
-              access_token: $token,
-              tag_name: $tag,
-              name: $name,
-              body: $body,
-              prerelease: $pre,
-              target_commitish: "master"
-            }')
-
-          RESPONSE=$(curl -s -X POST \
-            "https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
-
-          RELEASE_ID=$(echo "$RESPONSE" | jq -r '.id')
-
-          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
-            echo "::error::Failed to create Gitee release"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          echo "Created Gitee release ID: $RELEASE_ID"
-
-          # Download GitHub release assets and upload to Gitee
-          ASSETS=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-            "https://api.github.com/repos/${GH_REPO}/releases/${GH_RELEASE_ID}/assets")
-
-          ASSET_COUNT=$(echo "$ASSETS" | jq 'length')
-          echo "Found $ASSET_COUNT assets to sync"
-
-          for i in $(seq 0 $((ASSET_COUNT - 1))); do
-            NAME=$(echo "$ASSETS" | jq -r ".[$i].name")
-            DOWNLOAD_URL=$(echo "$ASSETS" | jq -r ".[$i].url")
-
-            echo "Downloading $NAME ..."
-            curl -sL \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Accept: application/octet-stream" \
-              "$DOWNLOAD_URL" -o "$NAME"
-
-            echo "Uploading $NAME to Gitee ..."
-            curl -s -X POST \
-              "https://gitee.com/api/v5/repos/diaochangpeng/db-designer/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${NAME}"
-
-            rm -f "$NAME"
-            echo "Done: $NAME"
-          done
-
-          echo "All assets synced successfully"
