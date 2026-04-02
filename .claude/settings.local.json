@@ -15,7 +15,13 @@
       "Bash(openspec instructions:*)",
       "Bash(cd /d D:/workspace/react/db-designer)",
       "Bash(openspec list:*)",
-      "Bash(openspec new:*)"
+      "Bash(openspec new:*)",
+      "Bash(ls openspec/changes/generalize-git-settings-for-gitea/specs/*.md)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(mkdir -p openspec/changes/archive)",
+      "Bash(mv openspec/changes/generalize-git-settings-for-gitea \"openspec/changes/archive/2026-04-02-generalize-git-settings-for-gitea\")",
+      "Bash(cp -r openspec/changes/generalize-git-settings-for-gitea \"openspec/changes/archive/2026-04-02-generalize-git-settings-for-gitea\")",
+      "Bash(rm -rf openspec/changes/generalize-git-settings-for-gitea)"
     ]
   }
 }
