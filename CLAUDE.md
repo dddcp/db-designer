@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DB Designer is a Tauri v2 desktop app for visually designing database table structures and generating SQL. It supports AI-powered table design, version management, remote DB comparison/sync, and SQL export for MySQL and PostgreSQL.
+DB Designer is a Tauri v2 desktop app for visually designing database table structures and generating SQL. It supports AI-powered table design, version management, remote DB comparison/sync, SQL export, Git integration, and local settings/config persistence for MySQL and PostgreSQL workflows.
 
-**Tech stack:** React 18 + TypeScript + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite (build) | Tauri 2 (framework)
+**Tech stack:** React 18 + TypeScript + React Router + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite 7 (build) | Tauri 2 (framework)
 
 ## Development Commands
 
@@ -51,26 +51,67 @@ All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri 
 
 | Module | Role |
 |--------|------|
-| `lib.rs` | Plugin registration + command handler registry (central wiring) |
+| `lib.rs` | Tauri plugin registration + command handler registry |
 | `db.rs` | SQLite connection, schema creation, migrations |
-| `models.rs` | All shared data structs (Rust side) |
-| `dialect.rs` | `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection) with MySQL/PostgreSQL implementations |
-| `version.rs` | Version snapshots (tables + routines) + SQL export (`export_version_sql`, `export_upgrade_sql`, `export_project_sql`, `export_table_sql`) |
-| `sync.rs` | Remote DB comparison + sync SQL generation |
-| `table.rs` | Table/column/index/init-data CRUD |
-| `routine.rs` | Programmable objects (functions/procedures/triggers) CRUD, remote comparison, sync, SQL export |
-| `project.rs` | Project CRUD |
-| `setting.rs` | Key-value settings store |
-| `db_connection.rs` | DB connection config CRUD |
+| `models.rs` | Shared Rust-side data structs |
+| `dialect.rs` | `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection/introspection) |
+| `project.rs` / `table.rs` / `routine.rs` / `version.rs` / `sync.rs` / `setting.rs` / `db_connection.rs` | Tauri command layer; validates IPC input and delegates to services |
+| `services/` | Business logic layer for projects, tables, routines, versions, sync, settings, and DB connections |
+| `storage/` | Storage abstraction layer; currently defines traits and SQLite-backed implementations entrypoint |
 | `git.rs` | Git repository integration |
+| `main.rs` | Desktop entrypoint |
+
+### Backend Layering
+
+When adding or refactoring backend features, prefer this flow:
+
+`Tauri command` → `service` → `storage`
+
+- Command modules own `#[tauri::command]` functions and IPC-facing parameter mapping
+- Services contain business logic and coordinate dialect / storage operations
+- Storage traits isolate persistence details so future remote/local store backends can be swapped in more easily
+- Keep database-specific SQL generation inside `dialect.rs`, not in services or command handlers
 
 ### Frontend Structure (`src/`)
 
 Three routes: `/` (project list), `/project/:id` (project detail), `/setting` (settings).
 
-The project detail page (`components/proj-detail/index.tsx`) is the core — left sidebar for table list (with search), right pane with tabs for structure editing, indexes, init data, and SQL preview. Project-level tabs switch between table design, programmable objects (routines), version management, DB sync, and SQL export.
+The project detail page (`components/proj-detail/index.tsx`) is the core screen:
+- Left sidebar: table list, search, create/edit/delete actions
+- Main work area: structure editing, indexes, init data, SQL preview
+- Project-level views: table design, programmable objects (routines), version management, DB sync, SQL export
+- AI helpers: `ai-design-modal.tsx`, `ai-modify-table-modal.tsx`, `ai-recommend-index-modal.tsx`
+- Drag-and-drop column sorting is implemented with `@dnd-kit`
 
-Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). Data types are defined in `data-types.ts` (19 built-in + user-custom types stored in settings).
+Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). Besides table/project types, it also defines routine, remote sync diff, Git, and DB connection types used across the app. Data types are defined in `data-types.ts` (built-in + user-custom types stored in settings).
+
+### Tauri Commands Currently Registered
+
+`src-tauri/src/lib.rs` currently wires commands for:
+- project CRUD
+- table / column / index / init-data CRUD
+- local settings + key-value settings
+- database connection CRUD
+- version snapshot creation / deletion / SQL export
+- remote DB connect / compare / sync
+- dialect metadata (`get_supported_database_types`, `get_type_mappings`)
+- routine CRUD / remote compare / sync / SQL export
+- Git init / sync / info
+
+If you add a new command, update both the command module and `tauri::generate_handler![...]` in `lib.rs`.
+
+### Shared Type Sync
+
+If you change Rust structs in `models.rs`, also update matching TypeScript definitions in `src/types/index.ts`. Current TS types include:
+- `Project`, `TableDef`, `ColumnDef`
+- `BackendTableDef`, `BackendColumnDef`
+- `IndexDef`, `DatabaseConnection`, `DatabaseTypeOption`
+- `GitInfo`, `GitConfig`, `GitPlatform`
+- `RoutineDef`, `RemoteRoutine`, `RoutineDiff`
+- `RemoteTable`, `RemoteColumn`, `RemoteIndex`
+- `TableDiff`, `ColumnDiff`, `IndexDiff`
+
+Do not let Rust/TypeScript field names drift.
 
 ### Dialect System
 
@@ -89,8 +130,19 @@ Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_dat
 ## Key Conventions
 
 - All Tauri commands return `Result<T, String>` with `.map_err(|e| format!(...))` for error handling
+- Rust backend command parameters use `snake_case`; frontend `invoke()` calls use `camelCase`
 - All database-specific SQL must go through `dialect.*` methods — never hardcode DB-specific logic
+- Prefer backend layering as `command -> service -> storage`
 - Code comments are in Chinese (中文注释); follow the same style
 - When modifying Rust structs in `models.rs`, update the corresponding TypeScript interface in `types/index.ts`
 - Frontend uses Ant Design components exclusively — no custom CSS framework
 - Column drag-and-drop sorting uses `@dnd-kit`
+- Verify changes with `cargo check` in `src-tauri/` and `npx tsc --noEmit` in repo root
+- Keep `lib.rs` command registration, Rust models, and frontend types in sync when adding features
+
+## Current Dependency Notes
+
+- Frontend routing uses `react-router-dom` v7
+- Build uses Vite 7 + TypeScript 5.8
+- Tauri plugins currently include opener, updater, process, and dialog
+- There is no dedicated automated test suite yet; type-check / cargo-check are the expected verification steps
