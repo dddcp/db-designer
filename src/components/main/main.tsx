@@ -85,9 +85,24 @@ const Main: React.FC = () => {
   const checkGitConfig = async () => {
     try {
       const settings = await invoke<{ [key: string]: string }>('get_local_settings');
-      const gitToken = settings['git_token'] || '';
-      const gitRepo = settings['git_repository'] || '';
-      setGitConfigSaved(!!(gitToken && gitRepo));
+      const remoteMode = settings['git_remote_mode'] || (settings['git_remote_url'] ? 'custom' : 'preset');
+      const authType = settings['git_auth_type'] || (settings['git_token'] ? 'token' : 'ssh');
+      const platform = settings['git_platform'] || 'github';
+      const repository = settings['git_repository'] || '';
+      const baseUrl = settings['git_base_url'] || '';
+      const remoteUrl = settings['git_remote_url'] || '';
+      const username = settings['git_username'] || '';
+      const token = settings['git_token'] || '';
+
+      const hasRemote = remoteMode === 'custom'
+        ? (authType === 'ssh' ? /^(git@|ssh:\/\/)/.test(remoteUrl) : /^https?:\/\//.test(remoteUrl))
+        : !!repository && (platform !== 'gitea' || /^https?:\/\//.test(baseUrl));
+
+      const hasAuth = authType === 'ssh'
+        ? true
+        : !!token && (remoteMode !== 'custom' ? (platform !== 'gitea' || !!username) : !!username);
+
+      setGitConfigSaved(hasRemote && hasAuth);
     } catch (error) {
       console.error('检查Git配置失败:', error);
       setGitConfigSaved(false);

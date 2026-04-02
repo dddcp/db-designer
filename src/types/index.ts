@@ -90,14 +90,35 @@ export interface GitInfo {
   latest_commit: string;
 }
 
+// Git远程模式
+export type GitRemoteMode = 'preset' | 'custom';
+
 // Git平台类型
-export type GitPlatform = 'github' | 'gitlab' | 'gitee';
+export type GitPlatform = 'github' | 'gitlab' | 'gitee' | 'gitea';
+
+// Git认证类型
+export type GitAuthType = 'token' | 'ssh';
+
+// Git远程配置
+export interface GitRemoteConfig {
+  mode: GitRemoteMode;
+  platform?: GitPlatform;
+  baseUrl?: string;
+  repository: string;
+  remoteUrl?: string;
+}
+
+// Git认证配置
+export interface GitAuthConfig {
+  authType: GitAuthType;
+  username?: string;
+  token?: string;
+}
 
 // Git配置
 export interface GitConfig {
-  platform: GitPlatform;
-  token: string;
-  repositoryName: string;
+  remote: GitRemoteConfig;
+  auth: GitAuthConfig;
   isInitialized: boolean;
 }
 

@@ -4,13 +4,18 @@ use crate::storage::{LocalSettingsStore, SettingStore};
 use crate::storage::sqlite::local_settings_store::JsonLocalSettingsStore;
 use crate::storage::sqlite::setting_store::SqliteSettingStore;
 
-const LOCAL_SETTING_KEYS: [&str; 6] = [
+const LOCAL_SETTING_KEYS: [&str; 11] = [
     "ai_base_url",
     "ai_api_key",
     "ai_model",
+    "git_remote_mode",
     "git_platform",
-    "git_token",
+    "git_base_url",
     "git_repository",
+    "git_remote_url",
+    "git_auth_type",
+    "git_username",
+    "git_token",
 ];
 
 pub struct SettingsService {
