@@ -37,7 +37,7 @@ DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
 | 数据库比对 | 连接远程 MySQL / PostgreSQL，对比本地设计与线上结构差异 |
 | 数据库同步 | 对比线上，生成增量脚本；一键同步线上到模型库 |
 | SQL 导出 | 一键导出完整 SQL（表结构 + 索引 + 元数据），支持 MySQL / PostgreSQL |
-| Git 数据同步 | 通过 Git 管理设计数据，适配 GitHub / GitLab / Gitee |
+| Git 数据同步 | 通过 Git 管理设计数据 |
 | 本地存储 | 基于 SQLite 本地存储，无需联网、无需服务端 |
 
 ## 截图预览
