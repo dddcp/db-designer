@@ -60,7 +60,7 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
   }
 
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const url = baseUrl.replace(/(\/v1(\/chat/completions)?|\/v1)\/?$/, '/v1/chat/completions');
   const response = await fetch(url, {
     method: 'POST',
     headers: {
