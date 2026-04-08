@@ -60,7 +60,13 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
   }
 
-  const url = baseUrl.replace(/(\/v1(\/chat/completions)?|\/v1)\/?$/, '/v1/chat/completions');
+  // 标准化 URL：追加 /v1/chat/completions，确保 baseUrl 末尾没有冗余斜杠
+  const url = baseUrl
+          .replace(/\/+$/, '')                    // 移除末尾斜杠
+          .replace(/\/chat\/completions$/, '')    // 移除已有的 chat/completions
+          .replace(/(\/v1)(\/.*)?$/, '$1')        // 保留 /v1，移除其后路径
+      + (baseUrl.includes('/v1') ? '' : '/v1') // 如果没有 /v1 则添加
+      + '/chat/completions';
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -86,9 +92,19 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
   const content: string = data.choices?.[0]?.message?.content || '';
 
   let jsonStr = content.trim();
+  // 剥离 markdown 代码块
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     jsonStr = codeBlockMatch[1].trim();
+  }
+  // 剥离 <thinking> 标签（如 Claude 模型的思考过程）
+  jsonStr = jsonStr.replace(/<think>[\s\S]*?<\/thinking>/gi, '');
+  // 如果仍不是 JSON 数组开头，尝试在文本中查找 JSON 数组
+  if (!jsonStr.trim().startsWith('[')) {
+    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
   }
 
   return jsonStr;
@@ -158,8 +174,8 @@ function buildExistingContext(contexts: TableContext[]): string {
 const buildSystemPrompt = (databaseType: string, typeNames: string[], existingContext: string) => {
   let prompt = `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
 
-要求：
-1. 输出必须是合法 JSON 数组，不要包含任何其他文本、markdown标记或代码块标记
+要求（必须严格遵守，仅输出 JSON，不要输出任何其他文字、解释或markdown标记）：
+1. 只输出一个合法的 JSON 数组，不要包含任何其他文本、markdown标记或代码块标记
 2. 每个表包含 name（英文蛇形命名）、displayName（中文名称）、columns 数组
 3. 字段类型只能从以下枚举中选择：${typeNames.join(', ')}
 4. 每张表必须有一个主键字段，标记 primaryKey: true
@@ -168,18 +184,8 @@ const buildSystemPrompt = (databaseType: string, typeNames: string[], existingCo
 7. 每张表应包含 created_at 和 updated_at 时间字段
 8. 不要重复设计已有的表，新表如需关联已有表请通过字段命名体现关联关系（如 user_id 关联 users 表）
 
-输出格式示例：
-[
-  {
-    "name": "users",
-    "displayName": "用户表",
-    "columns": [
-      { "name": "id", "displayName": "主键ID", "type": "int", "nullable": false, "primaryKey": true, "autoIncrement": true },
-      { "name": "username", "displayName": "用户名", "type": "varchar", "length": 50, "nullable": false, "primaryKey": false, "autoIncrement": false },
-      { "name": "created_at", "displayName": "创建时间", "type": "datetime", "nullable": false, "primaryKey": false, "autoIncrement": false }
-    ]
-  }
-]`;
+只输出 JSON 数组，不要有任何前缀或后缀文字。例如：
+[{"name":"users","displayName":"用户表","columns":[{"name":"id","displayName":"主键ID","type":"int","nullable":false,"primaryKey":true,"autoIncrement":true}]}]`;
 
   if (existingContext) {
     prompt += '\n\n' + existingContext;
