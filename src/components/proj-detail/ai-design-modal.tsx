@@ -93,17 +93,27 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
 
   let jsonStr = content.trim();
   // 剥离 markdown 代码块
-  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (codeBlockMatch) {
     jsonStr = codeBlockMatch[1].trim();
   }
-  // 剥离 <thinking> 标签（如 Claude 模型的思考过程）
-  jsonStr = jsonStr.replace(/<think>[\s\S]*?<\/thinking>/gi, '');
-  // 如果仍不是 JSON 数组开头，尝试在文本中查找 JSON 数组
-  if (!jsonStr.trim().startsWith('[')) {
-    const jsonMatch = jsonStr.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[0];
+  // 剥离 <think>/<thinking> 标签（如 模型的思考过程）
+  jsonStr = jsonStr.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
+  // 如果仍不是 JSON 开头，尝试在文本中查找 JSON 数组或对象
+  if (!jsonStr.startsWith('[') && !jsonStr.startsWith('{')) {
+    const arrayStart = jsonStr.indexOf('[');
+    const objectStart = jsonStr.indexOf('{');
+    const startCandidates = [arrayStart, objectStart].filter(index => index !== -1);
+
+    if (startCandidates.length > 0) {
+      const start = Math.min(...startCandidates);
+      const arrayEnd = jsonStr.lastIndexOf(']');
+      const objectEnd = jsonStr.lastIndexOf('}');
+      const end = Math.max(arrayEnd, objectEnd);
+
+      if (end > start) {
+        jsonStr = jsonStr.slice(start, end + 1).trim();
+      }
     }
   }
 
