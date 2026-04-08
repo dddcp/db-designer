@@ -126,12 +126,13 @@ function buildSystemPrompt(
   }
 
   // 要求
-  parts.push('要求:');
-  parts.push('1. 输出合法 JSON 数组，不要包含任何其他文本、markdown标记或代码块标记');
+  parts.push('要求（必须严格遵守）:');
+  parts.push('1. 只输出一个合法的 JSON 数组，不要输出任何其他文字、解释、markdown标记或代码块');
   parts.push('2. 不要推荐已存在的索引');
   parts.push('3. 每个索引包含: name(idx_开头蛇形命名), type("normal"|"unique"|"fulltext"), columns(字段名数组), comment(推荐理由)');
   parts.push('4. 只推荐当前表的索引');
   parts.push('5. 避免冗余索引（如已有联合索引覆盖的单列索引）');
+  parts.push('6. 输出示例: [{"name":"idx_user_name","type":"normal","columns":["username"],"comment":"用于用户名查询"}]');
 
   return parts.join('\n');
 }
