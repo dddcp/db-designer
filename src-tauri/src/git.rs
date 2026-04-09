@@ -530,5 +530,5 @@ pub fn pull_git_repository() -> Result<String, String> {
         return Err(format!("git reset 失败: {}", stderr));
     }
 
-    Ok("拉取成功".to_string())
+    Ok("拉取成功。请重启应用后使用！".to_string())
 }
