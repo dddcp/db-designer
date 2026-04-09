@@ -402,9 +402,9 @@ const Main: React.FC = () => {
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             创建于: {formatDate(project.created_at)}
                           </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            更新于: {formatDate(project.updated_at)}
-                          </Text>
+                          {/*<Text type="secondary" style={{ fontSize: 12 }}>*/}
+                          {/*  更新于: {formatDate(project.updated_at)}*/}
+                          {/*</Text>*/}
                         </Space>
                       }
                     />
