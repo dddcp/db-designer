@@ -1,5 +1,6 @@
 import {
   DatabaseOutlined,
+  DownloadOutlined,
   PlusOutlined,
   SettingOutlined,
   SyncOutlined
@@ -44,6 +45,8 @@ const Main: React.FC = () => {
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
+  const [pullModalVisible, setPullModalVisible] = useState(false);
+  const [pullLoading, setPullLoading] = useState(false);
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
@@ -205,6 +208,30 @@ const Main: React.FC = () => {
   };
 
   /**
+   * 打开拉取确认弹窗
+   */
+  const handlePull = () => {
+    setPullModalVisible(true);
+  };
+
+  /**
+   * 执行Git拉取
+   */
+  const handleConfirmPull = async () => {
+    setPullLoading(true);
+    try {
+      const result = await invoke<string>('pull_git_repository');
+      message.success(result);
+      setPullModalVisible(false);
+    } catch (error) {
+      console.error('拉取失败:', error);
+      message.error(`拉取失败: ${error}`);
+    } finally {
+      setPullLoading(false);
+    }
+  };
+
+  /**
    * 删除项目
    */
   const handleDeleteProject = async (projectId: number) => {
@@ -260,15 +287,26 @@ const Main: React.FC = () => {
           
           <Space>
             {gitConfigSaved && (
-              <Tooltip title="同步数据">
-                <Button
-                  type="text"
-                  icon={<SyncOutlined />}
-                  onClick={handleSync}
-                >
-                  同步
-                </Button>
-              </Tooltip>
+              <>
+                <Tooltip title="拉取远程数据">
+                  <Button
+                    type="text"
+                    icon={<DownloadOutlined />}
+                    onClick={handlePull}
+                  >
+                    拉取
+                  </Button>
+                </Tooltip>
+                <Tooltip title="同步数据">
+                  <Button
+                    type="text"
+                    icon={<SyncOutlined />}
+                    onClick={handleSync}
+                  >
+                    同步
+                  </Button>
+                </Tooltip>
+              </>
             )}
             {updateAvailable && (
               <Tooltip title={`发现新版本 ${updateAvailable.version}，点击更新`}>
@@ -455,6 +493,8 @@ const Main: React.FC = () => {
           cancelText="取消"
         >
           <div style={{ marginBottom: 8 }}>
+            <Text type="warning" strong>警告：此操作将覆盖远端数据！</Text>
+            <br/>
             <Text type="secondary">输入提交信息（留空则使用默认信息）</Text>
           </div>
           <Input.TextArea
@@ -463,6 +503,28 @@ const Main: React.FC = () => {
             placeholder="Auto sync: database changes"
             rows={3}
           />
+        </Modal>
+
+        {/* 拉取确认弹窗 */}
+        <Modal
+          title="拉取远程数据"
+          open={pullModalVisible}
+          onOk={handleConfirmPull}
+          onCancel={() => setPullModalVisible(false)}
+          confirmLoading={pullLoading}
+          okText="确认拉取"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+        >
+          <div>
+            <Text type="warning" strong>警告：此操作将覆盖本地数据！</Text>
+            <div style={{ marginTop: 12 }}>
+              <Text type="secondary">
+                拉取操作会从远程仓库获取最新数据并强制覆盖本地数据库文件。
+                本地未提交的更改将会丢失，请确认是否继续。
+              </Text>
+            </div>
+          </div>
         </Modal>
       </Layout>
   );

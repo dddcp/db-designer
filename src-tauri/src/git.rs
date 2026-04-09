@@ -478,11 +478,11 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
         return Err(format!("git commit 失败: {}", stderr));
     }
 
-    // 3. git push
+    // 3. git push (force push)
     let push_output = std::process::Command::new("git")
         .current_dir(&data_dir)
         .envs(git_env.iter().copied())
-        .args(["push", "-u", &remote.push_remote, "HEAD"])
+        .args(["push", "-f", "-u", &remote.push_remote, "HEAD"])
         .output()
         .map_err(|e| format!("执行 git push 失败: {}", e))?;
 
@@ -492,4 +492,43 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
     }
 
     Ok("同步成功".to_string())
+}
+
+// 拉取远程数据
+#[tauri::command]
+pub fn pull_git_repository() -> Result<String, String> {
+    let data_dir = get_data_dir();
+    let git_env = git_env();
+
+    let config = load_git_config()?;
+    let remote = resolve_git_remote(&config)?;
+    ensure_origin_remote(&data_dir, &remote.canonical_remote)?;
+
+    // 1. git fetch origin
+    let fetch_output = std::process::Command::new("git")
+        .current_dir(&data_dir)
+        .envs(git_env.iter().copied())
+        .args(["fetch", "origin"])
+        .output()
+        .map_err(|e| format!("执行 git fetch 失败: {}", e))?;
+
+    if !fetch_output.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
+        return Err(format!("git fetch 失败: {}", stderr));
+    }
+
+    // 2. git reset --hard origin/HEAD
+    let reset_output = std::process::Command::new("git")
+        .current_dir(&data_dir)
+        .envs(git_env.iter().copied())
+        .args(["reset", "--hard", "origin/HEAD"])
+        .output()
+        .map_err(|e| format!("执行 git reset 失败: {}", e))?;
+
+    if !reset_output.status.success() {
+        let stderr = String::from_utf8_lossy(&reset_output.stderr);
+        return Err(format!("git reset 失败: {}", stderr));
+    }
+
+    Ok("拉取成功".to_string())
 }

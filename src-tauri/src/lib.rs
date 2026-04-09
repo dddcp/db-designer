@@ -33,6 +33,7 @@ pub fn run() {
             project::delete_project,
             git::get_git_info,
             git::sync_git_repository,
+            git::pull_git_repository,
             git::init_git_repository,
             table::get_project_tables,
             table::save_table_structure,
