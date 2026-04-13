@@ -209,3 +209,5 @@ use crate::models::*;
 - Frontend uses Ant Design components exclusively — no custom CSS framework
 - Column drag-and-drop sorting uses `@dnd-kit`
 - Frontend state management: React hooks (useState, useEffect, useContext)
+- 使用中文回复我
+- 提交代码时需要将openspec同时提交
