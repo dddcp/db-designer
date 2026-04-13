@@ -223,6 +223,7 @@ use crate::models::*;
 - Keep `lib.rs` command registration, Rust models, and frontend types in sync when adding features
 - 使用中文回复我
 - 提交代码时需要将openspec同时提交
+- 不要自动提交git，需要我确认后再提交
 
 ---
 
