@@ -181,7 +181,12 @@ function buildExistingContext(contexts: TableContext[]): string {
   return lines.join('\n');
 }
 
-const buildSystemPrompt = (databaseType: string, typeNames: string[], existingContext: string) => {
+const buildSystemPrompt = (
+  databaseType: string,
+  typeNames: string[],
+  existingContext: string,
+  commonPrompt: string,
+) => {
   let prompt = `你是一个专业的数据库架构师。用户会用自然语言描述需求，你需要设计完整的数据库表结构。
 
 要求（必须严格遵守，仅输出 JSON，不要输出任何其他文字、解释或markdown标记）：
@@ -196,6 +201,10 @@ const buildSystemPrompt = (databaseType: string, typeNames: string[], existingCo
 
 只输出 JSON 数组，不要有任何前缀或后缀文字。例如：
 [{"name":"users","displayName":"用户表","columns":[{"name":"id","displayName":"主键ID","type":"int","nullable":false,"primaryKey":true,"autoIncrement":true}]}]`;
+
+  if (commonPrompt.trim()) {
+    prompt += `\n\n用户提供了以下默认设计偏好，请在不违背业务需求的前提下尽量遵循：\n${commonPrompt.trim()}`;
+  }
 
   if (existingContext) {
     prompt += '\n\n' + existingContext;
@@ -277,8 +286,10 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
     setLoading(true);
     try {
       const typeNames = dataTypes.map(t => t.value);
+      const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
+      const commonPrompt = allSettings['ai_design_common_prompt'] || '';
       const existingContext = buildExistingContext(tableContexts);
-      const systemPrompt = buildSystemPrompt(databaseType, typeNames, existingContext);
+      const systemPrompt = buildSystemPrompt(databaseType, typeNames, existingContext, commonPrompt);
       const jsonStr = await callAiApi(systemPrompt, prompt);
       const parsed = JSON.parse(jsonStr);
 
