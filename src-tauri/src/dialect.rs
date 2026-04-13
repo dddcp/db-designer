@@ -369,7 +369,7 @@ impl DatabaseConnector for MysqlDialect {
                 routines.push(RemoteRoutine {
                     name: name.clone(),
                     r#type: rtype.to_string(),
-                    body: b,
+                    body: normalize_routine_body(&b, "mysql"),
                 });
             }
         }
@@ -392,7 +392,7 @@ impl DatabaseConnector for MysqlDialect {
                 routines.push(RemoteRoutine {
                     name: name.clone(),
                     r#type: "trigger".to_string(),
-                    body: b,
+                    body: normalize_routine_body(&b, "mysql"),
                 });
             }
         }
@@ -1110,6 +1110,20 @@ impl DatabaseConnector for OracleDialect {
         }
 
         Ok(routines)
+    }
+}
+
+// ─── Routine body 归一化 ─────────────────────────────────────────────────────
+
+/// 剥离 MySQL routine body 中的 DEFINER 子句，其他方言直接返回原值
+pub fn normalize_routine_body(body: &str, db_type: &str) -> String {
+    if db_type == "mysql" {
+        let re = regex::Regex::new(
+            r"(?i)CREATE\s+DEFINER\s*=\s*(?:`[^`]*`|[^\s@]+)@(?:`[^`]*`|[^\s]+)\s+"
+        ).unwrap();
+        re.replace(body, "CREATE ").to_string()
+    } else {
+        body.to_string()
     }
 }
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::dialect::get_connector;
+use crate::dialect::{get_connector, normalize_routine_body};
 use crate::models::{RemoteRoutine, RoutineDef, RoutineDiff};
 use crate::services::database_connection_service::DatabaseConnectionService;
 use crate::storage::sqlite::routine_store::SqliteRoutineStore;
@@ -70,7 +70,9 @@ impl RoutineService {
         for routine in &local_routines {
             let key = (routine.name.clone(), routine.r#type.clone());
             if let Some(remote_body) = remote_map.get(&key) {
-                let status = if routine.body.trim() == remote_body.trim() {
+                let local_normalized = normalize_routine_body(routine.body.trim(), &db_type);
+                let remote_normalized = normalize_routine_body(remote_body.trim(), &db_type);
+                let status = if local_normalized == remote_normalized {
                     "same"
                 } else {
                     "different"
@@ -131,7 +133,7 @@ impl RoutineService {
             project_id,
             name: remote.name,
             r#type: remote.r#type,
-            body: remote.body,
+            body: normalize_routine_body(&remote.body, &db_type),
             comment: None,
             db_type: Some(db_type),
             created_at: String::new(),
@@ -164,7 +166,7 @@ impl RoutineService {
             } else {
                 sql.push_str(&format!("-- {} : {}\n", type_label, routine.name));
             }
-            sql.push_str(routine.body.trim());
+            sql.push_str(normalize_routine_body(routine.body.trim(), &database_type).trim());
             sql.push_str("\n\n");
         }
 

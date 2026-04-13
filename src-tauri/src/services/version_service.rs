@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::dialect::get_dialect;
+use crate::dialect::{get_dialect, normalize_routine_body};
 use crate::models::{ColumnDef, IndexDef, RoutineDef, Snapshot, SnapshotTable, TableDef, Version};
 use crate::services::routine_service::RoutineService;
 use crate::services::setting_service::SettingsService;
@@ -74,7 +74,7 @@ impl VersionService {
                 } else {
                     sql.push_str(&format!("-- {} : {}\n", type_label, r.name));
                 }
-                sql.push_str(r.body.trim());
+                sql.push_str(normalize_routine_body(r.body.trim(), &database_type).trim());
                 sql.push_str("\n\n");
             }
         }
@@ -384,7 +384,9 @@ impl VersionService {
 
             for ((name, rtype), new_r) in &new_routine_map {
                 if let Some(old_r) = old_routine_map.get(&(*name, *rtype)) {
-                    if old_r.body != new_r.body {
+                    let old_normalized = normalize_routine_body(old_r.body.trim(), &database_type);
+                    let new_normalized = normalize_routine_body(new_r.body.trim(), &database_type);
+                    if old_normalized != new_normalized {
                         modified_routines.push((*name, *rtype, *old_r, *new_r));
                     }
                 } else {
@@ -418,7 +420,7 @@ impl VersionService {
                         name
                     ));
                     sql.push_str(&dialect.drop_routine_sql(name, rtype));
-                    sql.push_str(new_routine.body.trim());
+                    sql.push_str(normalize_routine_body(new_routine.body.trim(), &database_type).trim());
                     sql.push_str("\n\n");
                 }
 
@@ -428,7 +430,7 @@ impl VersionService {
                         self.get_routine_type_label(rtype),
                         name
                     ));
-                    sql.push_str(routine.body.trim());
+                    sql.push_str(normalize_routine_body(routine.body.trim(), &database_type).trim());
                     sql.push_str("\n\n");
                 }
             }

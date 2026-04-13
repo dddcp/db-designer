@@ -958,6 +958,7 @@ dependencies = [
  "oracle",
  "postgres",
  "postgres-native-tls",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",
