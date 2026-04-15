@@ -213,3 +213,26 @@ export interface IndexDiff {
   remote_columns: string | null;
   detail: string | null;
 }
+
+// AI 评审记录
+export interface AiReview {
+  id: number;
+  project_id: number;
+  title: string;
+  result: string;
+  created_at: string;
+}
+
+// AI 评审问题
+export interface AiReviewIssue {
+  level: 'error' | 'warning' | 'suggestion';
+  scope: string;
+  title: string;
+  detail: string;
+}
+
+// AI 评审结果（result 字段解析后的结构）
+export interface AiReviewResult {
+  summary: string;
+  issues: AiReviewIssue[];
+}

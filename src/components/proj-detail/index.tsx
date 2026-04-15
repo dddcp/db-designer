@@ -48,6 +48,7 @@ import SqlExportTab from './sql-export-tab';
 import RoutineTab from './routine-tab';
 import AiDesignModal from './ai-design-modal';
 import AiModifyTableModal from './ai-modify-table-modal';
+import AiReviewTab from './ai-review-tab';
 import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -965,6 +966,10 @@ const ProjectDetail: React.FC = () => {
                 key: 'sqlexport',
                 label: <span><ExportOutlined /> SQL导出</span>,
               },
+              {
+                key: 'aireview',
+                label: <span><RobotOutlined /> AI 评审</span>,
+              },
             ]}
           />
         </div>
@@ -1210,6 +1215,10 @@ const ProjectDetail: React.FC = () => {
         ) : projectView === 'sync' ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <SyncTab project={project} />
+          </div>
+        ) : projectView === 'aireview' ? (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <AiReviewTab project={project} tables={tables} />
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: 'auto' }}>

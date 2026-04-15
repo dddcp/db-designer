@@ -139,6 +139,7 @@ Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_dat
 - Column drag-and-drop sorting uses `@dnd-kit`
 - Verify changes with `cargo check` in `src-tauri/` and `npx tsc --noEmit` in repo root
 - Keep `lib.rs` command registration, Rust models, and frontend types in sync when adding features
+- 提交代码时候需要将openspec一起提交
 
 ## Current Dependency Notes
 

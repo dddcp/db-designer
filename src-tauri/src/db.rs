@@ -148,6 +148,15 @@ pub fn init_database() -> Result<String, String> {
             updated_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (project_id) REFERENCES t_proj(id)
         );
+
+        CREATE TABLE IF NOT EXISTS t_ai_review (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            result TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES t_proj(id)
+        );
     ").map_err(|e| format!("Error initializing database: {}", e))?;
 
     // 数据库迁移：为已存在的 t_column 表添加 scale 列
