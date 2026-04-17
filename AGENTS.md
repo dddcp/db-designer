@@ -1,12 +1,12 @@
-# AGENTS.md - DB Designer Development Guide
+# AGENTS.md
+
+This file provides guidance to coding agents when working with code in this repository.
 
 ## Project Overview
 
 DB Designer is a Tauri v2 desktop app for visually designing database table structures and generating SQL. It supports AI-powered table design, version management, remote DB comparison/sync, SQL export, Git integration, and local settings/config persistence for MySQL and PostgreSQL workflows.
 
-**Tech Stack:** React 18 + TypeScript + React Router + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite 7 (build) | Tauri 2 (framework)
-
----
+**Tech stack:** React 18 + TypeScript + React Router + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite 7 (build) | Tauri 2 (framework)
 
 ## Development Commands
 
@@ -30,9 +30,7 @@ cd src-tauri && cargo check
 powershell -ExecutionPolicy Bypass -File scripts/bump-version.ps1 -Version x.y.z
 ```
 
-**Note:** There are no test suites configured. Verify changes with `cargo check` (Rust) and `npx tsc --noEmit` (TypeScript).
-
----
+There are no test suites configured. Verify changes with `cargo check` (Rust) and `npx tsc --noEmit` (TypeScript).
 
 ## Architecture
 
@@ -74,7 +72,7 @@ When adding or refactoring backend features, prefer this flow:
 - Storage traits isolate persistence details so future remote/local store backends can be swapped in more easily
 - Keep database-specific SQL generation inside `dialect.rs`, not in services or command handlers
 
-### Frontend Routes
+### Frontend Structure (`src/`)
 
 Three routes: `/` (project list), `/project/:id` (project detail), `/setting` (settings).
 
@@ -115,10 +113,6 @@ If you change Rust structs in `models.rs`, also update matching TypeScript defin
 
 Do not let Rust/TypeScript field names drift.
 
-### SQLite Schema
-
-Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
-
 ### Dialect System
 
 The `dialect.rs` file is the database abstraction layer:
@@ -129,90 +123,14 @@ The `dialect.rs` file is the database abstraction layer:
 
 SQL generation flow: raw type → `dialect.map_data_type()` → uppercase → append length/scale suffix → concatenate with dialect-specific clauses.
 
----
+### SQLite Schema
 
-## Code Style Guidelines
-
-### TypeScript/React (Frontend)
-
-**Imports:**
-- React imports first: `import React, { useState, useEffect } from 'react';`
-- Third-party imports next: `import { invoke } from '@tauri-apps/api/core';`
-- Ant Design imports next: `import { Button, Card, message } from 'antd';`
-- Custom imports last: `import type { IndexDef } from '../../types';`
-- Separate import groups with blank lines
-
-**Naming Conventions:**
-- Components: PascalCase (`IndexTab`, `AiDesignModal`)
-- Functions/Variables: camelCase (`loadIndexes`, `selectedTable`)
-- Types/Interfaces: PascalCase (`ColumnDef`, `TableDef`)
-- File names: kebab-case for components (`index-tab.tsx`, `ai-design-modal.tsx`)
-- Backend data interfaces prefixed: `BackendTableDef`, `BackendColumnDef`
-
-**Types:**
-- Use explicit types for props and state
-- Use `interface` for object shapes, `type` for unions/primitives
-- Import types with `import type { ... }` for type-only imports
-- Frontend uses camelCase; Backend uses snake_case
-- Type definitions live in `types/index.ts` (must stay in sync with `models.rs`)
-- Data types defined in `data-types.ts` (built-in + user-custom types stored in settings)
-
-**Error Handling:**
-- Wrap async operations in try/catch
-- Use `console.error` for logging errors
-- Use Ant Design `message.error()` for user-facing errors
-- Return early on invalid conditions
-
-**Formatting:**
-- Use 2 spaces for indentation
-- No semicolons at end of statements
-- Use template literals for string interpolation
-- Prefer `const` over `let`, avoid `var`
-
-### Rust (Backend)
-
-**Module Organization:**
-```rust
-mod db;
-mod models;
-mod project;
-mod table;
-// pub mod for public APIs
-pub mod dialect;
-```
-
-**Naming Conventions:**
-- Modules/Files: snake_case (`table.rs`, `db_connection.rs`)
-- Structs/Enums: PascalCase (`TableDef`, `DatabaseDialect`)
-- Functions/Variables: snake_case (`get_project_tables`, `init_db`)
-- Traits: PascalCase (`DatabaseDialect`, `DatabaseConnector`)
-- Rust keywords: use `r#` prefix (e.g., `r#type`)
-
-**Error Handling:**
-- All Tauri commands return `Result<T, String>`
-- Use `.map_err(|e| format!("Error connecting to database: {}", e))` pattern
-- Use `?` operator where appropriate
-- Error messages in Chinese (项目代码使用中文注释)
-
-**Imports:**
-```rust
-use std::collections::HashMap;
-use serde::Serialize;
-use rusqlite::params;
-use crate::db::init_db;
-use crate::models::*;
-```
-
-**Data Structures (models.rs):**
-- Use `#[derive(Debug, Serialize, Deserialize, Clone)]` for shared structs
-- Use `#[serde(rename = "name")]` for field name mapping between Rust snake_case and TypeScript camelCase
-- Use `#[serde(default)]` for optional fields with defaults
-
----
+Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
 
 ## Key Conventions
 
-- All Tauri commands return `Result<T, String>` with `.map_err(|e| format!(...))`
+- All Tauri commands return `Result<T, String>` with `.map_err(|e| format!(...))` for error handling
+- Rust backend command parameters use `snake_case`; frontend `invoke()` calls use `camelCase`
 - All database-specific SQL must go through `dialect.*` methods — never hardcode DB-specific logic
 - Prefer backend layering as `command -> service -> storage`
 - Code comments are in Chinese (中文注释); follow the same style
@@ -221,11 +139,9 @@ use crate::models::*;
 - Column drag-and-drop sorting uses `@dnd-kit`
 - Verify changes with `cargo check` in `src-tauri/` and `npx tsc --noEmit` in repo root
 - Keep `lib.rs` command registration, Rust models, and frontend types in sync when adding features
-- 使用中文回复我
-- 提交代码时需要将openspec同时提交
-- 不要自动提交git，需要我确认后再提交
-
----
+- 使用中文回复
+- 提交代码时需要将 openspec 一起提交
+- 不要自动提交 Git，需要我确认后再提交
 
 ## Current Dependency Notes
 
