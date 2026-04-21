@@ -55,7 +55,7 @@ All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri 
 | `db.rs` | SQLite connection, schema creation, migrations |
 | `models.rs` | Shared Rust-side data structs |
 | `dialect.rs` | `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection/introspection) |
-| `project.rs` / `table.rs` / `routine.rs` / `version.rs` / `sync.rs` / `setting.rs` / `db_connection.rs` | Tauri command layer; validates IPC input and delegates to services |
+| `project.rs` / `table.rs` / `routine.rs` / `version.rs` / `sync.rs` / `setting.rs` / `db_connection.rs` / `ai_review.rs` | Tauri command layer; validates IPC input and delegates to services |
 | `services/` | Business logic layer for projects, tables, routines, versions, sync, settings, and DB connections |
 | `storage/` | Storage abstraction layer; currently defines traits and SQLite-backed implementations entrypoint |
 | `git.rs` | Git repository integration |
@@ -97,6 +97,7 @@ Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). 
 - dialect metadata (`get_supported_database_types`, `get_type_mappings`)
 - routine CRUD / remote compare / sync / SQL export
 - Git init / sync / info
+- AI review CRUD (`get_ai_reviews`, `save_ai_review`, `delete_ai_review`)
 
 If you add a new command, update both the command module and `tauri::generate_handler![...]` in `lib.rs`.
 
@@ -110,6 +111,7 @@ If you change Rust structs in `models.rs`, also update matching TypeScript defin
 - `RoutineDef`, `RemoteRoutine`, `RoutineDiff`
 - `RemoteTable`, `RemoteColumn`, `RemoteIndex`
 - `TableDiff`, `ColumnDiff`, `IndexDiff`
+- `AiReview`, `AiReviewIssue`, `AiReviewResult`
 
 Do not let Rust/TypeScript field names drift.
 
@@ -125,7 +127,7 @@ SQL generation flow: raw type → `dialect.map_data_type()` → uppercase → ap
 
 ### SQLite Schema
 
-Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
+Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_ai_review`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
 
 ## Key Conventions
 
