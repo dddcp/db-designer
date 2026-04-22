@@ -2,9 +2,11 @@
 
 # DB Designer
 
-**AI 驱动的数据库模型设计工具**
+**AI-Powered Database Schema Design Tool**
 
-自然语言建表 / AI 索引优化 / AI 表结构重构 / 多数据库适配 / 版本管理 / 结构同步
+Natural Language Table Design / AI Index Optimization / AI Table Refactoring / Multi-Database Support / Version Management / Schema Sync
+
+[🇺🇸 English](#) | [🇨🇳 简体中文](README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/dddcp/db-designer?tab=MIT-1-ov-file#readme)
@@ -14,37 +16,37 @@
 
 ---
 
-## AI 能力
+## AI Capabilities
 
-DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
+DB Designer deeply integrates large language models to cover the core aspects of database design:
 
-| 能力 | 说明 |
-|------|------|
-| **自然语言建表** | 用一句话描述业务需求，AI 自动生成完整的表结构、字段、类型与约束 |
-| **项目上下文感知** | AI 设计新表时自动注入已有表结构、索引、元数据，理解业务全貌后再设计，确保命名风格一致、关联关系合理 |
-| **AI 表结构重构** | 选中任意表，用自然语言描述修改意图，AI 生成调整后的完整结构 |
-| **AI 设计偏好复用** | 可在设置页保存长期复用的 AI 设计通用提示词（如主键类型、命名习惯、审计字段），后续生成表结构时自动注入并尽量遵循 |
-| **AI 索引推荐** | 提供慢查询 SQL 或业务特征（数据量、读写比、性能痛点），AI 分析后推荐最优索引方案，支持一键创建 |
+| Capability | Description |
+|------------|-------------|
+| **Natural Language Table Design** | Describe your business needs in a sentence, and AI generates the complete table structure, columns, types, and constraints automatically. |
+| **Project Context Awareness** | When designing new tables, AI automatically injects existing table structures, indexes, and metadata to understand the full business context, ensuring consistent naming conventions and reasonable relationships. |
+| **AI Table Refactoring** | Select any table, describe your modification intent in natural language, and AI generates the adjusted complete structure. |
+| **AI Design Preference Reuse** | Save reusable AI design prompts (e.g., primary key types, naming habits, audit fields) in the settings page. These are automatically injected into subsequent table generation. |
+| **AI Index Recommendation** | Provide slow query SQL or business characteristics (data volume, read/write ratio, performance pain points), and AI analyzes and recommends optimal index schemes with one-click creation. |
 
-> 兼容所有 OpenAI API 格式的模型服务（OpenAI / DeepSeek / 通义千问 / 本地 Ollama 等），在设置页面配置即可。
+> Compatible with all OpenAI API format model services (OpenAI / DeepSeek / Tongyi Qianwen / Local Ollama, etc.). Configure in the settings page.
 
-## 功能特性
+## Features
 
-| 功能 | 说明 |
-|------|------|
-| 表结构设计 | 可视化设计表、列、索引，支持拖拽排序 |
-| 元数据管理 | 为表配置元数据，支持 Excel 导入与 INSERT 语句导出 |
-| 版本管理 | 对项目结构打快照，支持版本间差异对比和 SQL 导出 |
-| 数据库比对 | 连接远程 MySQL / PostgreSQL / Oracle，对比本地设计与线上结构差异 |
-| 数据库同步 | 对比线上，生成增量脚本；支持一键同步线上表结构与编程对象到模型库 |
-| 编程对象管理 | 支持函数、存储过程、触发器的增删改查、远程对比、一键同步与 SQL 导出 |
-| SQL 导出 | 一键导出完整 SQL（表结构 + 索引 + 元数据 + 编程对象），支持 MySQL / PostgreSQL / Oracle |
-| Git 数据同步 | 通过 Git 管理设计数据，支持推送与从远程拉取覆盖本地（危险操作带确认提示） |
-| 本地配置与存储 | 基于 SQLite 本地存储，无需联网、无需服务端 |
+| Feature | Description |
+|---------|-------------|
+| Table Structure Design | Visually design tables, columns, and indexes with drag-and-drop sorting support. |
+| Metadata Management | Configure metadata for tables, support Excel import and INSERT statement export. |
+| Version Management | Take snapshots of project structures, support version diff comparison and SQL export. |
+| Database Comparison | Connect to remote MySQL / PostgreSQL / Oracle, compare differences between local design and online structure. |
+| Database Sync | Compare with online databases to generate incremental scripts; one-click sync of online table structures and programmable objects to the model library. |
+| Programmable Object Management | Supports CRUD, remote comparison, one-click sync, and SQL export for functions, stored procedures, and triggers. |
+| SQL Export | One-click export of complete SQL (table structure + indexes + metadata + programmable objects), supporting MySQL / PostgreSQL / Oracle. |
+| Git Data Sync | Manage design data through Git, support push and pull from remote (dangerous operations come with confirmation prompts). |
+| Local Config & Storage | Based on SQLite local storage, no internet required, no server needed. |
 
-## 截图预览
+## Screenshots
 
-### AI 设计表结构
+### AI Table Design
 
 <p align="center">
   <img src="./doc/images/setting_ai.png" width="80%" />
@@ -56,66 +58,66 @@ DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
   <img src="./doc/images/ai_index_design.png" width="80%" />
 </p>
 
-### SQL 导出
+### SQL Export
 
 <p align="center">
   <img src="./doc/images/export_sql.png" width="80%" />
 </p>
 
-### 编程对象管理与同步
+### Programmable Object Management & Sync
 
-支持函数、存储过程、触发器的统一管理，可按数据库类型筛选导出与同步，适用于数据库对象较多的项目。
+Supports unified management of functions, stored procedures, and triggers. Filter by database type for export and sync, suitable for projects with many database objects.
 
-### 数据库对比与同步
+### Database Comparison & Sync
 
 <p align="center">
   <img src="./doc/images/sync_db.png" width="80%" />
 </p>
 
-## 安装
+## Installation
 
-前往 [Releases](https://github.com/dddcp/db-designer/releases) 下载对应平台安装包：
+Download the installer for your platform from [Releases](https://github.com/dddcp/db-designer/releases):
 
-| 平台 | 格式 |
-|------|------|
+| Platform | Format |
+|----------|--------|
 | Windows | `.msi` / `.exe` |
 | macOS | `.dmg` |
 | Linux | `.deb` / `.AppImage` |
 
-## 本地开发
+## Local Development
 
-### 前置要求
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) >= 18
 - [Rust](https://www.rust-lang.org/tools/install) >= 1.70
 - [Yarn](https://yarnpkg.com/)
 
-### 启动开发环境
+### Start Development
 
 ```bash
-# 安装前端依赖
+# Install frontend dependencies
 yarn install
 
-# 启动开发模式
+# Start development mode
 yarn tauri dev
 ```
 
-### 构建生产包
+### Build Production
 
 ```bash
 yarn tauri build
 ```
 
-## 技术栈
+## Tech Stack
 
-| 层 | 技术 |
-|----|------|
-| 框架 | [Tauri 2](https://tauri.app/) |
-| 前端 | React 18 + TypeScript + Ant Design 5 |
-| 后端 | Rust + SQLite (rusqlite) |
-| 数据库连接 | mysql / postgres / Oracle 相关适配 |
-| 构建工具 | Vite |
+| Layer | Technology |
+|-------|------------|
+| Framework | [Tauri 2](https://tauri.app/) |
+| Frontend | React 18 + TypeScript + Ant Design 5 |
+| Backend | Rust + SQLite (rusqlite) |
+| Database Connections | mysql / postgres / Oracle adapters |
+| Build Tool | Vite |
 
-## 更新日志
+## Changelog
 
-查看 [CHANGELOG.md](./CHANGELOG.md)。
+See [CHANGELOG.md](./CHANGELOG.md).
