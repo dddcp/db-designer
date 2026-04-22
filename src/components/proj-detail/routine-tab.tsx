@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -34,12 +35,6 @@ interface RoutineTabProps {
   project: Project;
 }
 
-const ROUTINE_TYPE_LABELS: Record<string, string> = {
-  function: '函数',
-  procedure: '存储过程',
-  trigger: '触发器',
-};
-
 const ROUTINE_TYPE_COLORS: Record<string, string> = {
   function: 'blue',
   procedure: 'green',
@@ -47,17 +42,16 @@ const ROUTINE_TYPE_COLORS: Record<string, string> = {
 };
 
 const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('manage');
   const [routines, setRoutines] = useState<RoutineDef[]>([]);
   const [loading, setLoading] = useState(false);
   const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<Partial<RoutineDef> | null>(null);
 
-  // 数据库类型
   const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
   const [filterDbType, setFilterDbType] = useState<string>('');
 
-  // SQL导出相关
   const [sqlContent, setSqlContent] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [exportDbType, setExportDbType] = useState('mysql');
@@ -77,18 +71,15 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
       setRoutines(result);
     } catch (error) {
       console.error('加载编程对象失败:', error);
-      message.error('加载编程对象失败');
+      message.error(t('routine_load_fail'));
     } finally {
       setLoading(false);
     }
   };
 
-  // 过滤后的列表
   const filteredRoutines = filterDbType
     ? routines.filter(r => r.db_type === filterDbType)
     : routines;
-
-  // ─── 编程对象维护 ─────────────────────────────────────────────────
 
   const handleCreate = (type: string) => {
     setEditingRoutine({
@@ -110,11 +101,11 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
   const handleSave = async () => {
     if (!editingRoutine) return;
     if (!editingRoutine.name?.trim()) {
-      message.warning('请输入名称');
+      message.warning(t('routine_name_required'));
       return;
     }
     if (!editingRoutine.body?.trim()) {
-      message.warning('请输入SQL定义');
+      message.warning(t('routine_sql_required'));
       return;
     }
 
@@ -132,27 +123,25 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
           updated_at: new Date().toISOString(),
         },
       });
-      message.success('保存成功');
+      message.success(t('save_success'));
       setIsEditDrawerVisible(false);
       await loadRoutines();
     } catch (error) {
       console.error('保存失败:', error);
-      message.error('保存失败: ' + error);
+      message.error(t('routine_save_fail') + ': ' + error);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await invoke('delete_routine', { id });
-      message.success('删除成功');
+      message.success(t('delete_success'));
       await loadRoutines();
     } catch (error) {
       console.error('删除失败:', error);
-      message.error('删除失败: ' + error);
+      message.error(t('routine_delete_fail') + ': ' + error);
     }
   };
-
-  // ─── SQL导出 ──────────────────────────────────────────────────────
 
   const handleExport = async () => {
     setExportLoading(true);
@@ -164,7 +153,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
       setSqlContent(sql);
     } catch (error) {
       console.error('导出失败:', error);
-      message.error('导出失败: ' + error);
+      message.error(t('routine_export_fail') + ': ' + error);
     } finally {
       setExportLoading(false);
     }
@@ -173,75 +162,78 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      message.success('已复制到剪贴板');
+      message.success(t('copy_success'));
     } catch {
-      message.error('复制失败');
+      message.error(t('copy_fail'));
     }
   };
 
-  // ─── 辅助函数 ───────────────────────────────────────────────────
-
   const getDbTypeTag = (dbType?: string) => {
     if (!dbType) {
-      return <Tag color="default">未指定</Tag>;
+      return <Tag color="default">{t('sync_routine_unspecified')}</Tag>;
     }
     const info = dbTypes.find(t => t.value === dbType);
     return <Tag color={info?.color || 'default'}>{info?.label || dbType}</Tag>;
   };
 
-  // ─── 列定义 ───────────────────────────────────────────────────────
-
   const manageColumns = [
     {
-      title: '名称',
+      title: t('routine_name_col'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
-      title: '类型',
+      title: t('routine_type_col'),
       dataIndex: 'type',
       key: 'type',
       width: 120,
-      render: (type: string) => (
-        <Tag color={ROUTINE_TYPE_COLORS[type] || 'default'}>
-          {ROUTINE_TYPE_LABELS[type] || type}
-        </Tag>
-      ),
+      render: (type: string) => {
+        const labelMap: Record<string, string> = {
+          function: t('routine_function'),
+          procedure: t('routine_procedure'),
+          trigger: t('routine_trigger'),
+        };
+        return (
+          <Tag color={ROUTINE_TYPE_COLORS[type] || 'default'}>
+            {labelMap[type] || type}
+          </Tag>
+        );
+      },
     },
     {
-      title: '数据库',
+      title: t('routine_db_type_col'),
       dataIndex: 'db_type',
       key: 'db_type',
       width: 120,
       render: (db_type: string) => getDbTypeTag(db_type),
     },
     {
-      title: '说明',
+      title: t('routine_comment_col'),
       dataIndex: 'comment',
       key: 'comment',
       ellipsis: true,
       render: (text: string) => text || <Text type="secondary">-</Text>,
     },
     {
-      title: '更新时间',
+      title: t('routine_updated_col'),
       dataIndex: 'updated_at',
       key: 'updated_at',
       width: 180,
-      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+      render: (text: string) => new Date(text).toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN'),
     },
     {
-      title: '操作',
+      title: t('routine_action_col'),
       key: 'action',
       width: 200,
       render: (_: unknown, record: RoutineDef) => (
         <Space size="small">
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
+            {t('edit')}
           </Button>
-          <Popconfirm title="确定删除吗？" onConfirm={() => handleDelete(record.id)}>
+          <Popconfirm title={t('routine_delete_confirm')} okText={t('confirm')} cancelText={t('cancel')} onConfirm={() => handleDelete(record.id)}>
             <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
+              {t('delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -249,28 +241,26 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
     },
   ];
 
-  // ─── 渲染 ─────────────────────────────────────────────────────────
-
   return (
     <div style={{ padding: '24px' }}>
       <Card>
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
           {
             key: 'manage',
-            label: '编程对象维护',
+            label: t('routine_maintenance'),
             children: (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <Space>
-                    <Text type="secondary">管理项目中的函数、存储过程和触发器</Text>
+                    <Text type="secondary">{t('routine_manage_desc')}</Text>
                     <Select
                       style={{ width: 140 }}
                       value={filterDbType}
                       onChange={setFilterDbType}
-                      placeholder="数据库类型"
+                      placeholder={t('routine_db_type')}
                       allowClear
                     >
-                      <Option value="">全部</Option>
+                      <Option value="">{t('routine_all')}</Option>
                       {dbTypes.map(t => (
                         <Option key={t.value} value={t.value}>{t.label}</Option>
                       ))}
@@ -279,15 +269,15 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                   <Dropdown
                     menu={{
                       items: [
-                        { key: 'function', label: '函数' },
-                        { key: 'procedure', label: '存储过程' },
-                        { key: 'trigger', label: '触发器' },
+                        { key: 'function', label: t('routine_function') },
+                        { key: 'procedure', label: t('routine_procedure') },
+                        { key: 'trigger', label: t('routine_trigger') },
                       ],
                       onClick: ({ key }) => handleCreate(key),
                     }}
                   >
                     <Button type="primary" icon={<PlusOutlined />}>
-                      新建 <DownOutlined />
+                      {t('routine_new')} <DownOutlined />
                     </Button>
                   </Dropdown>
                 </div>
@@ -299,7 +289,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                   pagination={false}
                   locale={{
                     emptyText: (
-                      <Empty description="暂无编程对象，点击上方按钮创建" />
+                      <Empty description={t('routine_empty')} />
                     ),
                   }}
                 />
@@ -308,11 +298,11 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
           },
           {
             key: 'export',
-            label: 'SQL导出',
+            label: t('routine_sql_export'),
             children: (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text type="secondary">导出当前项目编程对象的 SQL</Text>
+                  <Text type="secondary">{t('routine_export_desc')}</Text>
                   <Space>
                     <Select
                       style={{ width: 140 }}
@@ -329,14 +319,14 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                       loading={exportLoading}
                       onClick={handleExport}
                     >
-                      生成 SQL
+                      {t('routine_generate_sql')}
                     </Button>
                     <Button
                       icon={<CopyOutlined />}
                       onClick={() => handleCopy(sqlContent)}
                       disabled={!sqlContent}
                     >
-                      复制
+                      {t('copy')}
                     </Button>
                   </Space>
                 </div>
@@ -345,7 +335,7 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
                   readOnly
                   rows={20}
                   style={{ fontFamily: 'monospace', fontSize: 13 }}
-                  placeholder='点击"生成 SQL"导出编程对象...'
+                  placeholder={t('routine_sql_placeholder')}
                 />
               </div>
             ),
@@ -353,40 +343,39 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
         ]} />
       </Card>
 
-      {/* 编辑 Drawer */}
       <Drawer
-        title={editingRoutine?.created_at ? '编辑编程对象' : '新建编程对象'}
+        title={editingRoutine?.created_at ? t('routine_edit') : t('routine_create')}
         open={isEditDrawerVisible}
         onClose={() => setIsEditDrawerVisible(false)}
         width={700}
         footer={
           <Space>
-            <Button type="primary" onClick={handleSave}>保存</Button>
-            <Button onClick={() => setIsEditDrawerVisible(false)}>取消</Button>
+            <Button type="primary" onClick={handleSave}>{t('save')}</Button>
+            <Button onClick={() => setIsEditDrawerVisible(false)}>{t('cancel')}</Button>
           </Space>
         }
       >
         {editingRoutine && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
             <div>
-              <Text strong>类型</Text>
+              <Text strong>{t('routine_type_label')}</Text>
               <Select
                 style={{ width: '100%', marginTop: 4 }}
                 value={editingRoutine.type}
                 onChange={(v) => setEditingRoutine({ ...editingRoutine, type: v })}
               >
-                <Option value="function">函数</Option>
-                <Option value="procedure">存储过程</Option>
-                <Option value="trigger">触发器</Option>
+                <Option value="function">{t('routine_function')}</Option>
+                <Option value="procedure">{t('routine_procedure')}</Option>
+                <Option value="trigger">{t('routine_trigger')}</Option>
               </Select>
             </div>
             <div>
-              <Text strong>数据库类型</Text>
+              <Text strong>{t('routine_db_type_label')}</Text>
               <Select
                 style={{ width: '100%', marginTop: 4 }}
                 value={editingRoutine.db_type || undefined}
                 onChange={(v) => setEditingRoutine({ ...editingRoutine, db_type: v || undefined })}
-                placeholder="未指定"
+                placeholder={t('sync_routine_unspecified')}
                 allowClear
               >
                 {dbTypes.map(t => (
@@ -395,25 +384,25 @@ const RoutineTab: React.FC<RoutineTabProps> = ({ project }) => {
               </Select>
             </div>
             <div>
-              <Text strong>名称</Text>
+              <Text strong>{t('routine_name_label')}</Text>
               <Input
                 style={{ marginTop: 4 }}
                 value={editingRoutine.name}
                 onChange={(e) => setEditingRoutine({ ...editingRoutine, name: e.target.value })}
-                placeholder="编程对象名称"
+                placeholder={t('routine_name_placeholder')}
               />
             </div>
             <div>
-              <Text strong>说明</Text>
+              <Text strong>{t('routine_comment_label')}</Text>
               <Input
                 style={{ marginTop: 4 }}
                 value={editingRoutine.comment || ''}
                 onChange={(e) => setEditingRoutine({ ...editingRoutine, comment: e.target.value })}
-                placeholder="可选说明"
+                placeholder={t('routine_comment_placeholder')}
               />
             </div>
             <div>
-              <Text strong>SQL 定义</Text>
+              <Text strong>{t('routine_sql_label')}</Text>
               <TextArea
                 style={{ marginTop: 4, fontFamily: 'monospace', fontSize: 13 }}
                 value={editingRoutine.body}

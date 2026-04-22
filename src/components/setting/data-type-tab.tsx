@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Button,
   Divider,
@@ -25,6 +26,7 @@ import type { DataTypeOption } from '../../data-types';
 const { Title, Text } = Typography;
 
 const DataTypeTab: React.FC = () => {
+  const { t } = useTranslation();
   const [dataTypeForm] = Form.useForm();
   const [customDataTypes, setCustomDataTypes] = useState<DataTypeOption[]>([]);
   const [isDataTypeDrawerVisible, setIsDataTypeDrawerVisible] = useState(false);
@@ -59,15 +61,15 @@ const DataTypeTab: React.FC = () => {
 
   const handleSaveDataType = async (values: any) => {
     const valueLower = values.value.toLowerCase().trim();
-    if (BUILT_IN_DATA_TYPES.some(t => t.value === valueLower)) {
-      message.error('不允许与内置类型重名');
+    if (BUILT_IN_DATA_TYPES.some(dt => dt.value === valueLower)) {
+      message.error(t('data_type_duplicate_builtin'));
       return;
     }
     const duplicate = customDataTypes.some(
-      t => t.value.toLowerCase() === valueLower && (!editingDataType || t.value !== editingDataType.value),
+      dt => dt.value.toLowerCase() === valueLower && (!editingDataType || dt.value !== editingDataType.value),
     );
     if (duplicate) {
-      message.error('已存在相同标识的自定义类型');
+      message.error(t('data_type_duplicate_custom'));
       return;
     }
 
@@ -81,7 +83,7 @@ const DataTypeTab: React.FC = () => {
 
     let updated: DataTypeOption[];
     if (editingDataType) {
-      updated = customDataTypes.map(t => (t.value === editingDataType.value ? newType : t));
+      updated = customDataTypes.map(dt => (dt.value === editingDataType.value ? newType : dt));
     } else {
       updated = [...customDataTypes, newType];
     }
@@ -90,20 +92,20 @@ const DataTypeTab: React.FC = () => {
       await saveCustomDataTypes(updated);
       setCustomDataTypes(updated);
       setIsDataTypeDrawerVisible(false);
-      message.success(editingDataType ? '数据类型更新成功' : '数据类型添加成功');
+      message.success(editingDataType ? t('data_type_update_success') : t('data_type_add_success'));
     } catch {
-      message.error('保存数据类型失败');
+      message.error(t('data_type_save_fail'));
     }
   };
 
   const handleDeleteDataType = async (value: string) => {
-    const updated = customDataTypes.filter(t => t.value !== value);
+    const updated = customDataTypes.filter(dt => dt.value !== value);
     try {
       await saveCustomDataTypes(updated);
       setCustomDataTypes(updated);
-      message.success('数据类型删除成功');
+      message.success(t('data_type_delete_success'));
     } catch {
-      message.error('删除数据类型失败');
+      message.error(t('data_type_delete_fail'));
     }
   };
 
@@ -116,7 +118,7 @@ const DataTypeTab: React.FC = () => {
   return (
     <>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>内置类型</Title>
+        <Title level={4}>{t('data_type_builtin')}</Title>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {BUILT_IN_DATA_TYPES.map(dt => (
             <Tag key={dt.value} color="blue">{dt.label}</Tag>
@@ -126,9 +128,9 @@ const DataTypeTab: React.FC = () => {
         <Divider />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>自定义类型</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('data_type_custom')}</Title>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDataType}>
-            添加类型
+            {t('data_type_add_btn')}
           </Button>
         </div>
 
@@ -137,7 +139,7 @@ const DataTypeTab: React.FC = () => {
           locale={{
             emptyText: (
               <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">暂无自定义数据类型，点击上方按钮添加</Text>
+                <Text type="secondary">{t('data_type_empty_custom')}</Text>
               </div>
             ),
           }}
@@ -145,16 +147,16 @@ const DataTypeTab: React.FC = () => {
             <List.Item
               actions={[
                 <Button type="link" icon={<EditOutlined />} onClick={() => handleEditDataType(dt)}>
-                  编辑
+                  {t('data_type_edit')}
                 </Button>,
                 <Popconfirm
-                  title="确定要删除这个数据类型吗？"
+                  title={t('data_type_delete_confirm')}
                   onConfirm={() => handleDeleteDataType(dt.value)}
-                  okText="确定"
-                  cancelText="取消"
+                  okText={t('confirm')}
+                  cancelText={t('cancel')}
                 >
                   <Button type="link" danger icon={<DeleteOutlined />}>
-                    删除
+                    {t('delete')}
                   </Button>
                 </Popconfirm>,
               ]}
@@ -168,9 +170,9 @@ const DataTypeTab: React.FC = () => {
                 }
                 description={
                   <Space>
-                    {dt.hasLength && <Tag>支持长度</Tag>}
-                    {dt.hasScale && <Tag>支持精度/小数位</Tag>}
-                    {!dt.hasLength && !dt.hasScale && <Text type="secondary">无长度/精度参数</Text>}
+                    {dt.hasLength && <Tag>{t('data_type_support_length')}</Tag>}
+                    {dt.hasScale && <Tag>{t('data_type_support_scale')}</Tag>}
+                    {!dt.hasLength && !dt.hasScale && <Text type="secondary">{t('data_type_no_params')}</Text>}
                   </Space>
                 }
               />
@@ -180,7 +182,7 @@ const DataTypeTab: React.FC = () => {
       </Space>
 
       <Drawer
-        title={editingDataType ? '编辑数据类型' : '添加数据类型'}
+        title={editingDataType ? t('data_type_edit_drawer') : t('data_type_add_drawer')}
         open={isDataTypeDrawerVisible}
         onClose={closeDrawer}
         footer={null}
@@ -189,36 +191,36 @@ const DataTypeTab: React.FC = () => {
         <Form form={dataTypeForm} layout="vertical" onFinish={handleSaveDataType}>
           <Form.Item
             name="value"
-            label="类型标识"
-            rules={[{ required: true, message: '请输入类型标识' }]}
-            extra="存储用标识，如 enum、money（小写英文）"
+            label={t('data_type_value_label')}
+            rules={[{ required: true, message: t('data_type_value_required') }]}
+            extra={t('data_type_value_extra')}
           >
-            <Input placeholder="请输入类型标识" disabled={!!editingDataType} />
+            <Input placeholder={t('data_type_value_placeholder')} disabled={!!editingDataType} />
           </Form.Item>
 
           <Form.Item
             name="label"
-            label="显示名称"
-            rules={[{ required: true, message: '请输入显示名称' }]}
-            extra="下拉框中显示的名称，如 ENUM、MONEY"
+            label={t('data_type_label_label')}
+            rules={[{ required: true, message: t('data_type_label_required') }]}
+            extra={t('data_type_label_extra')}
           >
-            <Input placeholder="请输入显示名称" />
+            <Input placeholder={t('data_type_label_placeholder')} />
           </Form.Item>
 
-          <Form.Item name="hasLength" label="支持长度" valuePropName="checked">
-            <Switch checkedChildren="是" unCheckedChildren="否" />
+          <Form.Item name="hasLength" label={t('data_type_has_length')} valuePropName="checked">
+            <Switch checkedChildren={t('data_type_yes')} unCheckedChildren={t('data_type_no')} />
           </Form.Item>
 
-          <Form.Item name="hasScale" label="支持精度/小数位" valuePropName="checked">
-            <Switch checkedChildren="是" unCheckedChildren="否" />
+          <Form.Item name="hasScale" label={t('data_type_has_scale')} valuePropName="checked">
+            <Switch checkedChildren={t('data_type_yes')} unCheckedChildren={t('data_type_no')} />
           </Form.Item>
 
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
-                {editingDataType ? '更新' : '创建'}
+                {editingDataType ? t('db_conn_update_btn') : t('create')}
               </Button>
-              <Button onClick={closeDrawer}>取消</Button>
+              <Button onClick={closeDrawer}>{t('cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>

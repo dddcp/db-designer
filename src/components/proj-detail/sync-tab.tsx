@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Button,
@@ -33,6 +34,7 @@ interface SyncTabProps {
 }
 
 const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
+  const { t } = useTranslation();
   const [connections, setConnections] = useState<DatabaseConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState<number | undefined>();
   const [connecting, setConnecting] = useState(false);
@@ -44,7 +46,6 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
   const [sqlContent, setSqlContent] = useState('');
   const [syncingKeys, setSyncingKeys] = useState<Set<string>>(new Set());
 
-  // 编程对象对比
   const [routineDiffs, setRoutineDiffs] = useState<RoutineDiff[]>([]);
 
   useEffect(() => {
@@ -56,14 +57,13 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       const result = await invoke<DatabaseConnection[]>('get_database_connections');
       setConnections(result);
     } catch (error) {
-      console.error('加载连接配置失败:', error);
+      console.error(t('sync_load_connection_failed') + ':', error);
     }
   };
 
-  // 测试连接并获取远程表
   const handleConnect = async () => {
     if (!selectedConnectionId) {
-      message.warning('请先选择一个数据库连接');
+      message.warning(t('sync_select_connection_first'));
       return;
     }
     setConnecting(true);
@@ -72,23 +72,20 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
     setRoutineDiffs([]);
     try {
       await invoke('connect_database', { connectionId: selectedConnectionId });
-      message.success('连接成功');
+      message.success(t('sync_connect_success'));
       setConnected(true);
 
-      // 获取远程表结构
       const tables = await invoke<RemoteTable[]>('get_remote_tables', {
         connectionId: selectedConnectionId,
       });
       setRemoteTables(tables);
 
-      // 自动比对
       const diffResult = await invoke<TableDiff[]>('compare_tables', {
         projectId: project.id,
         remoteTablesJson: JSON.stringify(tables),
       });
       setDiffs(diffResult);
 
-      // 获取远程编程对象并比对
       try {
         const remoteRoutines = await invoke<RemoteRoutine[]>('get_remote_routines_cmd', {
           connectionId: selectedConnectionId,
@@ -100,21 +97,20 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
         });
         setRoutineDiffs(routineDiffResult);
       } catch (routineError) {
-        console.warn('编程对象比对失败（不影响表比对）:', routineError);
+        console.warn(t('sync_routine_compare_failed') + ':', routineError);
         setRoutineDiffs([]);
       }
     } catch (error) {
-      console.error('连接失败:', error);
-      message.error('连接失败: ' + error);
+      console.error(t('sync_connect_failed') + ':', error);
+      message.error(t('sync_connect_failed') + ': ' + error);
     } finally {
       setConnecting(false);
     }
   };
 
-  // 生成同步 SQL
   const handleGenerateSyncSQL = async () => {
     if (remoteTables.length === 0) {
-      message.warning('请先连接数据库并获取远程表');
+      message.warning(t('sync_connect_first'));
       return;
     }
     setLoading(true);
@@ -128,8 +124,8 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       setSqlContent(sql);
       setIsSqlModalVisible(true);
     } catch (error) {
-      console.error('生成同步SQL失败:', error);
-      message.error('生成同步SQL失败: ' + error);
+      console.error(t('sync_generate_sql_failed') + ':', error);
+      message.error(t('sync_generate_sql_failed') + ': ' + error);
     } finally {
       setLoading(false);
     }
@@ -138,13 +134,12 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
   const handleCopySQL = async () => {
     try {
       await navigator.clipboard.writeText(sqlContent);
-      message.success('已复制到剪贴板');
+      message.success(t('sync_copied_to_clipboard'));
     } catch {
-      message.error('复制失败');
+      message.error(t('sync_copy_failed'));
     }
   };
 
-  // 重新比对
   const refreshDiffs = async () => {
     if (!selectedConnectionId) return;
     try {
@@ -158,20 +153,20 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       });
       setDiffs(diffResult);
     } catch (error) {
-      message.error('刷新比对失败: ' + error);
+      message.error(t('sync_refresh_diff_failed') + ': ' + error);
     }
   };
 
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'only_local':
-        return <Tag color="green">仅本地</Tag>;
+        return <Tag color="green">{t('sync_only_local')}</Tag>;
       case 'only_remote':
-        return <Tag color="orange">仅远程</Tag>;
+        return <Tag color="orange">{t('sync_only_remote')}</Tag>;
       case 'different':
-        return <Tag color="red">有差异</Tag>;
+        return <Tag color="red">{t('sync_different')}</Tag>;
       case 'same':
-        return <Tag color="blue">一致</Tag>;
+        return <Tag color="blue">{t('sync_same')}</Tag>;
       default:
         return <Tag>{status}</Tag>;
     }
@@ -181,14 +176,13 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
     <div style={{ padding: '24px' }}>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>数据库比对与同步</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('sync_title')}</Title>
         </div>
 
-        {/* 连接选择 */}
         <Space style={{ marginBottom: 24 }} size="middle">
           <Select
             style={{ width: 500 }}
-            placeholder="选择数据库连接"
+            placeholder={t('sync_select_connection')}
             value={selectedConnectionId}
             onChange={(v) => { setSelectedConnectionId(v); setConnected(false); setDiffs([]); }}
           >
@@ -204,7 +198,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
             loading={connecting}
             onClick={handleConnect}
           >
-            连接并比对
+            {t('sync_connect_compare')}
           </Button>
           {connected && (
             <Button
@@ -213,27 +207,26 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
               onClick={handleGenerateSyncSQL}
               disabled={diffs.length === 0}
             >
-              生成同步脚本
+              {t('sync_generate_script')}
             </Button>
           )}
         </Space>
 
         {connections.length === 0 && (
           <Alert
-            message="暂无匹配的数据库连接"
-            description="请先在设置页面添加数据库连接配置"
+            message={t('sync_no_matching_connection')}
+            description={t('sync_add_connection_first')}
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
           />
         )}
 
-        {/* 比对结果 — 分Tab显示 */}
         {connected && (diffs.length > 0 || routineDiffs.length > 0) && (
           <Tabs items={[
             {
               key: 'table',
-              label: `表结构 (${diffs.length})`,
+              label: t('sync_table_structure', { count: diffs.length }),
               children: diffs.length > 0 ? (
                 <SyncTableDiff
                   project={project}
@@ -245,12 +238,12 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
                   getStatusTag={getStatusTag}
                 />
               ) : (
-                <Empty description="未获取到表结构比对结果" />
+                <Empty description={t('sync_no_table_diff_result')} />
               ),
             },
             {
               key: 'routine',
-              label: `编程对象 (${routineDiffs.length})`,
+              label: t('sync_routine_objects', { count: routineDiffs.length }),
               children: routineDiffs.length > 0 ? (
                 <SyncRoutineDiff
                   project={project}
@@ -263,30 +256,29 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
                   getStatusTag={getStatusTag}
                 />
               ) : (
-                <Empty description="未获取到编程对象比对结果" />
+                <Empty description={t('sync_no_routine_diff_result')} />
               ),
             },
           ]} />
         )}
 
         {connected && diffs.length === 0 && routineDiffs.length === 0 && (
-          <Empty description="未获取到比对结果" />
+          <Empty description={t('sync_no_diff_result')} />
         )}
       </Card>
 
-      {/* SQL 查看弹窗 */}
       <Drawer
-        title="同步脚本"
+        title={t('sync_script')}
         open={isSqlModalVisible}
         onClose={() => setIsSqlModalVisible(false)}
         width={800}
         footer={
           <Space>
             <Button icon={<CopyOutlined />} onClick={handleCopySQL}>
-              复制
+              {t('sync_copy')}
             </Button>
             <Button onClick={() => setIsSqlModalVisible(false)}>
-              关闭
+              {t('sync_close')}
             </Button>
           </Space>
         }

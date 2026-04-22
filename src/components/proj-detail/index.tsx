@@ -36,6 +36,7 @@ import {
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme-context';
 import { getAllDataTypes, findDataType } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
@@ -105,6 +106,7 @@ const ProjectDetail: React.FC = () => {
   const navigate = useNavigate();
   const { token } = useToken();
   const { isDarkMode } = useTheme();
+  const { t } = useTranslation();
 
   const [project, setProject] = useState<Project | null>(null);
   const [tables, setTables] = useState<TableDef[]>([]);
@@ -204,7 +206,7 @@ const ProjectDetail: React.FC = () => {
         return tablesData.length > 0 ? tablesData[0] : null;
       });
     } catch (error) {
-      console.error('加载表列表失败:', error);
+      console.error('Failed to load table list:', error);
     }
   };
 
@@ -219,7 +221,7 @@ const ProjectDetail: React.FC = () => {
       const currentProject = projects.find(p => p.id === parseInt(id || '0'));
 
       if (!currentProject) {
-        showNotification('error', '项目不存在');
+        showNotification('error', t('proj_not_exist'));
         navigate('/');
         return;
       }
@@ -227,8 +229,8 @@ const ProjectDetail: React.FC = () => {
       setProject(currentProject);
       await loadTables(currentProject.id);
     } catch (error) {
-      console.error('加载项目详情失败:', error);
-      showNotification('error', '加载项目详情失败');
+      console.error('Failed to load project detail:', error);
+      showNotification('error', t('proj_load_fail'));
     } finally {
       setLoading(false);
     }
@@ -272,10 +274,10 @@ const ProjectDetail: React.FC = () => {
       if (selectedTable?.id === tableId) {
         setSelectedTable(null);
       }
-      showNotification('success', '表删除成功');
+      showNotification('success', t('table_delete_success'));
     } catch (error) {
-      console.error('删除表失败:', error);
-      showNotification('error', '删除表失败: ' + error);
+      console.error('Failed to delete table:', error);
+      showNotification('error', `${t('table_delete_fail')}: ${error}`);
     }
   };
 
@@ -326,7 +328,7 @@ const ProjectDetail: React.FC = () => {
         if (selectedTable?.id === editingTable.id) {
           setSelectedTable(updatedTable);
         }
-        showNotification('success', '表更新成功');
+        showNotification('success', t('table_update_success'));
       } else {
         // 创建新表 - 调用后端保存
         const newId = Date.now().toString();
@@ -352,12 +354,12 @@ const ProjectDetail: React.FC = () => {
           columns: []
         };
         setTables([...tables, newTable]);
-        showNotification('success', '表创建成功');
+        showNotification('success', t('table_create_success'));
       }
       setIsTableModalVisible(false);
     } catch (error) {
-      console.error('保存表失败:', error);
-      showNotification('error', '保存表失败: ' + error);
+      console.error('Failed to save table:', error);
+      showNotification('error', `${t('table_save_fail')}: ${error}`);
     }
   };
 
@@ -366,7 +368,7 @@ const ProjectDetail: React.FC = () => {
    */
   const handleAddColumn = () => {
     if (!selectedTable) {
-      showNotification('warning', '请先选择一个表');
+      showNotification('warning', t('table_select_first'));
       return;
     }
     
@@ -441,7 +443,7 @@ const ProjectDetail: React.FC = () => {
       table.id === selectedTable.id ? updatedTable : table
     ));
     setSelectedTable(updatedTable);
-    showNotification('success', '列删除成功');
+    showNotification('success', t('col_delete_success'));
   };
 
   /**
@@ -491,18 +493,17 @@ const ProjectDetail: React.FC = () => {
     
     // 验证表基本信息
     if (!selectedTable.name.trim()) {
-      message.warning('表名不能为空');
+      message.warning(t('col_table_name_empty'));
       return;
     }
     
     if (!selectedTable.displayName.trim()) {
-      message.warning('表中文名称不能为空');
+      message.warning(t('col_table_display_name_empty'));
       return;
     }
     
-    // 验证列数据
     if (selectedTable.columns.length === 0) {
-      message.warning('请至少添加一个字段');
+      message.warning(t('col_at_least_one'));
       return;
     }
     
@@ -516,16 +517,15 @@ const ProjectDetail: React.FC = () => {
     });
     
     if (invalidColumns.length > 0) {
-      // 找出具体哪些字段有问题
       const invalidDetails = invalidColumns.map(column => {
         const issues = [];
-        if (!column.name.trim()) issues.push('字段名');
-        if (!column.displayName.trim()) issues.push('中文名称');
-        if (!column.type.trim()) issues.push('数据类型');
-        return `${column.displayName || '未命名字段'} (${issues.join('、')})`;
+        if (!column.name.trim()) issues.push(t('col_name_empty'));
+        if (!column.displayName.trim()) issues.push(t('col_display_name_empty'));
+        if (!column.type.trim()) issues.push(t('col_data_type_empty'));
+        return t('col_incomplete_item', { name: column.displayName || t('col_unnamed'), issues: issues.join(', ') });
       });
       
-      message.warning('以下字段信息不完整: ' + invalidDetails.join(', '));
+      message.warning(`${t('col_incomplete_prefix')} ${invalidDetails.join(', ')}`);
       return;
     }
     
@@ -533,7 +533,7 @@ const ProjectDetail: React.FC = () => {
     const columnNames = selectedTable.columns.map(col => col.name.trim().toLowerCase());
     const duplicateNames = columnNames.filter((name, index) => columnNames.indexOf(name) !== index);
     if (duplicateNames.length > 0) {
-      message.warning(`存在重复的字段名: ${[...new Set(duplicateNames)].join(', ')}`);
+      message.warning(t('col_duplicate_name', { names: [...new Set(duplicateNames)].join(', ') }));
       return;
     }
     
@@ -541,21 +541,21 @@ const ProjectDetail: React.FC = () => {
     const displayNames = selectedTable.columns.map(col => col.displayName.trim());
     const duplicateDisplayNames = displayNames.filter((name, index) => displayNames.indexOf(name) !== index);
     if (duplicateDisplayNames.length > 0) {
-      message.warning(`存在重复的中文名称: ${[...new Set(duplicateDisplayNames)].join(', ')}`);
+      message.warning(t('col_duplicate_display_name', { names: [...new Set(duplicateDisplayNames)].join(', ') }));
       return;
     }
     
     // 验证主键设置
     const primaryKeyColumns = selectedTable.columns.filter(col => col.primaryKey);
     if (primaryKeyColumns.length === 0) {
-      message.warning('当前表没有设置主键，建议设置主键字段');
+      message.warning(t('col_no_primary_key'));
       return;
     }
     
     try {
-      console.log('=== 前端开始保存表结构 ===');
-      console.log('项目ID:', project.id);
-      console.log('表信息:', selectedTable);
+      console.log('=== Start saving table structure ===');
+      console.log('Project ID:', project.id);
+      console.log('Table info:', selectedTable);
       
       // 转换数据结构以匹配后端接口
       const tableData = {
@@ -592,10 +592,10 @@ const ProjectDetail: React.FC = () => {
         table: tableData,
         columns: columnsData,
       });
-      message.success("保存成功");
+      message.success(t('save_success'));
     } catch (error) {
-      console.error('保存表结构失败:', error);
-      message.error('保存表结构失败: ' + error);
+      console.error('Failed to save table structure:', error);
+      message.error(`${t('table_save_fail')}: ${error}`);
     }
   };
 
@@ -670,10 +670,10 @@ const ProjectDetail: React.FC = () => {
         setSelectedTable(newTables[0]);
       }
       setIsAiCreateModalVisible(false);
-      message.success(`成功创建 ${newTables.length} 张表`);
+      message.success(t('ai_design_success', { count: newTables.length }));
     } catch (error) {
-      console.error('创建AI生成的表失败:', error);
-      message.error('创建表失败: ' + error);
+      console.error('Failed to create AI-generated tables:', error);
+      message.error(`${t('table_create_fail')}: ${error}`);
     }
   };
 
@@ -706,46 +706,46 @@ const ProjectDetail: React.FC = () => {
     setTables(prev => prev.map(t => t.id === selectedTable.id ? updatedTable : t));
     setSelectedTable(updatedTable);
     setIsAiModifyModalVisible(false);
-    message.success('AI修改方案已应用，请检查后点击"保存表结构"持久化');
+    message.success(t('ai_modify_applied'));
   };
 
   // 列定义
   const columnsColumns = [
     {
-      title: '排序',
+      title: t('col_order'),
       dataIndex: 'order',
       key: 'order',
       width: 60,
       render: () => <DragHandle />,
     },
     {
-      title: '字段名',
+      title: t('col_name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
           onChange={(e) => handleSaveColumn(record.id, 'name', e.target.value)}
-          placeholder="字段名"
+          placeholder={t('col_name_placeholder')}
           size="small"
         />
       ),
     },
     {
-      title: '中文名称',
+      title: t('col_display_name'),
       dataIndex: 'displayName',
       key: 'displayName',
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
           onChange={(e) => handleSaveColumn(record.id, 'displayName', e.target.value)}
-          placeholder="中文名称"
+          placeholder={t('col_display_name_placeholder')}
           size="small"
         />
       ),
     },
     {
-      title: '数据类型',
+      title: t('col_data_type'),
       dataIndex: 'type',
       key: 'type',
       render: (type: string, record: ColumnDef) => {
@@ -772,7 +772,7 @@ const ProjectDetail: React.FC = () => {
             <Input
               value={record.length}
               onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
-              placeholder="长度"
+              placeholder={t('col_length')}
               size="small"
               style={{ width: 80 }}
               type="number"
@@ -783,7 +783,7 @@ const ProjectDetail: React.FC = () => {
               <Input
                 value={record.length}
                 onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
-                placeholder="精度"
+                placeholder={t('col_precision')}
                 size="small"
                 style={{ width: 70 }}
                 type="number"
@@ -791,7 +791,7 @@ const ProjectDetail: React.FC = () => {
               <Input
                 value={record.scale}
                 onChange={(e) => handleSaveColumn(record.id, 'scale', parseInt(e.target.value) || undefined)}
-                placeholder="小数位"
+                placeholder={t('col_scale')}
                 size="small"
                 style={{ width: 70 }}
                 type="number"
@@ -803,44 +803,42 @@ const ProjectDetail: React.FC = () => {
       },
     },
     {
-      title: '属性',
+      title: t('col_attribute'),
       key: 'properties',
       render: (_text: string, record: ColumnDef) => (
         <Space size={[16, 4]} wrap>
           <Checkbox
             checked={record.primaryKey}
             onChange={(e) => {
-              // 如果设置为主键，则必须是非空的
               handleSaveColumn(record.id, 'primaryKey', e.target.checked);
             }}
           >
-            主键
+            {t('col_primary_key')}
           </Checkbox>
           <Checkbox
             checked={!record.nullable}
             onChange={(e) => {
-              // 如果已经是主键，则不能设置为可空
               if (record.primaryKey && !e.target.checked) {
-                showNotification('warning', '主键字段不能设置为可空');
+                showNotification('warning', t('col_primary_key_cannot_nullable'));
                 return;
               }
               handleSaveColumn(record.id, 'nullable', !e.target.checked);
             }}
             disabled={record.primaryKey}
           >
-            非空
+            {t('col_not_null')}
           </Checkbox>
           <Checkbox
             checked={record.autoIncrement}
             onChange={(e) => handleSaveColumn(record.id, 'autoIncrement', e.target.checked)}
           >
-            自增
+            {t('col_auto_increment')}
           </Checkbox>
         </Space>
       ),
     },
     {
-      title: '默认值',
+      title: t('col_default_value'),
       dataIndex: 'defaultValue',
       key: 'defaultValue',
       render: (text: string, record: ColumnDef) => (
@@ -853,7 +851,7 @@ const ProjectDetail: React.FC = () => {
           <Input
             value={text}
             onChange={(e) => handleSaveColumn(record.id, 'defaultValue', e.target.value)}
-            placeholder="默认值"
+            placeholder={t('col_default_value_placeholder')}
             size="small"
             disabled={record.defaultNull}
           />
@@ -861,24 +859,24 @@ const ProjectDetail: React.FC = () => {
       ),
     },
     {
-      title: '说明',
+      title: t('col_comment'),
       dataIndex: 'comment',
       key: 'comment',
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
           onChange={(e) => handleSaveColumn(record.id, 'comment', e.target.value)}
-          placeholder="字段说明"
+          placeholder={t('col_comment_placeholder')}
           size="small"
         />
       ),
     },
     {
-      title: '操作',
+      title: t('col_action'),
       key: 'action',
       render: (_text: string, record: ColumnDef) => (
         <Space size="small">
-          <Tooltip title="删除字段">
+          <Tooltip title={t('col_delete_tooltip')}>
             <Button
               type="text"
               danger
@@ -895,7 +893,7 @@ const ProjectDetail: React.FC = () => {
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text>加载中...</Text>
+        <Text>{t('loading')}</Text>
       </div>
     );
   }
@@ -903,7 +901,7 @@ const ProjectDetail: React.FC = () => {
   if (!project) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text>项目不存在</Text>
+        <Text>{t('proj_not_exist')}</Text>
       </div>
     );
   }
@@ -923,13 +921,13 @@ const ProjectDetail: React.FC = () => {
           }}
         >
           <Space>
-            <Tooltip title="返回主页">
+            <Tooltip title={t('proj_back_home')}>
               <Button 
                 type="text" 
                 icon={<ArrowLeftOutlined />}
                 onClick={handleBack}
               >
-                返回
+                {t('proj_back')}
               </Button>
             </Tooltip>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
@@ -948,27 +946,27 @@ const ProjectDetail: React.FC = () => {
             items={[
               {
                 key: 'design',
-                label: <span><TableOutlined /> 表设计</span>,
+                label: <span><TableOutlined /> {t('tab_table_design')}</span>,
               },
               {
                 key: 'routine',
-                label: <span><FunctionOutlined /> 编程对象</span>,
+                label: <span><FunctionOutlined /> {t('tab_routine')}</span>,
               },
               {
                 key: 'version',
-                label: <span><HistoryOutlined /> 版本管理</span>,
+                label: <span><HistoryOutlined /> {t('tab_version')}</span>,
               },
               {
                 key: 'sync',
-                label: <span><CloudSyncOutlined /> 数据库同步</span>,
+                label: <span><CloudSyncOutlined /> {t('tab_sync')}</span>,
               },
               {
                 key: 'sqlexport',
-                label: <span><ExportOutlined /> SQL导出</span>,
+                label: <span><ExportOutlined /> {t('tab_sql_export')}</span>,
               },
               {
                 key: 'aireview',
-                label: <span><RobotOutlined /> AI 评审</span>,
+                label: <span><RobotOutlined /> {t('tab_ai_review')}</span>,
               },
             ]}
           />
@@ -989,14 +987,14 @@ const ProjectDetail: React.FC = () => {
           >
             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
-                <Title level={4} style={{ margin: 0 }}>表列表</Title>
+                <Title level={4} style={{ margin: 0 }}>{t('table_list')}</Title>
                 <Space>
                   <Button
                     icon={<RobotOutlined />}
                     size="small"
                     onClick={() => setIsAiCreateModalVisible(true)}
                   >
-                    AI设计
+                    {t('table_ai_design')}
                   </Button>
                   <Button
                     type="primary"
@@ -1004,13 +1002,13 @@ const ProjectDetail: React.FC = () => {
                     size="small"
                     onClick={handleCreateTable}
                   >
-                    新建表
+                    {t('table_new')}
                   </Button>
                 </Space>
               </div>
 
               <Input.Search
-                placeholder="搜索表名或中文名"
+                placeholder={t('table_search')}
                 allowClear
                 size="small"
                 style={{ marginBottom: 12, flexShrink: 0 }}
@@ -1046,7 +1044,9 @@ const ProjectDetail: React.FC = () => {
                         }}
                       />,
                       <Popconfirm
-                        title="确定删除此表吗？"
+                        title={t('table_confirm_delete')}
+                        okText={t('confirm')}
+                        cancelText={t('cancel')}
                         onConfirm={(e) => {
                           e?.stopPropagation();
                           handleDeleteTable(table.id);
@@ -1076,7 +1076,7 @@ const ProjectDetail: React.FC = () => {
                   emptyText: (
                     <div style={{ textAlign: 'center', padding: 20 }}>
                       <TableOutlined style={{ fontSize: 32, color: token.colorTextDisabled, marginBottom: 8 }} />
-                      <div style={{ color: token.colorTextDisabled }}>暂无表，点击上方按钮创建第一个表</div>
+                      <div style={{ color: token.colorTextDisabled }}>{t('table_empty')}</div>
                     </div>
                   )
                 }}
@@ -1109,7 +1109,7 @@ const ProjectDetail: React.FC = () => {
                         label: (
                           <span>
                             <TableOutlined />
-                            表结构
+                            {t('table_structure')}
                           </span>
                         ),
                         children: (
@@ -1121,20 +1121,20 @@ const ProjectDetail: React.FC = () => {
                                   icon={<PlusOutlined />}
                                   onClick={handleAddColumn}
                                 >
-                                  添加列
+                                  {t('table_add_column')}
                                 </Button>
                                 <Button
                                   icon={<RobotOutlined />}
                                   onClick={() => setIsAiModifyModalVisible(true)}
                                 >
-                                  AI 修改
+                                  {t('table_ai_modify')}
                                 </Button>
                               </Space>
                               <Button
                                 type="primary"
                                 onClick={handleSaveStructure}
                               >
-                                保存表结构
+                                {t('table_save_structure')}
                               </Button>
                             </div>
                             <DndContext
@@ -1167,7 +1167,7 @@ const ProjectDetail: React.FC = () => {
                         label: (
                           <span>
                             <DatabaseOutlined />
-                            索引
+                            {t('tab_index')}
                           </span>
                         ),
                         children: <IndexTab selectedTable={selectedTable} tables={tables} />
@@ -1177,7 +1177,7 @@ const ProjectDetail: React.FC = () => {
                         label: (
                           <span>
                             <FileTextOutlined />
-                            元数据
+                            {t('table_metadata')}
                           </span>
                         ),
                         children: <InitDataTab selectedTable={selectedTable} />
@@ -1198,7 +1198,7 @@ const ProjectDetail: React.FC = () => {
               ) : (
                 <div style={{ textAlign: 'center', padding: 50 }}>
                   <TableOutlined style={{ fontSize: 48, color: token.colorTextDisabled, marginBottom: 16 }} />
-                  <div style={{ color: token.colorTextDisabled }}>请从左侧选择一个表开始设计</div>
+                  <div style={{ color: token.colorTextDisabled }}>{t('table_select_start')}</div>
                 </div>
               )}
             </div>
@@ -1229,7 +1229,7 @@ const ProjectDetail: React.FC = () => {
 
       {/* 表编辑模态框 */}
       <Drawer
-        title={editingTable ? '编辑表' : '新建表'}
+        title={editingTable ? t('table_edit') : t('table_new')}
         open={isTableModalVisible}
         onClose={() => setIsTableModalVisible(false)}
         footer={null}
@@ -1241,27 +1241,27 @@ const ProjectDetail: React.FC = () => {
         >
           <Form.Item
             name="name"
-            label="表名（英文）"
-            rules={[{ required: true, message: '请输入表名' }]}
+            label={t('table_name_en')}
+            rules={[{ required: true, message: t('table_name_en_required') }]}
           >
-            <Input placeholder="请输入表名，如：users" />
+            <Input placeholder={t('table_name_en_placeholder')} />
           </Form.Item>
 
           <Form.Item
             name="displayName"
-            label="中文名"
-            rules={[{ required: true, message: '请输入中文名' }]}
+            label={t('table_display_name')}
+            rules={[{ required: true, message: t('table_display_name_required') }]}
           >
-            <Input placeholder="请输入表的中文名，如：用户表" />
+            <Input placeholder={t('table_display_name_placeholder')} />
           </Form.Item>
 
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingTable ? '更新' : '创建'}
+                {editingTable ? t('table_update') : t('create')}
               </Button>
               <Button onClick={() => setIsTableModalVisible(false)}>
-                取消
+                {t('cancel')}
               </Button>
             </Space>
           </Form.Item>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -42,16 +43,16 @@ function levelColor(level: AiReviewIssue['level']): string {
 }
 
 /** 将 level 映射为可读标签 */
-function levelLabel(level: AiReviewIssue['level']): string {
-  if (level === 'error') return '严重';
-  if (level === 'warning') return '警告';
-  return '建议';
+function levelLabel(level: AiReviewIssue['level'], t: (key: string) => string): string {
+  if (level === 'error') return t('ai_review_level_critical');
+  if (level === 'warning') return t('ai_review_level_warning');
+  return t('ai_review_level_suggestion');
 }
 
 /** 按 scope 分组 issues */
-function groupByScope(issues: AiReviewIssue[]): Record<string, AiReviewIssue[]> {
+function groupByScope(issues: AiReviewIssue[], t: (key: string) => string): Record<string, AiReviewIssue[]> {
   return issues.reduce<Record<string, AiReviewIssue[]>>((acc, issue) => {
-    const key = issue.scope || '项目整体';
+    const key = issue.scope || t('ai_review_scope_default');
     if (!acc[key]) acc[key] = [];
     acc[key].push(issue);
     return acc;
@@ -74,6 +75,7 @@ function serializeTables(tables: TableDef[]): string {
 }
 
 const AiReviewTab: React.FC<AiReviewTabProps> = ({ project, tables }) => {
+  const { t, i18n } = useTranslation();
   const [reviews, setReviews] = useState<AiReview[]>([]);
   const [selectedReview, setSelectedReview] = useState<AiReview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,7 @@ const AiReviewTab: React.FC<AiReviewTabProps> = ({ project, tables }) => {
         setSelectedReview(list[0]);
       }
     } catch (e) {
-      message.error('加载评审记录失败: ' + e);
+      message.error(t('ai_review_load_fail') + ': ' + e);
     } finally {
       setLoading(false);
     }
@@ -104,7 +106,7 @@ const AiReviewTab: React.FC<AiReviewTabProps> = ({ project, tables }) => {
   // 发起新评审
   const handleStartReview = async () => {
     if (tables.length === 0) {
-      message.warning('项目暂无表结构，无法发起评审');
+      message.warning(t('ai_review_no_tables'));
       return;
     }
     setModalVisible(true);
@@ -112,7 +114,7 @@ const AiReviewTab: React.FC<AiReviewTabProps> = ({ project, tables }) => {
 
   const handleModalOk = async () => {
     const values = form.getFieldsValue();
-    const title = values.title?.trim() || `评审 ${new Date().toLocaleString()}`;
+    const title = values.title?.trim() || t('ai_review_title_placeholder', { date: new Date().toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN') });
     const background = values.background?.trim() || '';
 
     setReviewing(true);
@@ -169,9 +171,9 @@ ${background ? `业务背景：\n${background}` : ''}`;
       setSelectedReview(saved);
       setModalVisible(false);
       form.resetFields();
-      message.success('评审完成');
+      message.success(t('ai_review_done'));
     } catch (e) {
-      message.error('评审失败: ' + e);
+      message.error(t('ai_review_fail') + ': ' + e);
     } finally {
       setReviewing(false);
     }
@@ -186,9 +188,9 @@ ${background ? `业务背景：\n${background}` : ''}`;
       if (selectedReview?.id === id) {
         setSelectedReview(newList.length > 0 ? newList[0] : null);
       }
-      message.success('删除成功');
+      message.success(t('delete_success'));
     } catch (e) {
-      message.error('删除失败: ' + e);
+      message.error(t('delete_fail') + ': ' + e);
     }
   };
 
@@ -202,7 +204,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
     }
   })();
 
-  const grouped = parsedResult ? groupByScope(parsedResult.issues) : {};
+  const grouped = parsedResult ? groupByScope(parsedResult.issues, t) : {};
 
   return (
     <div style={{ padding: 24, height: '100%' }}>
@@ -210,16 +212,16 @@ ${background ? `业务背景：\n${background}` : ''}`;
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>
           <RobotOutlined style={{ marginRight: 8 }} />
-          AI 评审（仅作参考，不作为最终决策依据）
+          {t('ai_review_title')}
         </Title>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={handleStartReview}
           disabled={tables.length === 0}
-          title={tables.length === 0 ? '项目暂无表结构，无法发起评审' : ''}
+          title={tables.length === 0 ? t('ai_review_no_tables') : ''}
         >
-          新建评审
+          {t('ai_review_new')}
         </Button>
       </div>
 
@@ -228,7 +230,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
         <Col span={7} style={{ height: '100%', overflowY: 'auto', borderRight: '1px solid #f0f0f0' }}>
           <Spin spinning={loading}>
             {reviews.length === 0 ? (
-              <Empty description="暂无评审记录，点击「新建评审」开始" style={{ paddingTop: 40 }} />
+              <Empty description={t('ai_review_empty')} style={{ paddingTop: 40 }} />
             ) : (
               <List
                 dataSource={reviews}
@@ -244,7 +246,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
                     actions={[
                       <Popconfirm
                         key="del"
-                        title="确定删除这条评审记录吗？"
+                        title={t('ai_review_delete_confirm')}
                         onConfirm={(e) => {
                           e?.stopPropagation();
                           handleDelete(review.id);
@@ -264,7 +266,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
                       title={<Text ellipsis={{ tooltip: review.title }}>{review.title}</Text>}
                       description={
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {new Date(review.created_at).toLocaleString()}
+                          {new Date(review.created_at).toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN')}
                         </Text>
                       }
                     />
@@ -278,23 +280,23 @@ ${background ? `业务背景：\n${background}` : ''}`;
         {/* 右侧：评审详情 */}
         <Col span={17} style={{ height: '100%', overflowY: 'auto', paddingLeft: 16 }}>
           {!selectedReview ? (
-            <Empty description="请从左侧选择一条评审记录" style={{ paddingTop: 80 }} />
+            <Empty description={t('ai_review_select')} style={{ paddingTop: 80 }} />
           ) : parsedResult ? (
             <div>
               <Title level={5}>{selectedReview.title}</Title>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {new Date(selectedReview.created_at).toLocaleString()}
+                {new Date(selectedReview.created_at).toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN')}
               </Text>
 
               {parsedResult.summary && (
                 <div style={{ margin: '12px 0', padding: '12px', background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0' }}>
-                  <Text strong>评审摘要：</Text>
+                  <Text strong>{t('ai_review_summary')}</Text>
                   <Paragraph style={{ margin: '4px 0 0' }}>{parsedResult.summary}</Paragraph>
                 </div>
               )}
 
               {parsedResult.issues.length === 0 ? (
-                <Empty description="未发现问题" style={{ marginTop: 40 }} />
+                <Empty description={t('ai_review_no_issues')} style={{ marginTop: 40 }} />
               ) : (
                 Object.entries(grouped).map(([scope, issues]) => (
                   <div key={scope} style={{ marginTop: 16 }}>
@@ -313,7 +315,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
                           }}
                         >
                           <Space>
-                            <Tag color={levelColor(issue.level)}>{levelLabel(issue.level)}</Tag>
+                            <Tag color={levelColor(issue.level)}>{levelLabel(issue.level, t)}</Tag>
                             <Text strong>{issue.title}</Text>
                           </Space>
                           <Paragraph style={{ margin: '6px 0 0', color: '#595959' }}>
@@ -332,7 +334,7 @@ ${background ? `业务背景：\n${background}` : ''}`;
 
       {/* 新建评审 Modal */}
       <Modal
-        title="新建 AI 评审"
+        title={t('ai_review_new_title')}
         open={modalVisible}
         onOk={handleModalOk}
         onCancel={() => {
@@ -342,23 +344,23 @@ ${background ? `业务背景：\n${background}` : ''}`;
           }
         }}
         confirmLoading={reviewing}
-        okText="开始评审"
-        cancelText="取消"
+        okText={t('ai_review_start')}
+        cancelText={t('cancel')}
         width={520}
       >
-        <Spin spinning={reviewing} tip="AI 评审中，请稍候...">
+        <Spin spinning={reviewing} tip={t('ai_review_reviewing')}>
           <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
-            <Form.Item name="title" label="评审标题（可选）">
-              <Input placeholder={`评审 ${new Date().toLocaleString()}`} />
+            <Form.Item name="title" label={t('ai_review_title_label')}>
+              <Input placeholder={t('ai_review_title_placeholder', { date: new Date().toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN') })} />
             </Form.Item>
-            <Form.Item name="background" label="业务背景说明（可选）">
+            <Form.Item name="background" label={t('ai_review_context_label')}>
               <TextArea
                 rows={4}
-                placeholder="请描述业务背景，帮助 AI 更准确地评审设计..."
+                placeholder={t('ai_review_context_placeholder')}
               />
             </Form.Item>
             <Text type="secondary">
-              本次将对项目中共 {tables.length} 张表进行评审，AI 会结合设置中的通用提示词进行分析。
+              {t('ai_review_tables_info', { count: tables.length })}
             </Text>
           </Form>
         </Spin>

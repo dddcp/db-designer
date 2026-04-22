@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Drawer,
   Input,
@@ -145,6 +146,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
   existingIndexes,
   onIndexesCreated,
 }) => {
+  const { t } = useTranslation();
   const [sql, setSql] = useState('');
   const [rowCount, setRowCount] = useState('');
   const [rwRatio, setRwRatio] = useState('');
@@ -169,7 +171,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
       const parsed = JSON.parse(jsonStr);
 
       if (!Array.isArray(parsed)) {
-        throw new Error('AI返回的数据格式不正确，请重试');
+        throw new Error(t('ai_recommend_invalid_format'));
       }
 
       const recs: RecommendedIndex[] = parsed.map((item: any) => ({
@@ -181,10 +183,10 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
 
       setRecommendations(recs);
       setSelectedKeys(recs.map((r) => r.name));
-      message.success(`AI 推荐了 ${recs.length} 个索引`);
+      message.success(t('ai_recommend_success', { count: recs.length }));
     } catch (error: any) {
       console.error('AI推荐索引失败:', error);
-      message.error('AI推荐索引失败: ' + (error.message || error));
+      message.error(t('ai_recommend_fail') + ': ' + (error.message || error));
     } finally {
       setLoading(false);
     }
@@ -199,7 +201,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
   const handleCreate = () => {
     const selected = recommendations.filter((r) => selectedKeys.includes(r.name));
     if (selected.length === 0) {
-      message.warning('请至少选择一个索引');
+      message.warning(t('ai_recommend_select_at_least_one'));
       return;
     }
 
@@ -224,10 +226,10 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
     onCancel();
   };
 
-  const typeMap: Record<string, { color: string; text: string }> = {
-    normal: { color: 'blue', text: '普通索引' },
-    unique: { color: 'green', text: '唯一索引' },
-    fulltext: { color: 'orange', text: '全文索引' },
+  const typeMap: Record<string, { color: string; label: string }> = {
+    normal: { color: 'blue', label: 'idx_type_normal' },
+    unique: { color: 'green', label: 'idx_type_unique' },
+    fulltext: { color: 'orange', label: 'idx_type_fulltext' },
   };
 
   const selectedCount = recommendations.filter((r) => selectedKeys.includes(r.name)).length;
@@ -237,7 +239,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
       title={
         <Space>
           <RobotOutlined />
-          AI 推荐索引 - {selectedTable.displayName}({selectedTable.name})
+          {t('ai_recommend_title', { name: selectedTable.name, displayName: selectedTable.displayName })}
         </Space>
       }
       open={open}
@@ -246,9 +248,9 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
       footer={
         recommendations.length > 0 ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button onClick={handleClose}>取消</Button>
+            <Button onClick={handleClose}>{t('cancel')}</Button>
             <Button type="primary" onClick={handleCreate}>
-              创建选中索引 ({selectedCount})
+              {t('ai_recommend_create', { count: selectedCount })}
             </Button>
           </div>
         ) : null
@@ -256,38 +258,38 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <div>
-          <Text strong>问题 SQL (选填)</Text>
+          <Text strong>{t('ai_recommend_sql')}</Text>
           <TextArea
             value={sql}
             onChange={(e) => setSql(e.target.value)}
-            placeholder="输入需要优化的 SQL..."
+            placeholder={t('ai_recommend_sql_placeholder')}
             rows={4}
             style={{ marginTop: 4 }}
           />
         </div>
 
         <div>
-          <Text strong>业务背景与数据特征 (选填)</Text>
+          <Text strong>{t('ai_recommend_context')}</Text>
           <Row gutter={16} style={{ marginTop: 4 }}>
             <Col span={8}>
               <Input
                 value={rowCount}
                 onChange={(e) => setRowCount(e.target.value)}
-                placeholder="数据量，如：100万"
+                placeholder={t('ai_recommend_data_volume')}
               />
             </Col>
             <Col span={8}>
               <Input
                 value={rwRatio}
                 onChange={(e) => setRwRatio(e.target.value)}
-                placeholder="读写比例，如：读多写少(8:2)"
+                placeholder={t('ai_recommend_rw_ratio')}
               />
             </Col>
             <Col span={8}>
               <Input
                 value={painPoint}
                 onChange={(e) => setPainPoint(e.target.value)}
-                placeholder="性能痛点，如：查询超过2秒"
+                placeholder={t('ai_recommend_pain_point')}
               />
             </Col>
           </Row>
@@ -300,7 +302,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
           loading={loading}
           block
         >
-          {loading ? 'AI 分析中...' : 'AI 推荐'}
+          {loading ? t('ai_recommend_analyzing') : t('ai_recommend_btn')}
         </Button>
 
         {recommendations.length > 0 && (
@@ -321,7 +323,7 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
                       onClick={(e) => e.stopPropagation()}
                     />
                     <Text strong>{rec.name}</Text>
-                    <Tag color={typeInfo.color}>{typeInfo.text}</Tag>
+                    <Tag color={typeInfo.color}>{t(typeInfo.label)}</Tag>
                     {rec.columns.map((col) => (
                       <Tag key={col} color="purple">{col}</Tag>
                     ))}

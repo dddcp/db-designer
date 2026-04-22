@@ -196,10 +196,10 @@ impl DatabaseConnector for MysqlDialect {
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
-        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let _conn = pool
             .get_conn()
-            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
+            .map_err(|e| format!("mysql_connection_failed: {}", e))?;
         Ok(())
     }
 
@@ -217,16 +217,16 @@ impl DatabaseConnector for MysqlDialect {
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
-        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let mut conn = pool
             .get_conn()
-            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
+            .map_err(|e| format!("mysql_connection_failed: {}", e))?;
 
         use mysql::prelude::*;
 
         let tables: Vec<(String, Option<String>)> = conn.query(
             format!("SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{}' AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME", db)
-        ).map_err(|e| format!("查询表失败: {}", e))?;
+        ).map_err(|e| format!("query_tables_failed: {}", e))?;
 
         let mut result = Vec::new();
         for (table_name, table_comment) in &tables {
@@ -235,7 +235,7 @@ impl DatabaseConnector for MysqlDialect {
                     "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_KEY, EXTRA, COLUMN_DEFAULT, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' ORDER BY ORDINAL_POSITION",
                     db, table_name
                 )
-            ).map_err(|e| format!("查询列失败: {}", e))?;
+            ).map_err(|e| format!("query_columns_failed: {}", e))?;
 
             let remote_cols: Vec<RemoteColumn> = columns
                 .into_iter()
@@ -273,7 +273,7 @@ impl DatabaseConnector for MysqlDialect {
                     "SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX, INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' AND INDEX_NAME != 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
                     db, table_name
                 )
-            ).map_err(|e| format!("查询索引失败: {}", e))?;
+            ).map_err(|e| format!("query_indexes_failed: {}", e))?;
 
             let mut idx_map: HashMap<String, (bool, String, Vec<String>)> = HashMap::new();
             for (idx_name, non_unique, col_name, _seq, idx_type) in idx_rows {
@@ -330,10 +330,10 @@ impl DatabaseConnector for MysqlDialect {
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
-        let pool = mysql::Pool::new(opts).map_err(|e| format!("MySQL 连接失败: {}", e))?;
+        let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let mut conn = pool
             .get_conn()
-            .map_err(|e| format!("MySQL 连接失败: {}", e))?;
+            .map_err(|e| format!("mysql_connection_failed: {}", e))?;
 
         use mysql::prelude::*;
 
@@ -345,7 +345,7 @@ impl DatabaseConnector for MysqlDialect {
                 "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '{}' ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
                 db
             )
-        ).map_err(|e| format!("查询编程对象失败: {}", e))?;
+        ).map_err(|e| format!("query_routines_failed: {}", e))?;
 
         for (name, routine_type) in &routine_rows {
             let rtype = if routine_type == "FUNCTION" {
@@ -362,7 +362,7 @@ impl DatabaseConnector for MysqlDialect {
             // SHOW CREATE PROCEDURE 返回的列: Procedure, sql_mode, Create Procedure, ...
             let body: Option<String> = conn
                 .query_first(show_sql)
-                .map_err(|e| format!("获取 {} 定义失败: {}", name, e))?
+                .map_err(|e| format!("get_{}_definition_failed: {}", name, e))?
                 .map(|row: (String, String, String, String, String, String)| row.2);
 
             if let Some(b) = body {
@@ -380,12 +380,12 @@ impl DatabaseConnector for MysqlDialect {
                 "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '{}' ORDER BY TRIGGER_NAME",
                 db
             )
-        ).map_err(|e| format!("查询触发器失败: {}", e))?;
+        ).map_err(|e| format!("query_triggers_failed: {}", e))?;
 
         for (name,) in &trigger_rows {
             let body: Option<String> = conn
                 .query_first(format!("SHOW CREATE TRIGGER `{}`", name))
-                .map_err(|e| format!("获取触发器 {} 定义失败: {}", name, e))?
+                .map_err(|e| format!("get_trigger_{}_definition_failed: {}", name, e))?
                 .map(|row: (String, String, String, String, String, String, String)| row.2);
 
             if let Some(b) = body {
@@ -496,7 +496,7 @@ impl DatabaseConnector for PostgresDialect {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
-            .map_err(|e| format!("TLS 错误: {}", e))?;
+            .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -505,10 +505,10 @@ impl DatabaseConnector for PostgresDialect {
             .password(pass)
             .dbname(db)
             .connect(connector)
-            .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
+            .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
         client
             .simple_query("SELECT 1")
-            .map_err(|e| format!("PostgreSQL 查询失败: {}", e))?;
+            .map_err(|e| format!("postgresql_query_failed: {}", e))?;
         Ok(())
     }
 
@@ -523,7 +523,7 @@ impl DatabaseConnector for PostgresDialect {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
-            .map_err(|e| format!("TLS 错误: {}", e))?;
+            .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -532,12 +532,12 @@ impl DatabaseConnector for PostgresDialect {
             .password(pass)
             .dbname(db)
             .connect(connector)
-            .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
+            .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
 
         let table_rows = client.query(
             "SELECT c.relname, pg_catalog.obj_description(c.oid) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname",
             &[],
-        ).map_err(|e| format!("查询表失败: {}", e))?;
+        ).map_err(|e| format!("query_tables_failed: {}", e))?;
 
         let mut result = Vec::new();
         for row in &table_rows {
@@ -547,7 +547,7 @@ impl DatabaseConnector for PostgresDialect {
             let col_rows = client.query(
                 "SELECT c.column_name, c.data_type, c.character_maximum_length::int, c.is_nullable, COALESCE((SELECT 'PRI' FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name WHERE tc.table_name = c.table_name AND kcu.column_name = c.column_name AND tc.constraint_type = 'PRIMARY KEY'), '') as column_key, c.column_default, pg_catalog.col_description((SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name), c.ordinal_position) FROM information_schema.columns c WHERE c.table_schema = 'public' AND c.table_name = $1 ORDER BY c.ordinal_position",
                 &[&table_name],
-            ).map_err(|e| format!("查询列失败: {}", e))?;
+            ).map_err(|e| format!("query_columns_failed: {}", e))?;
 
             let remote_cols: Vec<RemoteColumn> = col_rows
                 .iter()
@@ -580,7 +580,7 @@ impl DatabaseConnector for PostgresDialect {
             let idx_rows = client.query(
                 "SELECT i.relname as index_name, ix.indisunique, a.attname as column_name, array_position(ix.indkey, a.attnum) as col_pos FROM pg_class t JOIN pg_index ix ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND t.relname = $1 AND NOT ix.indisprimary ORDER BY i.relname, col_pos",
                 &[&table_name],
-            ).map_err(|e| format!("查询索引失败: {}", e))?;
+            ).map_err(|e| format!("query_indexes_failed: {}", e))?;
 
             let mut idx_map: HashMap<String, (bool, Vec<String>)> = HashMap::new();
             for r in &idx_rows {
@@ -631,7 +631,7 @@ impl DatabaseConnector for PostgresDialect {
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
-            .map_err(|e| format!("TLS 错误: {}", e))?;
+            .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
         let mut client = postgres::Config::new()
             .host(host)
@@ -640,7 +640,7 @@ impl DatabaseConnector for PostgresDialect {
             .password(pass)
             .dbname(db)
             .connect(connector)
-            .map_err(|e| format!("PostgreSQL 连接失败: {}", e))?;
+            .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
 
         let mut routines = Vec::new();
 
@@ -656,7 +656,7 @@ impl DatabaseConnector for PostgresDialect {
              ORDER BY kind, p.proname",
                 &[],
             )
-            .map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+            .map_err(|e| format!("query_functions_procedures_failed: {}", e))?;
 
         for row in &func_rows {
             let name: String = row.get(0);
@@ -681,7 +681,7 @@ impl DatabaseConnector for PostgresDialect {
              ORDER BY t.tgname",
                 &[],
             )
-            .map_err(|e| format!("查询触发器失败: {}", e))?;
+            .map_err(|e| format!("query_triggers_failed: {}", e))?;
 
         for row in &trig_rows {
             let name: String = row.get(0);
@@ -822,9 +822,9 @@ impl DatabaseConnector for OracleDialect {
     ) -> Result<(), String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
-            .map_err(|e| format!("Oracle 连接失败: {}", e))?;
+            .map_err(|e| format!("oracle_connection_failed: {}", e))?;
         conn.execute("SELECT 1 FROM dual", &[])
-            .map_err(|e| format!("Oracle 查询失败: {}", e))?;
+            .map_err(|e| format!("oracle_query_failed: {}", e))?;
         Ok(())
     }
 
@@ -838,14 +838,14 @@ impl DatabaseConnector for OracleDialect {
     ) -> Result<Vec<RemoteTable>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
-            .map_err(|e| format!("Oracle 连接失败: {}", e))?;
+            .map_err(|e| format!("oracle_connection_failed: {}", e))?;
 
         // 查询表
         let mut stmt = conn.statement(
             "SELECT table_name, comments FROM user_tab_comments WHERE table_type = 'TABLE' ORDER BY table_name"
-        ).build().map_err(|e| format!("查询表失败: {}", e))?;
+        ).build().map_err(|e| format!("query_tables_failed: {}", e))?;
 
-        let rows = stmt.query(&[]).map_err(|e| format!("查询表失败: {}", e))?;
+        let rows = stmt.query(&[]).map_err(|e| format!("query_tables_failed: {}", e))?;
         let mut result = Vec::new();
 
         // 预查询主键信息：table_name -> Vec<column_name>
@@ -858,15 +858,15 @@ impl DatabaseConnector for OracleDialect {
              ORDER BY cc.table_name, cc.position",
             )
             .build()
-            .map_err(|e| format!("查询主键失败: {}", e))?;
+            .map_err(|e| format!("query_primary_keys_failed: {}", e))?;
         let pk_rows = pk_stmt
             .query(&[])
-            .map_err(|e| format!("查询主键失败: {}", e))?;
+            .map_err(|e| format!("query_primary_keys_failed: {}", e))?;
         let mut pk_map: HashMap<String, Vec<String>> = HashMap::new();
         for row_result in pk_rows {
-            let row = row_result.map_err(|e| format!("读取主键行失败: {}", e))?;
-            let tbl: String = row.get(0).map_err(|e| format!("获取表名失败: {}", e))?;
-            let col: String = row.get(1).map_err(|e| format!("获取列名失败: {}", e))?;
+            let row = row_result.map_err(|e| format!("read_pk_row_failed: {}", e))?;
+            let tbl: String = row.get(0).map_err(|e| format!("get_table_name_failed: {}", e))?;
+            let col: String = row.get(1).map_err(|e| format!("get_column_name_failed: {}", e))?;
             pk_map.entry(tbl).or_default().push(col);
         }
 
@@ -890,8 +890,8 @@ impl DatabaseConnector for OracleDialect {
         }
 
         for row_result in rows {
-            let row = row_result.map_err(|e| format!("读取表行失败: {}", e))?;
-            let table_name: String = row.get(0).map_err(|e| format!("获取表名失败: {}", e))?;
+            let row = row_result.map_err(|e| format!("read_table_row_failed: {}", e))?;
+            let table_name: String = row.get(0).map_err(|e| format!("get_table_name_failed: {}", e))?;
             let table_comment: Option<String> = row.get(1).ok();
 
             let pk_cols = pk_map.get(&table_name);
@@ -905,27 +905,27 @@ impl DatabaseConnector for OracleDialect {
                  LEFT JOIN user_col_comments cc \
                    ON c.table_name = cc.table_name AND c.column_name = cc.column_name \
                  WHERE c.table_name = :1 ORDER BY c.column_id"
-            ).build().map_err(|e| format!("查询列失败: {}", e))?;
+            ).build().map_err(|e| format!("query_columns_failed: {}", e))?;
 
             let col_rows = col_stmt
                 .query(&[&table_name])
-                .map_err(|e| format!("查询列失败: {}", e))?;
+                .map_err(|e| format!("query_columns_failed: {}", e))?;
             let mut remote_cols = Vec::new();
 
             for col_row_result in col_rows {
-                let col_row = col_row_result.map_err(|e| format!("读取列行失败: {}", e))?;
-                let name: String = col_row.get(0).map_err(|e| format!("获取列名失败: {}", e))?;
+                let col_row = col_row_result.map_err(|e| format!("read_column_row_failed: {}", e))?;
+                let name: String = col_row.get(0).map_err(|e| format!("get_column_name_failed: {}", e))?;
                 let data_type: String = col_row
                     .get(1)
-                    .map_err(|e| format!("获取数据类型失败: {}", e))?;
+                    .map_err(|e| format!("get_data_type_failed: {}", e))?;
                 let char_length: Option<u32> = col_row.get(2).ok();
                 let data_precision: Option<u32> = col_row.get(3).ok();
                 let _data_scale: Option<u32> = col_row.get(4).ok();
                 let nullable: String = col_row
                     .get(5)
-                    .map_err(|e| format!("获取nullable失败: {}", e))?;
+                    .map_err(|e| format!("get_nullable_failed: {}", e))?;
                 let default_value: Option<String> = col_row.get(6).ok();
-                let _column_id: u32 = col_row.get(7).map_err(|e| format!("获取列ID失败: {}", e))?;
+                let _column_id: u32 = col_row.get(7).map_err(|e| format!("get_column_id_failed: {}", e))?;
                 let comment: Option<String> = col_row.get(8).ok();
 
                 // 根据类型选择正确的长度
@@ -980,27 +980,27 @@ impl DatabaseConnector for OracleDialect {
                  ORDER BY i.index_name, ic.column_position",
                 )
                 .build()
-                .map_err(|e| format!("查询索引失败: {}", e))?;
+                .map_err(|e| format!("query_indexes_failed: {}", e))?;
 
             let idx_rows = idx_stmt
                 .query(&[&table_name])
-                .map_err(|e| format!("查询索引失败: {}", e))?;
+                .map_err(|e| format!("query_indexes_failed: {}", e))?;
 
             let mut idx_map: HashMap<String, (bool, Vec<String>)> = HashMap::new();
             for idx_row_result in idx_rows {
-                let idx_row = idx_row_result.map_err(|e| format!("读取索引行失败: {}", e))?;
+                let idx_row = idx_row_result.map_err(|e| format!("read_index_row_failed: {}", e))?;
                 let idx_name: String = idx_row
                     .get(0)
-                    .map_err(|e| format!("获取索引名失败: {}", e))?;
+                    .map_err(|e| format!("get_index_name_failed: {}", e))?;
                 let uniqueness: String = idx_row
                     .get(1)
-                    .map_err(|e| format!("获取唯一性失败: {}", e))?;
+                    .map_err(|e| format!("get_uniqueness_failed: {}", e))?;
                 let col_name: String = idx_row
                     .get(2)
-                    .map_err(|e| format!("获取索引列名失败: {}", e))?;
+                    .map_err(|e| format!("get_index_column_name_failed: {}", e))?;
                 let _col_pos: u32 = idx_row
                     .get(3)
-                    .map_err(|e| format!("获取列位置失败: {}", e))?;
+                    .map_err(|e| format!("get_column_position_failed: {}", e))?;
 
                 let entry = idx_map
                     .entry(idx_name)
@@ -1045,7 +1045,7 @@ impl DatabaseConnector for OracleDialect {
     ) -> Result<Vec<RemoteRoutine>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
-            .map_err(|e| format!("Oracle 连接失败: {}", e))?;
+            .map_err(|e| format!("oracle_connection_failed: {}", e))?;
 
         let mut routines = Vec::new();
 
@@ -1055,16 +1055,16 @@ impl DatabaseConnector for OracleDialect {
              FROM user_objects \
              WHERE object_type IN ('FUNCTION', 'PROCEDURE') \
              ORDER BY object_type, object_name"
-        ).build().map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+        ).build().map_err(|e| format!("query_functions_procedures_failed: {}", e))?;
 
         let rows = stmt
             .query(&[])
-            .map_err(|e| format!("查询函数/存储过程失败: {}", e))?;
+            .map_err(|e| format!("query_functions_procedures_failed: {}", e))?;
 
         for row_result in rows {
-            let row = row_result.map_err(|e| format!("读取行失败: {}", e))?;
-            let name: String = row.get(0).map_err(|e| format!("获取对象名失败: {}", e))?;
-            let obj_type: String = row.get(1).map_err(|e| format!("获取对象类型失败: {}", e))?;
+            let row = row_result.map_err(|e| format!("read_row_failed: {}", e))?;
+            let name: String = row.get(0).map_err(|e| format!("get_object_name_failed: {}", e))?;
+            let obj_type: String = row.get(1).map_err(|e| format!("get_object_type_failed: {}", e))?;
             let ddl: Option<String> = row.get(2).ok();
 
             if let Some(body) = ddl {
@@ -1089,15 +1089,15 @@ impl DatabaseConnector for OracleDialect {
              ORDER BY trigger_name",
             )
             .build()
-            .map_err(|e| format!("查询触发器失败: {}", e))?;
+            .map_err(|e| format!("query_triggers_failed: {}", e))?;
 
         let trig_rows = trig_stmt
             .query(&[])
-            .map_err(|e| format!("查询触发器失败: {}", e))?;
+            .map_err(|e| format!("query_triggers_failed: {}", e))?;
 
         for row_result in trig_rows {
-            let row = row_result.map_err(|e| format!("读取触发器行失败: {}", e))?;
-            let name: String = row.get(0).map_err(|e| format!("获取触发器名失败: {}", e))?;
+            let row = row_result.map_err(|e| format!("read_trigger_row_failed: {}", e))?;
+            let name: String = row.get(0).map_err(|e| format!("get_trigger_name_failed: {}", e))?;
             let ddl: Option<String> = row.get(1).ok();
 
             if let Some(body) = ddl {

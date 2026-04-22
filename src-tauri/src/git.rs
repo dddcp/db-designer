@@ -429,7 +429,7 @@ pub fn init_git_repository() -> Result<String, String> {
     let remote = resolve_git_remote(&config)?;
     ensure_origin_remote(&data_dir, &remote.canonical_remote)?;
 
-    Ok("Git 仓库初始化成功".to_string())
+    Ok("git_init_success".to_string())
 }
 
 // Git同步操作
@@ -473,7 +473,7 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
         let stderr = String::from_utf8_lossy(&commit_output.stderr);
         let stdout = String::from_utf8_lossy(&commit_output.stdout);
         if stdout.contains("nothing to commit") || stderr.contains("nothing to commit") {
-            return Ok("没有需要提交的更改".to_string());
+            return Ok("git_nothing_to_commit".to_string());
         }
         return Err(format!("git commit 失败: {}", stderr));
     }
@@ -491,7 +491,7 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
         return Err(format!("git push 失败: {}", stderr));
     }
 
-    Ok("同步成功".to_string())
+    Ok("git_sync_success".to_string())
 }
 
 // 拉取远程数据
@@ -530,5 +530,5 @@ pub fn pull_git_repository() -> Result<String, String> {
         return Err(format!("git reset 失败: {}", stderr));
     }
 
-    Ok("拉取成功。请重启应用后使用！".to_string())
+    Ok("git_pull_success".to_string())
 }

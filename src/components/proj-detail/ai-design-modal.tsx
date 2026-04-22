@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 import type { DatabaseTypeOption, TableDef, IndexDef } from '../../types';
@@ -214,6 +215,7 @@ const buildSystemPrompt = (
 };
 
 const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesGenerated, tables }) => {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedTables, setGeneratedTables] = useState<GeneratedTable[]>([]);
@@ -279,13 +281,13 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      message.warning('请输入需求描述');
+      message.warning(t('ai_design_input_required'));
       return;
     }
 
     setLoading(true);
     try {
-      const typeNames = dataTypes.map(t => t.value);
+      const typeNames = dataTypes.map(dt => dt.value);
       const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
       const commonPrompt = allSettings['ai_design_common_prompt'] || '';
       const existingContext = buildExistingContext(tableContexts);
@@ -294,11 +296,11 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       const parsed = JSON.parse(jsonStr);
 
       if (!Array.isArray(parsed)) {
-        throw new Error('AI返回的数据格式不正确，请重试');
+        throw new Error(t('ai_design_invalid_format'));
       }
 
       if (parsed.length === 0 || !parsed[0].columns) {
-        throw new Error('AI返回的数据格式不正确，请重试');
+        throw new Error(t('ai_design_invalid_format'));
       }
 
       const normalizedTables = parsed.map(table => ({
@@ -319,10 +321,10 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       }));
 
       setGeneratedTables(normalizedTables);
-      message.success(`成功生成 ${normalizedTables.length} 张表`);
+      message.success(t('ai_design_success', { count: normalizedTables.length }));
     } catch (error: any) {
       console.error('AI生成失败:', error);
-      message.error('AI生成失败: ' + (error.message || error));
+      message.error(t('ai_design_fail') + ': ' + (error.message || error));
     } finally {
       setLoading(false);
     }
@@ -354,7 +356,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
   const handleConfirm = () => {
     if (generatedTables.length === 0) {
-      message.warning('没有可用的数据');
+      message.warning(t('ai_design_no_data'));
       return;
     }
     onTablesGenerated(generatedTables);
@@ -370,20 +372,20 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
 
   const colColumns = (tableName: string) => [
     {
-      title: '字段名',
+      title: t('col_name'),
       dataIndex: 'name',
       key: 'name',
       width: 130,
       render: (text: string) => <Text code>{text}</Text>
     },
     {
-      title: '中文名',
+      title: t('col_display_name'),
       dataIndex: 'displayName',
       key: 'displayName',
       width: 120,
     },
     {
-      title: '类型',
+      title: t('col_data_type'),
       key: 'type',
       width: 140,
       render: (_: any, record: GeneratedColumn) => (
@@ -396,32 +398,32 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
             optionFilterProp="children"
             onChange={(val) => handleColumnChange(tableName, record.name, 'type', val)}
           >
-            {dataTypes.map(t => <Option key={t.value} value={t.value}>{t.label}</Option>)}
+            {dataTypes.map(dt => <Option key={dt.value} value={dt.value}>{dt.label}</Option>)}
           </Select>
           {record.length && <Text type="secondary">({record.length})</Text>}
         </Space>
       )
     },
     {
-      title: '属性',
+      title: t('col_attribute'),
       key: 'props',
       width: 200,
       render: (_: any, record: GeneratedColumn) => (
         <Space size={4}>
-          {record.primaryKey && <Tag color="blue">主键</Tag>}
-          {record.autoIncrement && <Tag color="cyan">自增</Tag>}
+          {record.primaryKey && <Tag color="blue">{t('col_primary_key')}</Tag>}
+          {record.autoIncrement && <Tag color="cyan">{t('col_auto_increment')}</Tag>}
           <Switch
             checked={!record.nullable}
             size="small"
-            checkedChildren="非空"
-            unCheckedChildren="可空"
+            checkedChildren={t('col_not_null')}
+            unCheckedChildren="NULL"
             onChange={(checked) => handleColumnChange(tableName, record.name, 'nullable', !checked)}
           />
         </Space>
       )
     },
     {
-      title: '操作',
+      title: t('col_action'),
       key: 'action',
       width: 60,
       render: (_: any, record: GeneratedColumn) => (
@@ -441,7 +443,7 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       title={
         <Space>
           <RobotOutlined />
-          AI 自动设计表结构
+          {t('ai_design_title')}
         </Space>
       }
       open={open}
@@ -450,9 +452,9 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       footer={
         generatedTables.length > 0 ? (
           <Space>
-            <Button onClick={handleClose}>取消</Button>
+            <Button onClick={handleClose}>{t('cancel')}</Button>
             <Button type="primary" icon={<CheckOutlined />} onClick={handleConfirm}>
-              确认创建 ({generatedTables.length} 张表)
+              {t('ai_design_confirm', { count: generatedTables.length })}
             </Button>
           </Space>
         ) : null
@@ -460,23 +462,23 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <div>
-          <Text strong>数据库类型(仅让AI做命名参考)</Text>
+          <Text strong>{t('ai_design_db_type')}</Text>
           <Select
             style={{ width: '100%', marginTop: 4 }}
             value={databaseType}
             onChange={setDatabaseType}
           >
-            {dbTypes.map(t => (
-              <Option key={t.value} value={t.value}>{t.label}</Option>
+            {dbTypes.map(dt => (
+              <Option key={dt.value} value={dt.value}>{dt.label}</Option>
             ))}
           </Select>
         </div>
         <div>
-          <Text strong>需求描述</Text>
+          <Text strong>{t('ai_design_requirement')}</Text>
           <TextArea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="请描述你的需求，例如：设计一个电商系统，包含用户、商品、订单、购物车等模块"
+            placeholder={t('ai_design_requirement_placeholder')}
             rows={4}
             style={{ marginTop: 8 }}
           />
@@ -489,12 +491,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
           loading={loading}
           block
         >
-          {loading ? 'AI 生成中...' : '生成表结构'}
+          {loading ? t('ai_design_generating') : t('ai_design_generate')}
         </Button>
 
         {loading && (
           <div style={{ textAlign: 'center', padding: 20 }}>
-            <Spin tip="正在调用AI生成表结构，请稍候..." />
+            <Spin tip={t('ai_design_tip')} />
           </div>
         )}
 
@@ -507,12 +509,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
                 <Space>
                   <Text strong>{table.displayName}</Text>
                   <Text type="secondary">({table.name})</Text>
-                  <Tag>{table.columns.length} 个字段</Tag>
+                  <Tag>{t('ai_modify_col_count', { count: table.columns.length })}</Tag>
                 </Space>
               ),
               extra: (
                 <Popconfirm
-                  title="确定删除此表吗？"
+                  title={t('ai_design_delete_confirm')}
                   onConfirm={(e) => {
                     e?.stopPropagation();
                     handleDeleteTable(table.name);

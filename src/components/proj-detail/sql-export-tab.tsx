@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -24,6 +25,7 @@ interface SqlExportTabProps {
 }
 
 const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
+  const { t } = useTranslation();
   const [databaseType, setDatabaseType] = useState('mysql');
   const [sqlContent, setSqlContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,7 +51,7 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
       setSqlContent(tableSql + '\n' + routineSql);
     } catch (error) {
       console.error('导出SQL失败:', error);
-      message.error('导出SQL失败: ' + error);
+      message.error(t('sql_export_fail') + ': ' + error);
     } finally {
       setLoading(false);
     }
@@ -58,9 +60,9 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(sqlContent);
-      message.success('已复制到剪贴板');
+      message.success(t('copy_success'));
     } catch {
-      message.error('复制失败');
+      message.error(t('copy_fail'));
     }
   };
 
@@ -68,7 +70,7 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
     <div style={{ padding: '24px' }}>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>SQL 导出</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('sql_export_title')}</Title>
           <Space>
             <Select
               value={databaseType}
@@ -85,20 +87,20 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
               loading={loading}
               onClick={handleExport}
             >
-              生成 SQL
+              {t('sql_export_generate')}
             </Button>
             <Button
               icon={<CopyOutlined />}
               onClick={handleCopy}
               disabled={!sqlContent}
             >
-              复制
+              {t('copy')}
             </Button>
           </Space>
         </div>
 
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-          导出当前项目所有表和编程对象的完整 SQL，包含表结构、索引、元数据和函数/存储过程/触发器。按数据库类型过滤，只导出兼容的编程对象。
+          {t('sql_export_desc')}
         </Text>
 
         <TextArea
@@ -106,7 +108,7 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
           readOnly
           rows={24}
           style={{ fontFamily: 'monospace', fontSize: 13 }}
-          placeholder='选择数据库类型后点击"生成 SQL"...'
+          placeholder={t('sql_export_placeholder')}
         />
       </Card>
     </div>

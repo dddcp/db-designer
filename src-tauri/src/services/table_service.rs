@@ -23,7 +23,7 @@ impl TableService {
 
     pub fn save_table_structure(&self, project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<String, String> {
         self.store.save_table_structure(project_id, table, columns)?;
-        Ok("表结构保存成功".to_string())
+        Ok("table_structure_save_success".to_string())
     }
 
     pub fn get_table_columns(&self, table_id: String) -> Result<Vec<ColumnDef>, String> {
@@ -32,7 +32,7 @@ impl TableService {
 
     pub fn save_table_indexes(&self, table_id: String, indexes: Vec<IndexDef>) -> Result<String, String> {
         self.store.save_table_indexes(&table_id, indexes)?;
-        Ok("索引保存成功".to_string())
+        Ok("index_save_success".to_string())
     }
 
     pub fn get_table_indexes(&self, table_id: String) -> Result<Vec<IndexDef>, String> {
@@ -45,16 +45,16 @@ impl TableService {
 
     pub fn save_init_data(&self, table_id: String, rows: Vec<String>) -> Result<String, String> {
         self.store.save_init_data(&table_id, rows)?;
-        Ok("元数据保存成功".to_string())
+        Ok("init_data_save_success".to_string())
     }
 
     pub fn delete_init_data(&self, id: i64) -> Result<String, String> {
         self.store.delete_init_data(id)?;
-        Ok("元数据删除成功".to_string())
+        Ok("init_data_delete_success".to_string())
     }
 
     pub fn delete_table(&self, table_id: String) -> Result<String, String> {
         self.store.delete_table(&table_id)?;
-        Ok("表删除成功".to_string())
+        Ok("table_delete_success".to_string())
     }
 }

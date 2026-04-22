@@ -39,7 +39,7 @@ impl VersionService {
 
     pub fn delete_version(&self, id: i64) -> Result<String, String> {
         self.store.delete_version(id)?;
-        Ok("版本删除成功".to_string())
+        Ok("version_delete_success".to_string())
     }
 
     pub fn export_version_sql(&self, version_id: i64, database_type: String) -> Result<String, String> {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 import type { TableDef } from '../../types';
@@ -78,6 +79,7 @@ ${columnsDesc}
 };
 
 const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel, selectedTable, onTableModified }) => {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedTable, setGeneratedTable] = useState<GeneratedTable | null>(null);
@@ -89,7 +91,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      message.warning('请输入需求描述');
+      message.warning(t('ai_modify_input_required'));
       return;
     }
 
@@ -104,7 +106,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       const tableObj = Array.isArray(parsed) ? parsed[0] : parsed;
 
       if (!tableObj || !tableObj.columns) {
-        throw new Error('AI返回的数据格式不正确，请重试');
+        throw new Error(t('ai_modify_invalid_format'));
       }
 
       const normalized: GeneratedTable = {
@@ -125,10 +127,10 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       };
 
       setGeneratedTable(normalized);
-      message.success('成功生成修改方案');
+      message.success(t('ai_modify_success'));
     } catch (error: any) {
       console.error('AI生成失败:', error);
-      message.error('AI生成失败: ' + (error.message || error));
+      message.error(t('ai_modify_fail') + ': ' + (error.message || error));
     } finally {
       setLoading(false);
     }
@@ -155,7 +157,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
 
   const handleConfirm = () => {
     if (!generatedTable) {
-      message.warning('没有可用的数据');
+      message.warning(t('ai_modify_no_data'));
       return;
     }
     onTableModified(generatedTable);
@@ -171,20 +173,20 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
 
   const colColumns = [
     {
-      title: '字段名',
+      title: t('col_name'),
       dataIndex: 'name',
       key: 'name',
       width: 130,
       render: (text: string) => <Text code>{text}</Text>
     },
     {
-      title: '中文名',
+      title: t('col_display_name'),
       dataIndex: 'displayName',
       key: 'displayName',
       width: 120,
     },
     {
-      title: '类型',
+      title: t('col_data_type'),
       key: 'type',
       width: 140,
       render: (_: any, record: GeneratedColumn) => (
@@ -197,32 +199,32 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
             optionFilterProp="children"
             onChange={(val) => handleColumnChange(record.name, 'type', val)}
           >
-            {dataTypes.map(t => <Option key={t.value} value={t.value}>{t.label}</Option>)}
+            {dataTypes.map(dt => <Option key={dt.value} value={dt.value}>{dt.label}</Option>)}
           </Select>
           {record.length && <Text type="secondary">({record.length})</Text>}
         </Space>
       )
     },
     {
-      title: '属性',
+      title: t('col_attribute'),
       key: 'props',
       width: 200,
       render: (_: any, record: GeneratedColumn) => (
         <Space size={4}>
-          {record.primaryKey && <Tag color="blue">主键</Tag>}
-          {record.autoIncrement && <Tag color="cyan">自增</Tag>}
+          {record.primaryKey && <Tag color="blue">{t('col_primary_key')}</Tag>}
+          {record.autoIncrement && <Tag color="cyan">{t('col_auto_increment')}</Tag>}
           <Switch
             checked={!record.nullable}
             size="small"
-            checkedChildren="非空"
-            unCheckedChildren="可空"
+            checkedChildren={t('col_not_null')}
+            unCheckedChildren="NULL"
             onChange={(checked) => handleColumnChange(record.name, 'nullable', !checked)}
           />
         </Space>
       )
     },
     {
-      title: '操作',
+      title: t('col_action'),
       key: 'action',
       width: 60,
       render: (_: any, record: GeneratedColumn) => (
@@ -243,7 +245,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       <Space>
         <Text strong>{generatedTable.displayName}</Text>
         <Text type="secondary">({generatedTable.name})</Text>
-        <Tag>{generatedTable.columns.length} 个字段</Tag>
+        <Tag>{t('ai_modify_col_count', { count: generatedTable.columns.length })}</Tag>
       </Space>
     ),
     children: (
@@ -262,7 +264,7 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       title={
         <Space>
           <RobotOutlined />
-          {`AI 修改表结构 - ${selectedTable.displayName}(${selectedTable.name})`}
+          {t('ai_modify_title', { name: selectedTable.name, displayName: selectedTable.displayName })}
         </Space>
       }
       open={open}
@@ -271,9 +273,9 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       footer={
         generatedTable ? (
           <Space>
-            <Button onClick={handleClose}>取消</Button>
+            <Button onClick={handleClose}>{t('cancel')}</Button>
             <Button type="primary" icon={<CheckOutlined />} onClick={handleConfirm}>
-              确认修改
+              {t('ai_modify_confirm')}
             </Button>
           </Space>
         ) : null
@@ -281,11 +283,11 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <div>
-          <Text strong>需求描述</Text>
+          <Text strong>{t('ai_modify_requirement')}</Text>
           <TextArea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="请描述对表的修改需求..."
+            placeholder={t('ai_modify_requirement_placeholder')}
             rows={4}
             style={{ marginTop: 8 }}
           />
@@ -298,12 +300,12 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
           loading={loading}
           block
         >
-          {loading ? 'AI 生成中...' : '生成修改方案'}
+          {loading ? t('ai_modify_generating') : t('ai_modify_generate')}
         </Button>
 
         {loading && (
           <div style={{ textAlign: 'center', padding: 20 }}>
-            <Spin tip="正在调用AI生成修改方案，请稍候..." />
+            <Spin tip={t('ai_modify_tip')} />
           </div>
         )}
 

@@ -26,19 +26,19 @@ impl RoutineService {
 
     pub fn save_routine(&self, routine: RoutineDef) -> Result<String, String> {
         self.store.save_routine(routine)?;
-        Ok("编程对象保存成功".to_string())
+        Ok("routine_save_success".to_string())
     }
 
     pub fn delete_routine(&self, id: String) -> Result<String, String> {
         self.store.delete_routine(&id)?;
-        Ok("编程对象删除成功".to_string())
+        Ok("routine_delete_success".to_string())
     }
 
     pub fn get_remote_routines(&self, connection_id: i32) -> Result<Vec<RemoteRoutine>, String> {
         let connection = self
             .database_connection_service
             .get_database_connection_by_id(connection_id)?
-            .ok_or_else(|| "连接配置不存在".to_string())?;
+            .ok_or_else(|| "connection_not_found".to_string())?;
 
         let connector = get_connector(&connection.r#type);
         connector.get_remote_routines(
@@ -52,7 +52,7 @@ impl RoutineService {
 
     pub fn compare_routines(&self, project_id: i32, remote_routines_json: String, db_type: String) -> Result<Vec<RoutineDiff>, String> {
         let remote_routines: Vec<RemoteRoutine> = serde_json::from_str(&remote_routines_json)
-            .map_err(|e| format!("解析远程编程对象数据失败: {}", e))?;
+            .map_err(|e| format!("parse_remote_routine_failed: {}", e))?;
 
         let local_routines = self.store.get_project_routines_by_db_type(project_id, &db_type)?;
 
@@ -114,7 +114,7 @@ impl RoutineService {
 
     pub fn sync_remote_routine_to_local(&self, project_id: i32, remote_routine_json: String, db_type: String) -> Result<String, String> {
         let remote: RemoteRoutine = serde_json::from_str(&remote_routine_json)
-            .map_err(|e| format!("解析远程编程对象数据失败: {}", e))?;
+            .map_err(|e| format!("parse_remote_routine_failed: {}", e))?;
 
         let routine_id = self
             .store
@@ -141,28 +141,28 @@ impl RoutineService {
         };
 
         self.store.save_routine(routine)?;
-        Ok("同步成功".to_string())
+        Ok("sync_success".to_string())
     }
 
     pub fn export_routines_sql(&self, project_id: i32, database_type: String) -> Result<String, String> {
         let routines = self.store.get_project_routines_by_db_type(project_id, &database_type)?;
 
         if routines.is_empty() {
-            return Ok("-- 项目中暂无编程对象\n".to_string());
+            return Ok("-- no_routines_in_project\n".to_string());
         }
 
         let mut sql = String::new();
-        sql.push_str("-- 编程对象\n\n");
+        sql.push_str("-- routines\n\n");
 
         for routine in &routines {
             let type_label = match routine.r#type.as_str() {
-                "function" => "函数",
-                "procedure" => "存储过程",
-                "trigger" => "触发器",
-                _ => "编程对象",
+                "function" => "Function",
+                "procedure" => "Procedure",
+                "trigger" => "Trigger",
+                _ => "Routine",
             };
             if routine.db_type.is_none() {
-                sql.push_str(&format!("-- {} : {} (未指定数据库类型)\n", type_label, routine.name));
+                sql.push_str(&format!("-- {} : {} (unspecified_db_type)\n", type_label, routine.name));
             } else {
                 sql.push_str(&format!("-- {} : {}\n", type_label, routine.name));
             }

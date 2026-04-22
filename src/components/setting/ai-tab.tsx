@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -13,6 +14,7 @@ import { SaveOutlined } from '@ant-design/icons';
 const { Title, Text } = Typography;
 
 const AiTab: React.FC = () => {
+  const { t } = useTranslation();
   const [aiForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -30,7 +32,7 @@ const AiTab: React.FC = () => {
         ai_design_common_prompt: settings['ai_design_common_prompt'] || '',
       });
     } catch (error) {
-      console.error('加载AI配置失败:', error);
+      console.error(t('ai_config_load_fail'), error);
     }
   };
 
@@ -41,10 +43,10 @@ const AiTab: React.FC = () => {
       await invoke('save_local_setting', { key: 'ai_api_key', value: values.ai_api_key });
       await invoke('save_local_setting', { key: 'ai_model', value: values.ai_model });
       await invoke('save_local_setting', { key: 'ai_design_common_prompt', value: values.ai_design_common_prompt || '' });
-      message.success('AI配置保存成功');
+      message.success(t('ai_save_success'));
     } catch (error) {
-      console.error('保存AI配置失败:', error);
-      message.error('保存AI配置失败');
+      console.error(t('ai_save_fail'), error);
+      message.error(t('ai_save_fail'));
     } finally {
       setLoading(false);
     }
@@ -53,37 +55,37 @@ const AiTab: React.FC = () => {
   return (
     <Form form={aiForm} layout="vertical" onFinish={handleSaveAiConfig}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>AI配置</Title>
+        <Title level={4}>{t('ai_config_title')}</Title>
         <Text type="secondary">
-          兼容所有 OpenAI 格式的 API（通义千问、Deepseek、文心等均可使用）
+          {t('ai_compat_tip')}
         </Text>
 
-        <Form.Item name="ai_base_url" label="API 地址" rules={[{ required: true, message: '请输入API地址' }]}>
-          <Input placeholder="https://api.openai.com" />
+        <Form.Item name="ai_base_url" label={t('ai_base_url')} rules={[{ required: true, message: t('ai_base_url_required') }]}>
+          <Input placeholder={t('ai_base_url_placeholder')} />
         </Form.Item>
 
-        <Form.Item name="ai_api_key" label="API Key" rules={[{ required: true, message: '请输入API Key' }]}>
-          <Input.Password placeholder="请输入API Key" />
+        <Form.Item name="ai_api_key" label={t('ai_api_key')} rules={[{ required: true, message: t('ai_api_key_required') }]}>
+          <Input.Password placeholder={t('ai_api_key_placeholder')} />
         </Form.Item>
 
-        <Form.Item name="ai_model" label="模型名称" rules={[{ required: true, message: '请输入模型名称' }]}>
-          <Input placeholder="gpt-4o" />
+        <Form.Item name="ai_model" label={t('ai_model')} rules={[{ required: true, message: t('ai_model_required') }]}>
+          <Input placeholder={t('ai_model_placeholder')} />
         </Form.Item>
 
-        <Form.Item name="ai_design_common_prompt" label="AI设计通用提示词">
+        <Form.Item name="ai_design_common_prompt" label={t('ai_common_prompt')}>
           <Input.TextArea
             rows={6}
-            placeholder={"例如：\n- 主键默认使用 bigint 自增\n- 每张表尽量包含 creator_id、updater_id\n- 状态字段优先使用 status tinyint\n- 金额字段优先使用 decimal(18,2)"}
+            placeholder={t('ai_common_prompt_placeholder')}
           />
         </Form.Item>
 
         <Text type="secondary">
-          可填写你常用的字段规范、主键偏好、命名习惯、审计字段等默认设计偏好，AI 自动设计表结构时会尽量遵循。
+          {t('ai_common_prompt_desc')}
         </Text>
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} icon={<SaveOutlined />}>
-            保存配置
+            {t('ai_save_config')}
           </Button>
         </Form.Item>
       </Space>

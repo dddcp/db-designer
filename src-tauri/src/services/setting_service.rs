@@ -69,7 +69,7 @@ impl SettingsService {
         self.local_store.save_settings(&settings)?;
         self.setting_store.delete_setting(&key)?;
 
-        Ok("本地设置保存成功".to_string())
+        Ok("local_setting_save_success".to_string())
     }
 
     pub fn delete_local_setting(&self, key: String) -> Result<String, String> {
@@ -82,7 +82,7 @@ impl SettingsService {
         self.local_store.save_settings(&settings)?;
         self.setting_store.delete_setting(&key)?;
 
-        Ok("本地设置删除成功".to_string())
+        Ok("local_setting_delete_success".to_string())
     }
 
     pub fn get_setting(&self, key: String) -> Result<Option<String>, String> {
@@ -91,12 +91,12 @@ impl SettingsService {
 
     pub fn save_setting(&self, key: String, value: String) -> Result<String, String> {
         self.setting_store.save_setting(&key, &value)?;
-        Ok("设置保存成功".to_string())
+        Ok("setting_save_success".to_string())
     }
 
     pub fn delete_setting(&self, key: String) -> Result<String, String> {
         self.setting_store.delete_setting(&key)?;
-        Ok("设置删除成功".to_string())
+        Ok("setting_delete_success".to_string())
     }
 
     pub fn get_all_settings(&self) -> Result<HashMap<String, String>, String> {

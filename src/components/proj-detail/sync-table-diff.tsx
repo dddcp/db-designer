@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import {
   Button,
   message,
@@ -36,15 +37,15 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
   onRefreshDiffs,
   getStatusTag,
 }) => {
+  const { t } = useTranslation();
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
   const [batchSyncing, setBatchSyncing] = useState(false);
 
   const getIndexTypeLabel = (type: string) => {
-    const map: Record<string, string> = { normal: '普通', unique: '唯一', fulltext: '全文' };
+    const map: Record<string, string> = { normal: t('idx_type_normal_short'), unique: t('idx_type_unique_short'), fulltext: t('idx_type_fulltext_short') };
     return map[type] || type;
   };
 
-  // 批量同步选中的表到本地
   const handleBatchSync = async () => {
     if (selectedRowKeys.length === 0) return;
     setBatchSyncing(true);
@@ -92,37 +93,36 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         }
       }
       if (failCount === 0) {
-        message.success(`批量同步完成，共 ${successCount} 张表`);
+        message.success(t('sync_batch_done', { count: successCount }));
       } else {
-        message.warning(`同步完成：成功 ${successCount} 张，失败 ${failCount} 张`);
+        message.warning(t('sync_batch_partial', { success: successCount, fail: failCount }));
       }
       setSelectedRowKeys([]);
       await onRefreshDiffs();
     } catch (error) {
-      message.error('批量同步失败: ' + error);
+      message.error(t('sync_batch_fail') + ': ' + error);
     } finally {
       setBatchSyncing(false);
     }
   };
 
-  // 同步整张远程表到本地
   const handleSyncTable = async (tableName: string) => {
     const key = `table_${tableName}`;
     onSyncingKeysChange(prev => new Set(prev).add(key));
     try {
       const remoteTable = remoteTables.find(t => t.name === tableName);
       if (!remoteTable) {
-        message.error('未找到远程表数据');
+        message.error(t('sync_remote_table_not_found'));
         return;
       }
       await invoke('sync_remote_table_to_local', {
         projectId: project.id,
         remoteTableJson: JSON.stringify(remoteTable),
       });
-      message.success(`表 ${tableName} 同步成功`);
+      message.success(t('sync_table_sync_success', { name: tableName }));
       await onRefreshDiffs();
     } catch (error) {
-      message.error('同步失败: ' + error);
+      message.error(t('sync_sync_failed') + ': ' + error);
     } finally {
       onSyncingKeysChange(prev => {
         const next = new Set(prev);
@@ -132,14 +132,13 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     }
   };
 
-  // 同步差异字段到本地
   const handleSyncColumns = async (tableName: string, columnNames: string[]) => {
     const key = `cols_${tableName}_${columnNames.join(',')}`;
     onSyncingKeysChange(prev => new Set(prev).add(key));
     try {
       const remoteTable = remoteTables.find(t => t.name === tableName);
       if (!remoteTable) {
-        message.error('未找到远程表数据');
+        message.error(t('sync_remote_table_not_found'));
         return;
       }
       await invoke('sync_remote_columns_to_local', {
@@ -148,10 +147,10 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         remoteColumnsJson: JSON.stringify(remoteTable.columns),
         columnNames,
       });
-      message.success('字段同步成功');
+      message.success(t('sync_column_sync_success'));
       await onRefreshDiffs();
     } catch (error) {
-      message.error('同步失败: ' + error);
+      message.error(t('sync_sync_failed') + ': ' + error);
     } finally {
       onSyncingKeysChange(prev => {
         const next = new Set(prev);
@@ -161,14 +160,13 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     }
   };
 
-  // 同步差异索引到本地
   const handleSyncIndexes = async (tableName: string, indexNames: string[]) => {
     const key = `idx_${tableName}_${indexNames.join(',')}`;
     onSyncingKeysChange(prev => new Set(prev).add(key));
     try {
       const remoteTable = remoteTables.find(t => t.name === tableName);
       if (!remoteTable) {
-        message.error('未找到远程表数据');
+        message.error(t('sync_remote_table_not_found'));
         return;
       }
       await invoke('sync_remote_indexes_to_local', {
@@ -177,10 +175,10 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         remoteIndexesJson: JSON.stringify(remoteTable.indexes),
         indexNames,
       });
-      message.success('索引同步成功');
+      message.success(t('sync_index_sync_success'));
       await onRefreshDiffs();
     } catch (error) {
-      message.error('同步失败: ' + error);
+      message.error(t('sync_sync_failed') + ': ' + error);
     } finally {
       onSyncingKeysChange(prev => {
         const next = new Set(prev);
@@ -190,7 +188,6 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     }
   };
 
-  // 表差异汇总
   const diffSummary = {
     total: diffs.length,
     same: diffs.filter(d => d.status === 'same').length,
@@ -201,7 +198,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
 
   const diffColumns = [
     {
-      title: '表名',
+      title: t('sync_table_name'),
       dataIndex: 'table_name',
       key: 'table_name',
       render: (name: string, record: TableDiff) => (
@@ -214,37 +211,37 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
       ),
     },
     {
-      title: '状态',
+      title: t('sync_status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: string) => getStatusTag(status),
     },
     {
-      title: '差异详情',
+      title: t('sync_diff_detail'),
       key: 'detail',
       render: (_: any, record: TableDiff) => {
-        if (record.status === 'same') return <Text type="secondary">结构一致</Text>;
-        if (record.status === 'only_local') return <Text type="success">远程库中不存在，需创建</Text>;
-        if (record.status === 'only_remote') return <Text type="warning">本地设计中不存在</Text>;
+        if (record.status === 'same') return <Text type="secondary">{t('sync_structure_same')}</Text>;
+        if (record.status === 'only_local') return <Text type="success">{t('sync_only_local_create')}</Text>;
+        if (record.status === 'only_remote') return <Text type="warning">{t('sync_only_remote_missing')}</Text>;
         const parts = [];
         const colAdded = record.column_diffs.filter(c => c.status === 'only_local').length;
         const colRemoved = record.column_diffs.filter(c => c.status === 'only_remote').length;
         const colChanged = record.column_diffs.filter(c => c.status === 'different').length;
-        if (colAdded > 0) parts.push(`新增 ${colAdded} 列`);
-        if (colRemoved > 0) parts.push(`远程多 ${colRemoved} 列`);
-        if (colChanged > 0) parts.push(`${colChanged} 列有差异`);
+        if (colAdded > 0) parts.push(t('sync_col_added', { count: colAdded }));
+        if (colRemoved > 0) parts.push(t('sync_col_remote_more', { count: colRemoved }));
+        if (colChanged > 0) parts.push(t('sync_col_diff', { count: colChanged }));
         const idxAdded = record.index_diffs.filter(i => i.status === 'only_local').length;
         const idxRemoved = record.index_diffs.filter(i => i.status === 'only_remote').length;
         const idxChanged = record.index_diffs.filter(i => i.status === 'different').length;
-        if (idxAdded > 0) parts.push(`新增 ${idxAdded} 索引`);
-        if (idxRemoved > 0) parts.push(`远程多 ${idxRemoved} 索引`);
-        if (idxChanged > 0) parts.push(`${idxChanged} 索引有差异`);
-        return <Text>{parts.join('，')}</Text>;
+        if (idxAdded > 0) parts.push(t('sync_idx_added', { count: idxAdded }));
+        if (idxRemoved > 0) parts.push(t('sync_idx_remote_more', { count: idxRemoved }));
+        if (idxChanged > 0) parts.push(t('sync_idx_diff', { count: idxChanged }));
+        return <Text>{parts.join(',')}</Text>;
       },
     },
     {
-      title: '操作',
+      title: t('sync_action'),
       key: 'action',
       width: 160,
       render: (_: any, record: TableDiff) => {
@@ -258,7 +255,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
               loading={syncingKeys.has(key)}
               onClick={() => handleSyncTable(record.table_name)}
             >
-              同步到模型
+              {t('sync_to_model')}
             </Button>
           );
         }
@@ -281,7 +278,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
                 onSyncingKeysChange(prev => new Set(prev).add(key));
                 try {
                   const remoteTable = remoteTables.find(t => t.name === record.table_name);
-                  if (!remoteTable) { message.error('未找到远程表数据'); return; }
+                  if (!remoteTable) { message.error(t('sync_remote_table_not_found')); return; }
                   if (diffCols.length > 0) {
                     await invoke('sync_remote_columns_to_local', {
                       projectId: project.id,
@@ -298,16 +295,16 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
                       indexNames: diffIdxs,
                     });
                   }
-                  message.success('同步成功');
+                  message.success(t('sync_sync_success'));
                   await onRefreshDiffs();
                 } catch (error) {
-                  message.error('同步失败: ' + error);
+                  message.error(t('sync_sync_failed') + ': ' + error);
                 } finally {
                   onSyncingKeysChange(prev => { const n = new Set(prev); n.delete(key); return n; });
                 }
               }}
             >
-              同步全部差异
+              {t('sync_sync_all_diff')}
             </Button>
           );
         }
@@ -316,24 +313,23 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     },
   ];
 
-  // 展开行：列差异 + 索引差异
   const expandedRowRender = (record: TableDiff) => {
     if (record.column_diffs.length === 0 && record.index_diffs.length === 0) return null;
 
     const colDiffColumns = [
-      { title: '列名', dataIndex: 'column_name', key: 'column_name' },
+      { title: t('sync_col_name'), dataIndex: 'column_name', key: 'column_name' },
       {
-        title: '状态',
+        title: t('sync_status'),
         dataIndex: 'status',
         key: 'status',
         width: 100,
         render: (status: string) => getStatusTag(status),
       },
-      { title: '本地类型', dataIndex: 'local_type', key: 'local_type', render: (v: string | null) => v || '-' },
-      { title: '远程类型', dataIndex: 'remote_type', key: 'remote_type', render: (v: string | null) => v || '-' },
-      { title: '说明', dataIndex: 'detail', key: 'detail', render: (v: string | null) => v || '-' },
+      { title: t('sync_local_type'), dataIndex: 'local_type', key: 'local_type', render: (v: string | null) => v || '-' },
+      { title: t('sync_remote_type'), dataIndex: 'remote_type', key: 'remote_type', render: (v: string | null) => v || '-' },
+      { title: t('sync_detail'), dataIndex: 'detail', key: 'detail', render: (v: string | null) => v || '-' },
       {
-        title: '操作',
+        title: t('sync_action'),
         key: 'action',
         width: 100,
         render: (_: any, col: ColumnDiff) => {
@@ -347,7 +343,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
                 loading={syncingKeys.has(key)}
                 onClick={() => handleSyncColumns(record.table_name, [col.column_name])}
               >
-                同步
+                {t('sync_col_sync')}
               </Button>
             );
           }
@@ -357,16 +353,16 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     ];
 
     const idxDiffColumns = [
-      { title: '索引名', dataIndex: 'index_name', key: 'index_name' },
+      { title: t('sync_idx_name'), dataIndex: 'index_name', key: 'index_name' },
       {
-        title: '状态',
+        title: t('sync_status'),
         dataIndex: 'status',
         key: 'status',
         width: 100,
         render: (status: string) => getStatusTag(status),
       },
       {
-        title: '本地',
+        title: t('sync_local'),
         key: 'local_info',
         render: (_: any, idx: IndexDiff) => {
           if (!idx.local_type) return '-';
@@ -374,16 +370,16 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         },
       },
       {
-        title: '远程',
+        title: t('sync_remote'),
         key: 'remote_info',
         render: (_: any, idx: IndexDiff) => {
           if (!idx.remote_type) return '-';
           return <Text>{getIndexTypeLabel(idx.remote_type)} [{idx.remote_columns}]</Text>;
         },
       },
-      { title: '说明', dataIndex: 'detail', key: 'detail', render: (v: string | null) => v || '-' },
+      { title: t('sync_detail'), dataIndex: 'detail', key: 'detail', render: (v: string | null) => v || '-' },
       {
-        title: '操作',
+        title: t('sync_action'),
         key: 'action',
         width: 100,
         render: (_: any, idx: IndexDiff) => {
@@ -397,7 +393,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
                 loading={syncingKeys.has(key)}
                 onClick={() => handleSyncIndexes(record.table_name, [idx.index_name])}
               >
-                同步
+                {t('sync_col_sync')}
               </Button>
             );
           }
@@ -410,7 +406,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         {record.column_diffs.length > 0 && (
           <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>字段对比</Text>
+            <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('sync_column_compare')}</Text>
             <Table
               dataSource={record.column_diffs}
               columns={colDiffColumns}
@@ -422,7 +418,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
         )}
         {record.index_diffs.length > 0 && (
           <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>索引对比</Text>
+            <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('sync_index_compare')}</Text>
             <Table
               dataSource={record.index_diffs}
               columns={idxDiffColumns}
@@ -436,7 +432,6 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     );
   };
 
-  // 可批量选中的行：仅远程和有差异的表
   const canSyncStatuses = new Set(['only_remote', 'different']);
   const rowSelection = {
     selectedRowKeys,
@@ -450,25 +445,21 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     <>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
-          <Text>共 {diffSummary.total} 张表：</Text>
+          <Text>{t('sync_total_tables', { count: diffSummary.total })}：</Text>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            <Text>一致 {diffSummary.same}</Text>
+            <Text>{t('sync_same')} {diffSummary.same}</Text>
           </Space>
-          <Space>
-            <Tag color="green">仅本地 {diffSummary.onlyLocal}</Tag>
-          </Space>
-          <Space>
-            <Tag color="orange">仅远程 {diffSummary.onlyRemote}</Tag>
-          </Space>
+          <Tag color="green">{t('sync_only_local')} {diffSummary.onlyLocal}</Tag>
+          <Tag color="orange">{t('sync_only_remote')} {diffSummary.onlyRemote}</Tag>
           <Space>
             <WarningOutlined style={{ color: '#ff4d4f' }} />
-            <Text>有差异 {diffSummary.different}</Text>
+            <Text>{t('sync_different')} {diffSummary.different}</Text>
           </Space>
         </Space>
         <Space>
           {selectedRowKeys.length > 0 && (
-            <Text type="secondary">已选 {selectedRowKeys.length} 张表</Text>
+            <Text type="secondary">{t('sync_selected_count', { count: selectedRowKeys.length })}</Text>
           )}
           <Button
             type="primary"
@@ -477,7 +468,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
             loading={batchSyncing}
             onClick={handleBatchSync}
           >
-            批量同步到模型
+            {t('sync_batch_to_model')}
           </Button>
         </Space>
       </div>

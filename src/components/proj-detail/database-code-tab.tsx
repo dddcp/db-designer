@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import type { DatabaseTypeOption } from '../../types';
 import {
@@ -26,10 +27,8 @@ interface DatabaseCodeTabProps {
   selectedTable: TableDef | null;
 }
 
-/**
- * 数据库代码生成组件
- */
 const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
+  const { t } = useTranslation();
   const [sqlCode, setSqlCode] = useState('');
   const [databaseType, setDatabaseType] = useState('mysql');
   const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
@@ -38,7 +37,6 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
-  // 当表或数据库类型变化时重新生成代码
   useEffect(() => {
     if (selectedTable) {
       generateSQL();
@@ -47,9 +45,6 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     }
   }, [selectedTable, databaseType]);
 
-  /**
-   * 调用后台生成SQL代码
-   */
   const generateSQL = async () => {
     if (!selectedTable) return;
     try {
@@ -60,26 +55,23 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
       setSqlCode(sql);
     } catch (error) {
       console.error('生成SQL失败:', error);
-      setSqlCode('-- 生成SQL失败');
+      setSqlCode(`-- ${t('db_code_generate_fail')}`);
     }
   };
 
-  /**
-   * 复制SQL代码
-   */
   const handleCopyCode = async () => {
     try {
       await navigator.clipboard.writeText(sqlCode);
-      message.success('SQL代码已复制到剪贴板');
+      message.success(t('copy_success'));
     } catch (error) {
-      message.error('复制失败，请手动复制');
+      message.error(t('copy_fail_manual'));
     }
   };
 
   if (!selectedTable) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text type="secondary">请从左侧选择一个表生成数据库代码</Text>
+        <Text type="secondary">{t('db_code_select_table')}</Text>
       </div>
     );
   }
@@ -90,7 +82,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
         <div style={{ marginBottom: 16 }}>
           <Row gutter={16} align="middle">
             <Col>
-              <Title level={4} style={{ margin: 0 }}>数据库代码</Title>
+              <Title level={4} style={{ margin: 0 }}>{t('db_code_title')}</Title>
             </Col>
             <Col>
               <Select
@@ -111,7 +103,7 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
                   onClick={handleCopyCode}
                   disabled={!sqlCode}
                 >
-                  复制代码
+                  {t('db_code_copy')}
                 </Button>
               </Space>
             </Col>
@@ -127,12 +119,12 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
             fontSize: '14px',
             resize: 'none'
           }}
-          placeholder="选择表后自动生成数据库代码..."
+          placeholder={t('db_code_placeholder')}
         />
 
         <div style={{ marginTop: 16 }}>
           <Text type="secondary">
-            提示：此代码基于当前表结构自动生成，包含表结构、索引和元数据。
+            {t('db_code_tip')}
           </Text>
         </div>
       </Card>

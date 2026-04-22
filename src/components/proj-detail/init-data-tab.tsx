@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -33,16 +34,15 @@ interface InitDataTabProps {
   selectedTable: TableDef | null;
 }
 
-// 一行元数据 = { _key: string, [columnName]: value }
 type DataRow = Record<string, any>;
 
 const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
+  const { t } = useTranslation();
   const [dataRows, setDataRows] = useState<DataRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [filterText, setFilterText] = useState('');
 
-  // 当选中表变化时，从后端加载已保存的元数据
   useEffect(() => {
     if (selectedTable) {
       loadInitData();
@@ -53,11 +53,9 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     setFilterText('');
   }, [selectedTable?.id]);
 
-  // 搜索过滤后的数据
   const filteredRows = dataRows.filter(row => {
     if (!filterText) return true;
     if (!selectedTable) return false;
-    // 仅搜索定义好的列内容
     return selectedTable.columns.some(col => {
       const val = row[col.name];
       if (val === null || val === undefined) return false;
@@ -85,14 +83,12 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     }
   };
 
-  // 添加空行
   const handleAddRow = () => {
     if (!selectedTable) {
-      message.warning('请先选择一个表');
+      message.warning(t('init_data_select_table'));
       return;
     }
     
-    // 如果有搜索内容，清除搜索以便看到新添加的行
     if (filterText) {
       setSearchText('');
       setFilterText('');
@@ -101,7 +97,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     const newRow: DataRow = { _key: `row_${Date.now()}` };
     selectedTable.columns.forEach(col => {
       const type = col.type.toLowerCase();
-      // 判断如果是可NULL且无默认值就是NULL，非NULL且无默认值就空字符串
       const hasDefaultValue = col.defaultValue !== undefined && col.defaultValue !== null && col.defaultValue !== '';
 
       if (col.defaultNull) {
@@ -109,7 +104,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       } else if (hasDefaultValue) {
         newRow[col.name] = col.defaultValue;
       } else {
-        // 如果是日期类型且无默认值，默认为当前时间
         if (['datetime', 'timestamp'].includes(type)) {
           newRow[col.name] = dayjs().format('YYYY-MM-DD HH:mm:ss');
         } else if (type === 'date') {
@@ -126,31 +120,25 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     setDataRows([newRow, ...dataRows]);
   };
 
-  // 修改单元格
   const handleCellChange = (rowKey: string, columnName: string, value: any) => {
     setDataRows(dataRows.map(row =>
       row._key === rowKey ? { ...row, [columnName]: value } : row
     ));
   };
 
-  // 删除行
   const handleDeleteRow = (rowKey: string) => {
     setDataRows(dataRows.filter(row => row._key !== rowKey));
   };
 
-  // 保存到后端
   const handleSave = async () => {
     if (!selectedTable) return;
 
-    // 获取主键字段
     const pkColumns = selectedTable.columns.filter(c => c.primaryKey);
     const pkSet = new Set<string>();
 
-    // 验证数据规则
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
       
-      // 1. 主键校验 (非空且唯一)
       if (pkColumns.length > 0) {
         const pkValues = pkColumns.map(col => {
           const val = row[col.name];
@@ -162,20 +150,18 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
 
         const hasNullPk = pkValues.some(v => v === null);
         if (hasNullPk) {
-          // 校验所有为空的主键字段（自增字段允许为空，其余不允许）
           for (let j = 0; j < pkValues.length; j++) {
             if (pkValues[j] === null && !pkColumns[j].autoIncrement) {
-              message.error(`第 ${i + 1} 行主键字段 "${pkColumns[j].displayName}" 不能为空`);
+              message.error(t('init_data_pk_not_null', { row: i + 1, column: pkColumns[j].displayName }));
               return;
             }
           }
         }
 
-        // 仅对所有主键均有值的行进行唯一性校验
         if (!hasNullPk) {
           const pkKey = pkValues.join('|');
           if (pkSet.has(pkKey)) {
-            message.error(`第 ${i + 1} 行主键冲突: [${pkValues.join(', ')}] 已存在`);
+            message.error(t('init_data_pk_conflict', { row: i + 1, values: pkValues.join(', ') }));
             return;
           }
           pkSet.add(pkKey);
@@ -185,63 +171,54 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       for (const col of selectedTable.columns) {
         const value = row[col.name];
         
-        // 2. 非空校验 (非主键字段的非空校验)
         if (!col.primaryKey && !col.nullable) {
           if (value === null || value === undefined) {
-            message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空 (NULL)`);
+            message.error(t('init_data_not_null', { row: i + 1, column: col.displayName }));
             return;
           }
-          // 数值类型不允许空字符串
           const type = col.type.toLowerCase();
           if (['int', 'integer', 'bigint', 'smallint', 'tinyint', 'decimal', 'float', 'double', 'numeric'].includes(type)) {
             if (String(value).trim() === '') {
-              message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空`);
+              message.error(t('init_data_must_integer', { row: i + 1, column: col.displayName }));
               return;
             }
           }
         }
 
-        // 3. 类型与规则校验
         if (value !== null && value !== undefined) {
           const type = col.type.toLowerCase();
           const strVal = String(value);
 
-          // 时间类型非空字符串校验 (无论是否可 NULL，只要有值就不能是空字符串)
           if (['datetime', 'timestamp', 'date', 'time'].includes(type)) {
             if (strVal.trim() === '') {
-              message.error(`第 ${i + 1} 行 "${col.displayName}" 格式错误：时间不能为空字符串`);
+              message.error(t('init_data_time_empty', { row: i + 1, column: col.displayName }));
               return;
             }
           }
 
-          // 字符串类型非空字符串校验 (仅针对非 NULL 字段)
           if (['varchar', 'char', 'text', 'string'].includes(type)) {
             if (!col.nullable && strVal.trim() === '') {
-              message.error(`第 ${i + 1} 行 "${col.displayName}" 不能为空字符串`);
+              message.error(t('init_data_empty_string', { row: i + 1, column: col.displayName }));
               return;
             }
           }
 
-          // 其他类型校验 (需要排除空字符串，因为空字符串在上面已经处理或允许)
           if (strVal !== '') {
-            // 整数校验
             if (['int', 'integer', 'bigint', 'smallint', 'tinyint'].includes(type)) {
               if (isNaN(Number(value)) || !Number.isInteger(Number(value))) {
-                message.error(`第 ${i + 1} 行 "${col.displayName}" 必须是整数`);
+                message.error(t('init_data_must_integer', { row: i + 1, column: col.displayName }));
                 return;
               }
             } 
-            // 数字校验
             else if (['decimal', 'float', 'double', 'numeric'].includes(type)) {
               if (isNaN(Number(value))) {
-                message.error(`第 ${i + 1} 行 "${col.displayName}" 必须是数字`);
+                message.error(t('init_data_must_number', { row: i + 1, column: col.displayName }));
                 return;
               }
             }
-            // 长度校验 (字符串类型)
             else if (['varchar', 'char', 'text', 'string'].includes(type)) {
               if (col.length && strVal.length > col.length) {
-                message.error(`第 ${i + 1} 行 "${col.displayName}" 长度超出限制 (最大 ${col.length})`);
+                message.error(t('init_data_length_exceed', { row: i + 1, column: col.displayName, max: col.length }));
                 return;
               }
             }
@@ -251,7 +228,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     }
 
     try {
-      // 将每行数据转为 JSON（去掉 _key）
       const rowJsons = dataRows.map(row => {
         const { _key, ...rest } = row;
         return JSON.stringify(rest);
@@ -260,17 +236,16 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         tableId: selectedTable.id,
         rows: rowJsons,
       });
-      message.success('元数据保存成功');
+      message.success(t('init_data_save_success'));
     } catch (error) {
       console.error('保存元数据失败:', error);
-      message.error('保存元数据失败');
+      message.error(t('init_data_save_fail'));
     }
   };
 
-  // Excel 导入
   const handleImportExcel = (file: File) => {
     if (!selectedTable) {
-      message.warning('请先选择一个表');
+      message.warning(t('init_data_select_table'));
       return false;
     }
 
@@ -283,7 +258,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         const jsonData: Record<string, any>[] = XLSX.utils.sheet_to_json(firstSheet);
 
         if (jsonData.length === 0) {
-          message.warning('Excel 文件中没有数据');
+          message.warning(t('init_data_excel_empty'));
           return;
         }
 
@@ -293,20 +268,16 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           let d: dayjs.Dayjs | null = null;
 
           if (rawValue instanceof Date) {
-            // cellDates: true 解析出的 JS Date 对象
             d = dayjs(rawValue);
           } else if (typeof rawValue === 'number') {
-            // Excel 日期序列号（如 45985.4667592593）
-            // Excel 序列号起始日期为 1899-12-30，需加 Excel 1900 闰年 bug 修正
             const excelEpoch = dayjs('1899-12-30');
             d = excelEpoch.add(rawValue, 'day');
           } else if (typeof rawValue === 'string' && rawValue.trim() !== '') {
-            // 字符串格式的日期，尝试解析
             const parsed = dayjs(rawValue);
             if (parsed.isValid()) {
               d = parsed;
             } else {
-              return rawValue; // 无法解析，原样返回
+              return rawValue;
             }
           }
 
@@ -317,7 +288,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           return d.format('YYYY-MM-DD HH:mm:ss');
         };
 
-        // 将 Excel 列名映射到表字段
         const importedRows: DataRow[] = jsonData.map((excelRow, idx) => {
           const row: DataRow = { _key: `import_${idx}_${Date.now()}` };
           selectedTable!.columns.forEach(col => {
@@ -327,7 +297,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
                 ? excelRow[col.displayName]
                 : undefined;
 
-            // 导入excel的时候如果字段是NULL，判断是否可以为NULL插入值，不要将NULL的字符串写入
             if (rawValue === undefined || rawValue === null || String(rawValue).toUpperCase() === 'NULL') {
               if (col.nullable) {
                 row[col.name] = null;
@@ -348,35 +317,30 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         });
 
         setDataRows([...dataRows, ...importedRows]);
-        message.success(`成功导入 ${importedRows.length} 条数据`);
+        message.success(t('init_data_import_success', { count: importedRows.length }));
       } catch (err) {
         console.error('Excel解析失败:', err);
-        message.error('Excel 文件解析失败');
+        message.error(t('init_data_parse_fail'));
       }
     };
     reader.readAsArrayBuffer(file);
 
-    return false; // 阻止 antd Upload 默认上传
+    return false;
   };
 
-  // 根据列类型渲染编辑控件
   const renderCellEditor = (col: ColumnDef, value: any, rowKey: string) => {
     const type = col.type.toLowerCase();
     const isNull = value === null;
 
-    // 当点击 NULL 图标时切换 NULL 状态
     const handleSetNull = (e: React.MouseEvent) => {
       e.stopPropagation();
       if (isNull) {
-        // 取消 NULL 状态，直接设置为空
         handleCellChange(rowKey, col.name, '');
       } else {
-        // 设置为 NULL
         handleCellChange(rowKey, col.name, null);
       }
     };
 
-    // 渲染 NULL 图标
     const renderNullIcon = () => {
       if (!col.nullable) return null;
       return (
@@ -384,7 +348,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           type="text"
           size="small"
           onClick={handleSetNull}
-          title={isNull ? "点击取消 NULL" : "点击设置为 NULL"}
+          title={isNull ? t('init_data_null_toggle') : t('init_data_set_null')}
           style={{ 
             color: isNull ? '#ff4d4f' : '#bfbfbf',
             padding: '0 4px',
@@ -410,7 +374,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
             backgroundColor: 'rgba(255, 77, 79, 0.05)'
           }}
           onClick={() => {
-            // 点击 NULL 文本时也直接设置为空
             handleCellChange(rowKey, col.name, '');
           }}
         />
@@ -449,7 +412,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         <DatePicker
           showTime
           size="small"
-          allowClear={false} // 去掉清除按钮
+          allowClear={false}
           value={value ? dayjs(value) : null}
           onChange={(_d, dateStr) => handleCellChange(rowKey, col.name, dateStr as string)}
           style={{ width: '100%' }}
@@ -461,7 +424,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       editor = (
         <DatePicker
           size="small"
-          allowClear={false} // 去掉清除按钮
+          allowClear={false}
           value={value ? dayjs(value) : null}
           onChange={(_d, dateStr) => handleCellChange(rowKey, col.name, dateStr as string)}
           style={{ width: '100%' }}
@@ -473,7 +436,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       editor = (
         <TimePicker
           size="small"
-          allowClear={false} // 去掉清除按钮
+          allowClear={false}
           value={value ? dayjs(value, 'HH:mm:ss') : null}
           onChange={(_t, timeStr) => handleCellChange(rowKey, col.name, timeStr as string)}
           style={{ width: '100%' }}
@@ -482,7 +445,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
         />
       );
     } else {
-      // 默认文本输入
       editor = (
         <Input
           size="small"
@@ -501,7 +463,6 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
     );
   };
 
-  // 动态生成表格列
   const buildColumns = () => {
     if (!selectedTable) return [];
 
@@ -519,14 +480,13 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       render: (value: any, record: DataRow) => renderCellEditor(col, value, record._key),
     }));
 
-    // 操作列
     cols.push({
-      title: '操作',
+      title: t('col_action'),
       key: '_action',
       width: 60,
       fixed: 'right' as const,
       render: (_: any, record: DataRow) => (
-        <Popconfirm title="确定删除此行？" onConfirm={() => handleDeleteRow(record._key)}>
+        <Popconfirm title={t('init_data_delete_row')} okText={t('confirm')} cancelText={t('cancel')} onConfirm={() => handleDeleteRow(record._key)}>
           <Button type="text" danger size="small" icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -538,7 +498,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
   if (!selectedTable) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text type="secondary">请从左侧选择一个表管理元数据</Text>
+        <Text type="secondary">{t('init_data_select_table_first')}</Text>
       </div>
     );
   }
@@ -546,7 +506,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
   if (selectedTable.columns.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text type="secondary">当前表尚未定义字段，请先在"表结构"中添加字段</Text>
+        <Text type="secondary">{t('init_data_no_columns')}</Text>
       </div>
     );
   }
@@ -556,9 +516,9 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Title level={4} style={{ margin: 0 }}>元数据管理</Title>
+            <Title level={4} style={{ margin: 0 }}>{t('init_data_title')}</Title>
             <Input
-              placeholder="搜索所有字段（回车搜索）"
+              placeholder={t('init_data_search')}
               prefix={<SearchOutlined />}
               allowClear
               value={searchText}
@@ -578,21 +538,21 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
               showUploadList={false}
               beforeUpload={handleImportExcel}
             >
-              <Button icon={<UploadOutlined />}>导入 Excel</Button>
+              <Button icon={<UploadOutlined />}>{t('init_data_import_excel')}</Button>
             </Upload>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={handleAddRow}
             >
-              添加行
+              {t('init_data_add_row')}
             </Button>
             <Button
               type="primary"
               icon={<SaveOutlined />}
               onClick={handleSave}
             >
-              保存
+              {t('save')}
             </Button>
           </Space>
         </div>
@@ -603,7 +563,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
           pagination={{ 
             pageSize: 10,
             showSizeChanger: false,
-            showTotal: (total) => `共 ${total} 条`
+            showTotal: (total) => t('init_data_total', { total })
           }}
           rowKey="_key"
           size="small"
@@ -613,7 +573,7 @@ const InitDataTab: React.FC<InitDataTabProps> = ({ selectedTable }) => {
             emptyText: (
               <div style={{ textAlign: 'center', padding: 40 }}>
                 <Text type="secondary">
-                  {filterText ? '未找到匹配结果' : '暂无数据，点击"添加行"或"导入 Excel"开始'}
+                  {filterText ? t('init_data_not_found') : t('init_data_empty_data')}
                 </Text>
               </div>
             ),

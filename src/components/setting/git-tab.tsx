@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { translateBackendMessage } from '../../i18n/backend-messages';
 import {
   Button,
   Form,
@@ -44,6 +46,7 @@ const GIT_SETTING_KEYS = [
 ] as const;
 
 const GitTab: React.FC = () => {
+  const { t } = useTranslation();
   const [gitForm] = Form.useForm<GitFormValues>();
   const [loading, setLoading] = useState(false);
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
@@ -101,7 +104,7 @@ const GitTab: React.FC = () => {
       gitForm.setFieldsValue(nextValues);
       setGitConfigSaved(isGitConfigComplete(nextValues));
     } catch (error) {
-      console.error('加载Git配置失败:', error);
+      console.error(t('git_config_load_fail'), error);
     }
   };
 
@@ -126,11 +129,11 @@ const GitTab: React.FC = () => {
     setLoading(true);
     try {
       await persistGitConfig(values);
-      message.success('Git配置保存成功');
+      message.success(t('git_save_success'));
       setGitConfigSaved(isGitConfigComplete(values));
     } catch (error) {
-      console.error('保存Git配置失败:', error);
-      message.error(`保存Git配置失败: ${error}`);
+      console.error(t('git_save_fail'), error);
+      message.error(`${t('git_save_fail')}: ${error}`);
     } finally {
       setLoading(false);
     }
@@ -143,10 +146,10 @@ const GitTab: React.FC = () => {
       await persistGitConfig(values);
       setGitConfigSaved(isGitConfigComplete(values));
       const result = await invoke<string>('init_git_repository');
-      message.success(result);
+      message.success(translateBackendMessage(result));
     } catch (error) {
-      console.error('Git仓库初始化失败:', error);
-      message.error(`Git仓库初始化失败: ${error}`);
+      console.error(t('git_init_repo_fail'), error);
+      message.error(`${t('git_init_fail')}: ${error}`);
     } finally {
       setLoading(false);
     }
@@ -169,10 +172,10 @@ const GitTab: React.FC = () => {
         token: '',
       });
       setGitConfigSaved(false);
-      message.success('Git配置已清除');
+      message.success(t('git_config_cleared'));
     } catch (error) {
-      console.error('清除Git配置失败:', error);
-      message.error('清除Git配置失败');
+      console.error(t('git_clear_fail'), error);
+      message.error(t('git_clear_fail'));
     } finally {
       setLoading(false);
     }
@@ -192,16 +195,16 @@ const GitTab: React.FC = () => {
       onValuesChange={(_, allValues) => setGitConfigSaved(isGitConfigComplete(allValues))}
     >
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>Git仓库配置</Title>
+        <Title level={4}>{t('git_config_title')}</Title>
 
         <Form.Item
           name="remoteMode"
-          label="远程配置方式"
-          rules={[{ required: true, message: '请选择远程配置方式' }]}
+          label={t('git_remote_mode')}
+          rules={[{ required: true, message: t('git_remote_mode_required') }]}
         >
           <Radio.Group>
-            <Radio.Button value="preset">平台预设</Radio.Button>
-            <Radio.Button value="custom">自定义远程地址</Radio.Button>
+            <Radio.Button value="preset">{t('git_preset')}</Radio.Button>
+            <Radio.Button value="custom">{t('git_custom_url')}</Radio.Button>
           </Radio.Group>
         </Form.Item>
 
@@ -215,10 +218,10 @@ const GitTab: React.FC = () => {
                 <>
                   <Form.Item
                     name="platform"
-                    label="Git平台"
-                    rules={[{ required: true, message: '请选择Git平台' }]}
+                    label={t('git_platform')}
+                    rules={[{ required: true, message: t('git_platform_required') }]}
                   >
-                    <Select placeholder="请选择Git平台">
+                    <Select placeholder={t('git_platform_placeholder')}>
                       <Option value="github">GitHub</Option>
                       <Option value="gitlab">GitLab</Option>
                       <Option value="gitee">Gitee</Option>
@@ -229,26 +232,26 @@ const GitTab: React.FC = () => {
                   {platform === 'gitea' && (
                     <Form.Item
                       name="baseUrl"
-                      label="Gitea服务地址"
+                      label={t('git_base_url')}
                       rules={[
-                        { required: true, message: '请输入Gitea服务地址' },
-                        { pattern: /^https?:\/\//, message: 'Gitea服务地址必须以 http:// 或 https:// 开头' },
+                        { required: true, message: t('git_base_url_required') },
+                        { pattern: /^https?:\/\//, message: t('git_base_url_invalid') },
                       ]}
                     >
-                      <Input placeholder="例如：http://git.example.com 或 https://git.example.com" />
+                      <Input placeholder={t('git_base_url_placeholder')} />
                     </Form.Item>
                   )}
 
                   <Form.Item
                     name="repository"
-                    label="仓库路径"
+                    label={t('git_repository')}
                     rules={[
-                      { required: true, message: '请输入仓库路径' },
-                      { pattern: /^[^/\s]+\/[^/\s]+$/, message: '仓库路径格式必须为 owner/repo' },
+                      { required: true, message: t('git_repository_required') },
+                      { pattern: /^[^/\s]+\/[^/\s]+$/, message: t('git_repository_invalid') },
                     ]}
-                    extra="格式：owner/repo，例如 octocat/hello-world"
+                    extra={t('git_repository_extra')}
                   >
-                    <Input placeholder="例如：owner/repo" />
+                    <Input placeholder={t('git_repository_placeholder')} />
                   </Form.Item>
                 </>
               );
@@ -257,9 +260,9 @@ const GitTab: React.FC = () => {
             return (
               <Form.Item
                 name="remoteUrl"
-                label="远程地址"
+                label={t('git_remote_url')}
                 rules={[
-                  { required: true, message: '请输入远程地址' },
+                  { required: true, message: t('git_remote_url_required') },
                   () => ({
                     validator(_, value) {
                       const authType = getFieldValue('authType') || 'token';
@@ -270,16 +273,16 @@ const GitTab: React.FC = () => {
                       if (authType === 'ssh') {
                         return /^(git@|ssh:\/\/)/.test(input)
                           ? Promise.resolve()
-                          : Promise.reject(new Error('SSH 认证需要使用 git@ 或 ssh:// 地址'));
+                          : Promise.reject(new Error(t('git_ssh_url_error')));
                       }
                       return /^https?:\/\//.test(input)
                         ? Promise.resolve()
-                        : Promise.reject(new Error('Token 认证仅支持 HTTP/HTTPS 地址'));
+                        : Promise.reject(new Error(t('git_token_url_error')));
                     },
                   }),
                 ]}
               >
-                <Input placeholder="例如：https://git.example.com/owner/repo.git 或 git@git.example.com:owner/repo.git" />
+                <Input placeholder={t('git_remote_url_placeholder')} />
               </Form.Item>
             );
           }}
@@ -287,8 +290,8 @@ const GitTab: React.FC = () => {
 
         <Form.Item
           name="authType"
-          label="认证方式"
-          rules={[{ required: true, message: '请选择认证方式' }]}
+          label={t('git_auth_type')}
+          rules={[{ required: true, message: t('git_auth_type_required') }]}
         >
           <Radio.Group>
             <Radio.Button value="token">Token</Radio.Button>
@@ -306,7 +309,7 @@ const GitTab: React.FC = () => {
             if (authType === 'ssh') {
               return (
                 <Form.Item>
-                  <Text type="secondary">SSH 模式将使用系统 Git 的 SSH 配置与密钥。</Text>
+                  <Text type="secondary">{t('git_ssh_mode_tip')}</Text>
                 </Form.Item>
               );
             }
@@ -316,20 +319,20 @@ const GitTab: React.FC = () => {
                 {showUsername && (
                   <Form.Item
                     name="username"
-                    label="用户名"
-                    rules={[{ required: true, message: '请输入用户名' }]}
-                    extra={remoteMode === 'custom' ? '自定义远程在 Token 模式下需要提供用户名。' : 'Gitea Token 模式需要提供用户名。'}
+                    label={t('git_username')}
+                    rules={[{ required: true, message: t('git_username_placeholder') }]}
+                    extra={remoteMode === 'custom' ? t('git_username_custom_tip') : t('git_username_gitea_tip')}
                   >
-                    <Input placeholder="请输入用户名" />
+                    <Input placeholder={t('git_username_placeholder')} />
                   </Form.Item>
                 )}
 
                 <Form.Item
                   name="token"
-                  label="访问令牌"
-                  rules={[{ required: true, message: '请输入访问令牌' }]}
+                  label={t('git_token')}
+                  rules={[{ required: true, message: t('git_token_required') }]}
                 >
-                  <Input.Password placeholder="请输入Git访问令牌" />
+                  <Input.Password placeholder={t('git_token_placeholder')} />
                 </Form.Item>
               </>
             );
@@ -344,7 +347,7 @@ const GitTab: React.FC = () => {
               loading={loading}
               icon={<SaveOutlined />}
             >
-              保存配置
+              {t('git_save_config')}
             </Button>
             <Button
               type="default"
@@ -352,14 +355,14 @@ const GitTab: React.FC = () => {
               onClick={handleInitGitRepository}
               disabled={!gitConfigSaved}
             >
-              初始化仓库
+              {t('git_init_repo')}
             </Button>
             <Popconfirm
-              title="确定要清除Git配置吗？"
-              description="清除后将无法进行Git同步"
+              title={t('git_clear_confirm')}
+              description={t('git_clear_desc')}
               onConfirm={handleClearGitConfig}
-              okText="确定"
-              cancelText="取消"
+              okText={t('confirm')}
+              cancelText={t('cancel')}
             >
               <Button
                 type="default"
@@ -367,7 +370,7 @@ const GitTab: React.FC = () => {
                 icon={<DeleteOutlined />}
                 disabled={!gitConfigSaved}
               >
-                清除配置
+                {t('git_clear_config')}
               </Button>
             </Popconfirm>
           </Space>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Card,
@@ -34,7 +35,6 @@ interface IndexTabProps {
   tables: TableDef[];
 }
 
-// 后端索引数据结构
 interface BackendIndexDef {
   id: string;
   table_id: string;
@@ -44,17 +44,14 @@ interface BackendIndexDef {
   fields: Array<{ column_id: string; sort_order: number }>;
 }
 
-/**
- * 索引管理组件
- */
 const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
+  const { t } = useTranslation();
   const [indexes, setIndexes] = useState<IndexDef[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingIndex, setEditingIndex] = useState<IndexDef | null>(null);
   const [isAiRecommendVisible, setIsAiRecommendVisible] = useState(false);
   const [form] = Form.useForm();
 
-  // 加载索引
   useEffect(() => {
     if (selectedTable) {
       loadIndexes();
@@ -87,9 +84,6 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
     }
   };
 
-  /**
-   * 将索引列表保存到后端
-   */
   const saveIndexesToBackend = async (newIndexes: IndexDef[]) => {
     if (!selectedTable) return;
     try {
@@ -110,16 +104,13 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
       });
     } catch (error) {
       console.error('保存索引失败:', error);
-      message.error('保存索引失败');
+      message.error(t('idx_save_fail'));
     }
   };
 
-  /**
-   * 添加索引
-   */
   const handleAddIndex = () => {
     if (!selectedTable) {
-      message.warning('请先选择一个表');
+      message.warning(t('idx_select_table'));
       return;
     }
     setEditingIndex(null);
@@ -127,9 +118,6 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
     setIsModalVisible(true);
   };
 
-  /**
-   * 编辑索引
-   */
   const handleEditIndex = (index: IndexDef) => {
     setEditingIndex(index);
     form.setFieldsValue({
@@ -141,26 +129,20 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
     setIsModalVisible(true);
   };
 
-  /**
-   * 删除索引（直接保存）
-   */
   const handleDeleteIndex = async (indexId: string) => {
     const newIndexes = indexes.filter(index => index.id !== indexId);
     setIndexes(newIndexes);
     await saveIndexesToBackend(newIndexes);
-    message.success('索引删除成功');
+    message.success(t('idx_delete_success'));
   };
 
-  /**
-   * 新建/编辑索引后保存（直接保存到后端）
-   */
   const handleSaveIndex = async (values: any) => {
     const invalidColumns = values.columns.filter((columnName: string) =>
       !selectedTable?.columns.some(col => col.name === columnName)
     );
 
     if (invalidColumns.length > 0) {
-      message.error(`以下字段不存在: ${invalidColumns.join(', ')}`);
+      message.error(t('idx_invalid_columns', { columns: invalidColumns.join(', ') }));
       return;
     }
 
@@ -182,33 +164,32 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
     setIndexes(newIndexes);
     setIsModalVisible(false);
     await saveIndexesToBackend(newIndexes);
-    message.success(editingIndex ? '索引更新成功' : '索引创建成功');
+    message.success(editingIndex ? t('idx_update_success') : t('idx_create_success'));
   };
 
-  // 索引列定义
   const indexColumns = [
     {
-      title: '索引名称',
+      title: t('idx_name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
-      title: '类型',
+      title: t('idx_type'),
       dataIndex: 'type',
       key: 'type',
       render: (type: string) => {
-        const typeMap = {
-          normal: { color: 'blue', text: '普通索引' },
-          unique: { color: 'green', text: '唯一索引' },
-          fulltext: { color: 'orange', text: '全文索引' }
+        const typeMap: Record<string, { color: string; text: string }> = {
+          normal: { color: 'blue', text: t('idx_type_normal') },
+          unique: { color: 'green', text: t('idx_type_unique') },
+          fulltext: { color: 'orange', text: t('idx_type_fulltext') }
         };
-        const config = typeMap[type as keyof typeof typeMap] || typeMap.normal;
+        const config = typeMap[type] || typeMap.normal;
         return <Tag color={config.color}>{config.text}</Tag>;
       },
     },
     {
-      title: '包含列',
+      title: t('idx_columns'),
       dataIndex: 'columns',
       key: 'columns',
       render: (columns: string[]) => (
@@ -220,13 +201,13 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
       ),
     },
     {
-      title: '说明',
+      title: t('idx_comment'),
       dataIndex: 'comment',
       key: 'comment',
       render: (text: string) => <Text type="secondary">{text || '-'}</Text>,
     },
     {
-      title: '操作',
+      title: t('col_action'),
       key: 'actions',
       width: 120,
       render: (record: IndexDef) => (
@@ -237,10 +218,12 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
             size="small"
             onClick={() => handleEditIndex(record)}
           >
-            编辑
+            {t('edit')}
           </Button>
           <Popconfirm
-            title="确定删除此索引吗？"
+            title={t('idx_delete_confirm')}
+            okText={t('confirm')}
+            cancelText={t('cancel')}
             onConfirm={() => handleDeleteIndex(record.id)}
           >
             <Button
@@ -249,7 +232,7 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
               icon={<DeleteOutlined />}
               size="small"
             >
-              删除
+              {t('delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -260,7 +243,7 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
   if (!selectedTable) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text type="secondary">请从左侧选择一个表开始管理索引</Text>
+        <Text type="secondary">{t('idx_select_table')}</Text>
       </div>
     );
   }
@@ -269,20 +252,20 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
     <div>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>索引管理</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('idx_title')}</Title>
           <Space>
             <Button
               icon={<RobotOutlined />}
               onClick={() => setIsAiRecommendVisible(true)}
             >
-              AI 推荐索引
+              {t('idx_ai_recommend')}
             </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={handleAddIndex}
             >
-              添加索引
+              {t('idx_add')}
             </Button>
           </Space>
         </div>
@@ -296,16 +279,15 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
           locale={{
             emptyText: (
               <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">暂无索引，点击上方按钮创建第一个索引</Text>
+                <Text type="secondary">{t('idx_empty')}</Text>
               </div>
             )
           }}
         />
       </Card>
 
-      {/* 索引编辑模态框 */}
       <Drawer
-        title={editingIndex ? '编辑索引' : '添加索引'}
+        title={editingIndex ? t('idx_edit') : t('idx_add')}
         open={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         footer={null}
@@ -320,22 +302,22 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
             <Col span={12}>
               <Form.Item
                 name="name"
-                label="索引名称"
-                rules={[{ required: true, message: '请输入索引名称' }]}
+                label={t('idx_name')}
+                rules={[{ required: true, message: t('idx_name_required') }]}
               >
-                <Input placeholder="请输入索引名称" />
+                <Input placeholder={t('idx_name_placeholder')} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 name="type"
-                label="索引类型"
-                rules={[{ required: true, message: '请选择索引类型' }]}
+                label={t('idx_type')}
+                rules={[{ required: true, message: t('idx_type_required') }]}
               >
-                <Select placeholder="请选择索引类型">
-                  <Option value="normal">普通索引</Option>
-                  <Option value="unique">唯一索引</Option>
-                  <Option value="fulltext">全文索引</Option>
+                <Select placeholder={t('idx_type_placeholder')}>
+                  <Option value="normal">{t('idx_type_normal')}</Option>
+                  <Option value="unique">{t('idx_type_unique')}</Option>
+                  <Option value="fulltext">{t('idx_type_fulltext')}</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -343,12 +325,12 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
 
           <Form.Item
             name="columns"
-            label="包含列"
-            rules={[{ required: true, message: '请选择至少一个列' }]}
+            label={t('idx_columns')}
+            rules={[{ required: true, message: t('idx_columns_required') }]}
           >
             <Select
               mode="multiple"
-              placeholder="请选择索引包含的列"
+              placeholder={t('idx_columns_placeholder')}
               allowClear
             >
               {selectedTable.columns.map(column => (
@@ -361,10 +343,10 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
 
           <Form.Item
             name="comment"
-            label="说明"
+            label={t('idx_comment')}
           >
             <Input.TextArea
-              placeholder="请输入索引说明"
+              placeholder={t('idx_comment_placeholder')}
               rows={3}
             />
           </Form.Item>
@@ -372,17 +354,16 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit">
-                {editingIndex ? '更新' : '创建'}
+                {editingIndex ? t('table_update') : t('create')}
               </Button>
               <Button onClick={() => setIsModalVisible(false)}>
-                取消
+                {t('cancel')}
               </Button>
             </Space>
           </Form.Item>
         </Form>
       </Drawer>
 
-      {/* AI 推荐索引 */}
       <AiRecommendIndexModal
         open={isAiRecommendVisible}
         onCancel={() => setIsAiRecommendVisible(false)}
@@ -394,7 +375,7 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
           setIndexes(merged);
           await saveIndexesToBackend(merged);
           setIsAiRecommendVisible(false);
-          message.success(`成功创建 ${newIndexes.length} 个索引`);
+          message.success(t('idx_create_count', { count: newIndexes.length }));
         }}
       />
     </div>

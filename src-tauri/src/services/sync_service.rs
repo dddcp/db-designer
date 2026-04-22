@@ -43,7 +43,7 @@ impl SyncService {
             &connection.database,
         )?;
 
-        Ok("连接成功".to_string())
+        Ok("sync_connect_success".to_string())
     }
 
     pub fn get_remote_tables(&self, connection_id: i32) -> Result<Vec<RemoteTable>, String> {
@@ -147,10 +147,10 @@ impl SyncService {
                         if type_diff || nullable_diff || dv_diff || cmt_diff || pk_diff || ai_diff {
                             let mut details = Vec::new();
                             if type_diff {
-                                details.push(format!("类型: {} -> {}", local_type_str, remote_type_str));
+                                details.push(format!("Type: {} -> {}", local_type_str, remote_type_str));
                             }
                             if nullable_diff {
-                                details.push(format!("可空: {} -> {}", local_col.nullable, remote_col.nullable));
+                                details.push(format!("Nullable: {} -> {}", local_col.nullable, remote_col.nullable));
                             }
                             if dv_diff {
                                 let local_desc = if local_col.default_null {
@@ -163,16 +163,16 @@ impl SyncService {
                                 } else {
                                     remote_dv.clone()
                                 };
-                                details.push(format!("默认值: [{}] -> [{}]", local_desc, remote_desc));
+                                details.push(format!("Default: [{}] -> [{}]", local_desc, remote_desc));
                             }
                             if cmt_diff {
-                                details.push(format!("说明: [{}] -> [{}]", local_cmt, remote_cmt));
+                                details.push(format!("Comment: [{}] -> [{}]", local_cmt, remote_cmt));
                             }
                             if pk_diff {
-                                details.push(format!("主键: {} -> {}", local_col.primary_key, remote_pk));
+                                details.push(format!("Primary Key: {} -> {}", local_col.primary_key, remote_pk));
                             }
                             if ai_diff {
-                                details.push(format!("自增: {} -> {}", local_col.auto_increment, remote_ai));
+                                details.push(format!("Auto Increment: {} -> {}", local_col.auto_increment, remote_ai));
                             }
                             col_diffs.push(ColumnDiff {
                                 column_name: name.clone(),
@@ -241,10 +241,10 @@ impl SyncService {
                         if type_diff || cols_diff {
                             let mut details = Vec::new();
                             if type_diff {
-                                details.push(format!("类型: {} -> {}", idx_type, remote_index.index_type));
+                                details.push(format!("Type: {} -> {}", idx_type, remote_index.index_type));
                             }
                             if cols_diff {
-                                details.push(format!("列: [{}] -> [{}]", local_cols_str, remote_cols_str));
+                                details.push(format!("Columns: [{}] -> [{}]", local_cols_str, remote_cols_str));
                             }
                             index_diffs.push(IndexDiff {
                                 index_name: name.clone(),
@@ -337,7 +337,7 @@ impl SyncService {
                         .ok_or_else(|| format!("未找到本地表: {}", diff.table_name))?;
                     let cols = self.table_service.get_table_columns(table.id.clone())?;
 
-                    sql.push_str(&format!("-- 新建表: {}\n", diff.table_name));
+                    sql.push_str(&format!("-- CREATE TABLE: {}\n", diff.table_name));
                     sql.push_str(&dialect.create_table_prefix(&diff.table_name));
                     let mut col_defs = Vec::new();
                     for col in &cols {
@@ -385,8 +385,8 @@ impl SyncService {
                     sql.push_str("\n);\n\n");
                 }
                 "only_remote" => {
-                    sql.push_str(&format!("-- 远程多余表(可选删除): {}\n", diff.table_name));
-                    sql.push_str(&format!("-- DROP TABLE IF EXISTS {};\n\n", diff.table_name));
+                    sql.push_str(&format!("-- DROP TABLE: {}\n", diff.table_name));
+                    sql.push_str(&format!("DROP TABLE IF EXISTS {};\n\n", diff.table_name));
                 }
                 "different" => {
                     let table = table_by_name
@@ -669,7 +669,7 @@ impl SyncService {
 
         tx.commit().map_err(|e| format!("Error: {}", e))?;
 
-        Ok("同步成功".to_string())
+        Ok("sync_success".to_string())
     }
 
     pub fn sync_remote_columns_to_local(
@@ -767,7 +767,7 @@ impl SyncService {
             }
         }
 
-        Ok("同步成功".to_string())
+        Ok("sync_success".to_string())
     }
 
     pub fn sync_remote_indexes_to_local(
@@ -839,7 +839,7 @@ impl SyncService {
 
         tx.commit().map_err(|e| format!("Error: {}", e))?;
 
-        Ok("同步成功".to_string())
+        Ok("sync_success".to_string())
     }
 
     fn get_type_length_info(&self) -> Result<(HashSet<String>, HashSet<String>), String> {

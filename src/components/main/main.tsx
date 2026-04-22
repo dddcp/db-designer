@@ -27,7 +27,9 @@ import {
   theme
 } from 'antd';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { translateBackendMessage } from '../../i18n/backend-messages';
 import { useTheme } from '../../store/theme-context';
 import type { Project } from '../../types';
 
@@ -39,6 +41,7 @@ const { useToken } = theme;
  * 主页面组件
  */
 const Main: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -77,8 +80,8 @@ const Main: React.FC = () => {
       // 检查应用更新
       await checkForUpdates();
     } catch (error) {
-      console.error('初始化失败:', error);
-      message.error('应用初始化失败');
+      console.error(t('main_init_fail'), error);
+      message.error(t('main_init_fail'));
     }
   };
 
@@ -107,7 +110,7 @@ const Main: React.FC = () => {
 
       setGitConfigSaved(hasRemote && hasAuth);
     } catch (error) {
-      console.error('检查Git配置失败:', error);
+      console.error('checkGitConfig failed:', error);
       setGitConfigSaved(false);
     }
   };
@@ -123,7 +126,7 @@ const Main: React.FC = () => {
         setUpdateAvailable(update);
       }
     } catch (error) {
-      console.error('检查更新失败:', error);
+      console.error('checkForUpdates failed:', error);
     } finally {
       setUpdateLoading(false);
     }
@@ -136,11 +139,11 @@ const Main: React.FC = () => {
     if (!updateAvailable) return;
     try {
       await updateAvailable.downloadAndInstall();
-      message.success('更新下载完成，即将重启应用...');
+      message.success(t('basic_update_done'));
       await relaunch();
     } catch (error) {
-      console.error('更新失败:', error);
-      message.error(`更新失败: ${error}`);
+      console.error('installUpdate failed:', error);
+      message.error(`${t('update_fail')}: ${error}`);
     }
   };
 
@@ -152,8 +155,8 @@ const Main: React.FC = () => {
       const result = await invoke<Project[]>('get_projects');
       setProjects(result);
     } catch (error) {
-      console.error('加载项目失败:', error);
-      message.error('加载项目列表失败');
+      console.error(t('main_load_projects_fail'), error);
+      message.error(t('main_load_projects_fail'));
     }
   };
 
@@ -168,13 +171,13 @@ const Main: React.FC = () => {
         description: values.description,
       };
       await invoke('create_project', { project: projectData });
-      message.success('项目创建成功');
+      message.success(t('main_create_success'));
       setIsModalVisible(false);
       form.resetFields();
       await loadProjects();
     } catch (error) {
-      console.error('创建项目失败:', error);
-      message.error('创建项目失败');
+      console.error(t('main_create_fail'), error);
+      message.error(t('main_create_fail'));
     } finally {
       setLoading(false);
     }
@@ -197,11 +200,11 @@ const Main: React.FC = () => {
       const result = await invoke<string>('sync_git_repository', {
         commitMessage: commitMessage || 'Auto sync: database changes'
       });
-      message.success(result);
+      message.success(translateBackendMessage(result));
       setSyncModalVisible(false);
     } catch (error) {
-      console.error('同步失败:', error);
-      message.error(`同步失败: ${error}`);
+      console.error(t('main_sync_fail'), error);
+      message.error(`${t('main_sync_fail')}: ${error}`);
     } finally {
       setSyncLoading(false);
     }
@@ -221,11 +224,11 @@ const Main: React.FC = () => {
     setPullLoading(true);
     try {
       const result = await invoke<string>('pull_git_repository');
-      message.success(result);
+      message.success(translateBackendMessage(result));
       setPullModalVisible(false);
     } catch (error) {
-      console.error('拉取失败:', error);
-      message.error(`拉取失败: ${error}`);
+      console.error(t('main_pull_fail'), error);
+      message.error(`${t('main_pull_fail')}: ${error}`);
     } finally {
       setPullLoading(false);
     }
@@ -237,11 +240,11 @@ const Main: React.FC = () => {
   const handleDeleteProject = async (projectId: number) => {
     try {
       await invoke('delete_project', { id: projectId });
-      message.success('项目删除成功');
+      message.success(t('main_delete_success'));
       await loadProjects();
     } catch (error) {
-      console.error('删除项目失败:', error);
-      message.error('删除项目失败');
+      console.error(t('main_delete_fail'), error);
+      message.error(t('main_delete_fail'));
     }
   };
 
@@ -249,7 +252,7 @@ const Main: React.FC = () => {
    * 格式化日期
    */
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-CN', {
+    return new Date(dateString).toLocaleDateString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -281,51 +284,51 @@ const Main: React.FC = () => {
           <Space>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
             <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
-              数据库模型设计器
+              {t('app_title')}
             </Title>
           </Space>
           
           <Space>
             {gitConfigSaved && (
               <>
-                <Tooltip title="拉取远程数据">
+                <Tooltip title={t('main_pull_data')}>
                   <Button
                     type="text"
                     icon={<DownloadOutlined />}
                     onClick={handlePull}
                   >
-                    拉取
+                    {t('main_pull')}
                   </Button>
                 </Tooltip>
-                <Tooltip title="同步数据">
+                <Tooltip title={t('main_sync_data')}>
                   <Button
                     type="text"
                     icon={<SyncOutlined />}
                     onClick={handleSync}
                   >
-                    同步
+                    {t('main_sync')}
                   </Button>
                 </Tooltip>
               </>
             )}
             {updateAvailable && (
-              <Tooltip title={`发现新版本 ${updateAvailable.version}，点击更新`}>
+              <Tooltip title={t('main_new_version_found', { version: updateAvailable.version })}>
                 <Button
                   type="primary"
                   onClick={handleInstallUpdate}
                   loading={updateLoading}
                 >
-                  发现新版本
+                  {t('main_new_version')}
                 </Button>
               </Tooltip>
             )}
-            <Tooltip title="设置">
+            <Tooltip title={t('main_settings')}>
               <Button
                 type="text"
                 icon={<SettingOutlined />}
                 onClick={() => navigate('/setting')}
               >
-                设置
+                {t('main_settings')}
               </Button>
             </Tooltip>
           </Space>
@@ -342,10 +345,10 @@ const Main: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Space>
                   <Title level={4} style={{ margin: 0 }}>
-                    项目列表
+                    {t('main_project_list')}
                   </Title>
                   <Text type="secondary">
-                    共 {projects.length} 个项目
+                    {t('main_total_projects', { count: projects.length })}
                   </Text>
                 </Space>
                 
@@ -354,7 +357,7 @@ const Main: React.FC = () => {
                   icon={<PlusOutlined />}
                   onClick={() => setIsModalVisible(true)}
                 >
-                  新建项目
+                  {t('main_new_project')}
                 </Button>
               </div>
             </Card>
@@ -367,17 +370,17 @@ const Main: React.FC = () => {
                   <List.Item
                     actions={[
                       <Button type="link" key="view" onClick={() => handleProjectClick(project.id)}>
-                        查看详情
+                        {t('main_view_detail')}
                       </Button>,
                       <Popconfirm
                         key="delete"
-                        title="确定删除此项目吗？"
-                        description="删除后将同时删除项目下的所有表和索引数据"
+                        title={t('main_confirm_delete_project')}
+                        description={t('main_delete_project_desc')}
                         onConfirm={() => handleDeleteProject(project.id)}
-                        okText="确定"
-                        cancelText="取消"
+                        okText={t('confirm')}
+                        cancelText={t('cancel')}
                       >
-                        <Button type="link" danger>删除</Button>
+                        <Button type="link" danger>{t('delete')}</Button>
                       </Popconfirm>,
                     ]}
                   >
@@ -391,16 +394,16 @@ const Main: React.FC = () => {
                       title={
                         <Space>
                           <Text strong>{project.name}</Text>
-                          <Tag color="blue">项目</Tag>
+                          <Tag color="blue">{t('main_project')}</Tag>
                         </Space>
                       }
                       description={
                         <Space direction="vertical" size={0}>
                           <Text type="secondary">
-                            {project.description || '暂无描述'}
+                            {project.description || t('main_no_description')}
                           </Text>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            创建于: {formatDate(project.created_at)}
+                            {t('main_created_at', { date: formatDate(project.created_at) })}
                           </Text>
                           {/*<Text type="secondary" style={{ fontSize: 12 }}>*/}
                           {/*  更新于: {formatDate(project.updated_at)}*/}
@@ -414,7 +417,7 @@ const Main: React.FC = () => {
                   emptyText: (
                     <div style={{ textAlign: 'center', padding: 40 }}>
                       <DatabaseOutlined style={{ fontSize: 48, color: token.colorTextDisabled, marginBottom: 16 }} />
-                      <div style={{ color: token.colorTextDisabled }}>暂无项目，点击上方按钮创建第一个项目</div>
+                      <div style={{ color: token.colorTextDisabled }}>{t('main_empty')}</div>
                     </div>
                   )
                 }}
@@ -428,7 +431,7 @@ const Main: React.FC = () => {
 
         {/* 创建项目模态框 */}
         <Drawer
-          title="创建新项目"
+          title={t('main_create_project')}
           open={isModalVisible}
           onClose={() => {
             setIsModalVisible(false);
@@ -444,18 +447,18 @@ const Main: React.FC = () => {
           >
             <Form.Item
               name="name"
-              label="项目名称"
-              rules={[{ required: true, message: '请输入项目名称' }]}
+              label={t('main_project_name')}
+              rules={[{ required: true, message: t('main_project_name_required') }]}
             >
-              <Input placeholder="请输入项目名称" />
+              <Input placeholder={t('main_project_name_required')} />
             </Form.Item>
             
             <Form.Item
               name="description"
-              label="项目描述"
+              label={t('main_project_desc')}
             >
               <Input.TextArea 
-                placeholder="请输入项目描述（可选）" 
+                placeholder={t('main_project_desc_placeholder')} 
                 rows={4}
               />
             </Form.Item>
@@ -467,7 +470,7 @@ const Main: React.FC = () => {
                   htmlType="submit" 
                   loading={loading}
                 >
-                  创建
+                  {t('create')}
                 </Button>
                 <Button 
                   onClick={() => {
@@ -475,7 +478,7 @@ const Main: React.FC = () => {
                     form.resetFields();
                   }}
                 >
-                  取消
+                  {t('cancel')}
                 </Button>
               </Space>
             </Form.Item>
@@ -484,18 +487,18 @@ const Main: React.FC = () => {
 
         {/* 同步提交信息弹窗 */}
         <Modal
-          title="Git 同步"
+          title={t('main_git_sync')}
           open={syncModalVisible}
           onOk={handleConfirmSync}
           onCancel={() => setSyncModalVisible(false)}
           confirmLoading={syncLoading}
-          okText="同步"
-          cancelText="取消"
+          okText={t('main_sync')}
+          cancelText={t('cancel')}
         >
           <div style={{ marginBottom: 8 }}>
-            <Text type="warning" strong>警告：此操作将覆盖远端数据！</Text>
+            <Text type="warning" strong>{t('main_git_sync_warning')}</Text>
             <br/>
-            <Text type="secondary">输入提交信息（留空则使用默认信息）</Text>
+            <Text type="secondary">{t('main_git_commit_msg')}</Text>
           </div>
           <Input.TextArea
             value={commitMessage}
@@ -507,21 +510,20 @@ const Main: React.FC = () => {
 
         {/* 拉取确认弹窗 */}
         <Modal
-          title="拉取远程数据"
+          title={t('main_git_pull')}
           open={pullModalVisible}
           onOk={handleConfirmPull}
           onCancel={() => setPullModalVisible(false)}
           confirmLoading={pullLoading}
-          okText="确认拉取"
-          cancelText="取消"
+          okText={t('main_git_pull_confirm')}
+          cancelText={t('cancel')}
           okButtonProps={{ danger: true }}
         >
           <div>
-            <Text type="warning" strong>警告：此操作将覆盖本地数据！</Text>
+            <Text type="warning" strong>{t('main_git_pull_warning')}</Text>
             <div style={{ marginTop: 12 }}>
               <Text type="secondary">
-                拉取操作会从远程仓库获取最新数据并强制覆盖本地数据库文件。
-                本地未提交的更改将会丢失，请确认是否继续。
+                {t('main_git_pull_desc')}
               </Text>
             </div>
           </div>

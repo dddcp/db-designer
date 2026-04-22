@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
@@ -11,6 +12,7 @@ import {
   Modal,
   Progress,
   Row,
+  Select,
   Space,
   Switch,
   Typography,
@@ -23,6 +25,7 @@ import {
 const { Title, Text } = Typography;
 
 const BasicTab: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -39,7 +42,7 @@ const BasicTab: React.FC = () => {
       const settings = await invoke<{ [key: string]: string }>('get_all_settings');
       setIsDarkMode(settings['theme'] === 'dark');
     } catch (error) {
-      console.error('加载主题设置失败:', error);
+      console.error(t('basic_theme_load_fail'), error);
     }
   };
 
@@ -52,8 +55,8 @@ const BasicTab: React.FC = () => {
       localStorage.setItem('theme', checked ? 'dark' : 'light');
       window.location.reload();
     } catch (error) {
-      console.error('保存主题设置失败:', error);
-      message.error('保存主题设置失败');
+      console.error(t('basic_theme_save_fail'), error);
+      message.error(t('basic_theme_save_fail'));
     }
   };
 
@@ -63,14 +66,14 @@ const BasicTab: React.FC = () => {
       const update = await check();
       if (update) {
         Modal.confirm({
-          title: '发现新版本',
+          title: t('basic_new_version'),
           content: (
             <div>
-              <p>最新版本: <strong>{update.version}</strong></p>
-              <p>当前版本: {appVersion}</p>
+              <p>{t('basic_latest_version')} <strong>{update.version}</strong></p>
+              <p>{t('basic_current_version')} {appVersion}</p>
               {update.body && (
                 <div>
-                  <p>更新说明:</p>
+                  <p>{t('basic_update_notes')}</p>
                   <div style={{ maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
                     {update.body}
                   </div>
@@ -78,8 +81,8 @@ const BasicTab: React.FC = () => {
               )}
             </div>
           ),
-          okText: '下载并安装',
-          cancelText: '稍后再说',
+          okText: t('basic_download_install'),
+          cancelText: t('basic_later'),
           onOk: async () => {
             setUpdating(true);
             setUpdateProgress(0);
@@ -102,11 +105,11 @@ const BasicTab: React.FC = () => {
                     break;
                 }
               });
-              message.success('更新下载完成，即将重启应用...');
+              message.success(t('basic_update_done'));
               await relaunch();
             } catch (err) {
-              console.error('更新失败:', err);
-              message.error(`更新失败: ${err}`);
+              console.error(t('update_fail'), err);
+              message.error(`${t('update_fail')}: ${err}`);
             } finally {
               setUpdating(false);
               setUpdateProgress(null);
@@ -114,11 +117,11 @@ const BasicTab: React.FC = () => {
           },
         });
       } else {
-        message.success('当前已是最新版本');
+        message.success(t('already_latest'));
       }
     } catch (error) {
-      console.error('检查更新失败:', error);
-      message.error(`检查更新失败: ${error}`);
+      console.error(t('check_update_fail'), error);
+      message.error(`${t('check_update_fail')}: ${error}`);
     } finally {
       setCheckingUpdate(false);
     }
@@ -126,37 +129,51 @@ const BasicTab: React.FC = () => {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Title level={4}>主题设置</Title>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text>深色模式</Text>
+      <Title level={4}>{t('basic_theme')}</Title>
+      <div style={{ display: 'flex',gap: 16 }}>
+        <Text strong>{t('basic_dark_mode')}</Text>
         <Switch
           checked={isDarkMode}
           onChange={(checked) => {
             setIsDarkMode(checked);
             handleSaveTheme(checked);
           }}
-          checkedChildren="开启"
-          unCheckedChildren="关闭"
+          checkedChildren={t('basic_dark_on')}
+          unCheckedChildren={t('basic_dark_off')}
         />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <Text strong>{t('language')}</Text>
+        <Select
+          value={i18n.language}
+          onChange={(value) => {
+            i18n.changeLanguage(value);
+          }}
+          style={{ width: 200, marginLeft: 16 }}
+        >
+          <Select.Option value="zh-CN">{t('language_zh')}</Select.Option>
+          <Select.Option value="en-US">{t('language_en')}</Select.Option>
+        </Select>
       </div>
 
       <Divider />
 
-      <Title level={4}>应用信息</Title>
+      <Title level={4}>{t('basic_app_info')}</Title>
       <Row gutter={16}>
         <Col span={12}>
-          <Text strong>应用名称</Text>
-          <div><Text type="secondary">数据库模型设计器</Text></div>
+          <Text strong>{t('basic_app_name')}</Text>
+          <div><Text type="secondary">{t('app_title')}</Text></div>
         </Col>
         <Col span={12}>
-          <Text strong>版本</Text>
-          <div><Text type="secondary">{appVersion || '加载中...'}</Text></div>
+          <Text strong>{t('basic_version')}</Text>
+          <div><Text type="secondary">{appVersion || t('loading')}</Text></div>
         </Col>
       </Row>
 
       <Divider />
 
-      <Title level={4}>版本更新</Title>
+      <Title level={4}>{t('basic_version_update')}</Title>
       <Space direction="vertical" style={{ width: '100%' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Button
@@ -166,9 +183,9 @@ const BasicTab: React.FC = () => {
             loading={checkingUpdate}
             disabled={updating}
           >
-            检查更新
+            {t('basic_check_update')}
           </Button>
-          {updating && <Text type="secondary">正在下载更新...</Text>}
+          {updating && <Text type="secondary">{t('basic_downloading')}</Text>}
         </div>
         {updateProgress !== null && (
           <Progress percent={updateProgress} status={updateProgress < 100 ? 'active' : 'success'} />

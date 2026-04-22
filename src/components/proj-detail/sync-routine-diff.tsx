@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import {
   Button,
   Drawer,
@@ -42,6 +43,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
   onRoutineDiffsChange,
   getStatusTag,
 }) => {
+  const { t } = useTranslation();
   const [routineDiffDrawerVisible, setRoutineDiffDrawerVisible] = useState(false);
   const [selectedRoutineDiff, setSelectedRoutineDiff] = useState<RoutineDiff | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
@@ -52,7 +54,6 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
-  // 刷新编程对象差异
   const refreshRoutineDiffs = async () => {
     if (!selectedConnectionId) return;
     const remoteRoutines = await invoke<RemoteRoutine[]>('get_remote_routines_cmd', {
@@ -66,7 +67,6 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     onRoutineDiffsChange(routineDiffResult);
   };
 
-  // 批量同步选中的编程对象到本地
   const handleBatchSync = async () => {
     if (selectedRowKeys.length === 0) return;
     setBatchSyncing(true);
@@ -93,20 +93,19 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         }
       }
       if (failCount === 0) {
-        message.success(`批量同步完成，共 ${successCount} 个编程对象`);
+        message.success(t('sync_batch_routine_sync_complete', { count: successCount }));
       } else {
-        message.warning(`同步完成：成功 ${successCount} 个，失败 ${failCount} 个`);
+        message.warning(t('sync_batch_routine_sync_partial', { success: successCount, fail: failCount }));
       }
       setSelectedRowKeys([]);
       await refreshRoutineDiffs();
     } catch (error) {
-      message.error('批量同步失败: ' + error);
+      message.error(t('sync_batch_sync_failed') + ': ' + error);
     } finally {
       setBatchSyncing(false);
     }
   };
 
-  // 同步远程编程对象到本地
   const handleSyncRoutineToLocal = async (diff: RoutineDiff) => {
     const key = `routine_${diff.name}_${diff.type}`;
     onSyncingKeysChange(prev => new Set(prev).add(key));
@@ -121,11 +120,10 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         remoteRoutineJson: JSON.stringify(remoteRoutine),
         dbType,
       });
-      message.success(`${diff.name} 同步成功`);
-      // 重新比对编程对象
+      message.success(t('sync_routine_sync_success', { name: diff.name }));
       await refreshRoutineDiffs();
     } catch (error) {
-      message.error('同步失败: ' + error);
+      message.error(t('sync_sync_failed') + ': ' + error);
     } finally {
       onSyncingKeysChange(prev => {
         const next = new Set(prev);
@@ -138,39 +136,47 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
   const handleCopyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      message.success('已复制到剪贴板');
+      message.success(t('sync_copied_to_clipboard'));
     } catch {
-      message.error('复制失败');
+      message.error(t('sync_copy_failed'));
     }
+  };
+
+  const getRoutineTypeLabel = (type: string) => {
+    const map: Record<string, string> = {
+      function: t('sync_routine_function'),
+      procedure: t('sync_routine_procedure'),
+      trigger: t('sync_routine_trigger'),
+    };
+    return map[type] || type;
   };
 
   const routineColumns = [
     {
-      title: '名称',
+      title: t('sync_name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
-      title: '类型',
+      title: t('sync_type'),
       dataIndex: 'type',
       key: 'type',
       width: 120,
       render: (type: string) => {
-        const labels: Record<string, string> = { function: '函数', procedure: '存储过程', trigger: '触发器' };
         const colors: Record<string, string> = { function: 'blue', procedure: 'green', trigger: 'orange' };
-        return <Tag color={colors[type] || 'default'}>{labels[type] || type}</Tag>;
+        return <Tag color={colors[type] || 'default'}>{getRoutineTypeLabel(type)}</Tag>;
       },
     },
     {
-      title: '状态',
+      title: t('sync_status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: string) => getStatusTag(status),
     },
     {
-      title: '操作',
+      title: t('sync_action'),
       key: 'action',
       width: 200,
       render: (_: any, record: RoutineDiff) => (
@@ -184,7 +190,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
                 setRoutineDiffDrawerVisible(true);
               }}
             >
-              查看差异
+              {t('sync_view_diff')}
             </Button>
           )}
           {(record.status === 'only_remote' || record.status === 'different') && (
@@ -195,7 +201,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
               loading={syncingKeys.has(`routine_${record.name}_${record.type}`)}
               onClick={() => handleSyncRoutineToLocal(record)}
             >
-              同步到本地
+              {t('sync_to_local')}
             </Button>
           )}
         </Space>
@@ -203,7 +209,6 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     },
   ];
 
-  // 可批量选中的行：仅远程和有差异的编程对象
   const canSyncStatuses = new Set(['only_remote', 'different']);
   const rowSelection = {
     selectedRowKeys,
@@ -217,21 +222,21 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     <>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
-          <Text>共 {routineDiffs.length} 个编程对象（{dbTypes.find(t => t.value === dbType)?.label || dbType}）：</Text>
+          <Text>{t('sync_total_routines', { count: routineDiffs.length, dbType: dbTypes.find(t2 => t2.value === dbType)?.label || dbType })}：</Text>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            <Text>一致 {routineDiffs.filter(d => d.status === 'same').length}</Text>
+            <Text>{t('sync_same')} {routineDiffs.filter(d => d.status === 'same').length}</Text>
           </Space>
-          <Tag color="green">仅本地 {routineDiffs.filter(d => d.status === 'only_local').length}</Tag>
-          <Tag color="orange">仅远程 {routineDiffs.filter(d => d.status === 'only_remote').length}</Tag>
+          <Tag color="green">{t('sync_only_local')} {routineDiffs.filter(d => d.status === 'only_local').length}</Tag>
+          <Tag color="orange">{t('sync_only_remote')} {routineDiffs.filter(d => d.status === 'only_remote').length}</Tag>
           <Space>
             <WarningOutlined style={{ color: '#ff4d4f' }} />
-            <Text>有差异 {routineDiffs.filter(d => d.status === 'different').length}</Text>
+            <Text>{t('sync_different')} {routineDiffs.filter(d => d.status === 'different').length}</Text>
           </Space>
         </Space>
         <Space>
           {selectedRowKeys.length > 0 && (
-            <Text type="secondary">已选 {selectedRowKeys.length} 个</Text>
+            <Text type="secondary">{t('sync_selected_items', { count: selectedRowKeys.length })}</Text>
           )}
           <Button
             type="primary"
@@ -240,7 +245,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
             loading={batchSyncing}
             onClick={handleBatchSync}
           >
-            批量同步到本地
+            {t('sync_batch_to_local')}
           </Button>
         </Space>
       </div>
@@ -254,9 +259,8 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         rowSelection={rowSelection}
       />
 
-      {/* 编程对象差异查看弹窗 */}
       <Drawer
-        title={selectedRoutineDiff ? `${({function: '函数', procedure: '存储过程', trigger: '触发器'} as Record<string,string>)[selectedRoutineDiff.type] || selectedRoutineDiff.type}: ${selectedRoutineDiff.name}` : '差异对比'}
+        title={selectedRoutineDiff ? `${getRoutineTypeLabel(selectedRoutineDiff.type)}: ${selectedRoutineDiff.name}` : t('sync_diff_compare')}
         open={routineDiffDrawerVisible}
         onClose={() => setRoutineDiffDrawerVisible(false)}
         width={900}
@@ -265,13 +269,13 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
           <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <Text strong>本地</Text>
+                <Text strong>{t('sync_local')}</Text>
                 {selectedRoutineDiff.local_body && (
-                  <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopyText(selectedRoutineDiff.local_body || '')}>复制</Button>
+                  <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopyText(selectedRoutineDiff.local_body || '')}>{t('sync_copy')}</Button>
                 )}
               </div>
               <TextArea
-                value={selectedRoutineDiff.local_body || '(无)'}
+                value={selectedRoutineDiff.local_body || t('sync_none_value')}
                 readOnly
                 rows={20}
                 style={{ fontFamily: 'monospace', fontSize: 12 }}
@@ -279,13 +283,13 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <Text strong>远程</Text>
+                <Text strong>{t('sync_remote')}</Text>
                 {selectedRoutineDiff.remote_body && (
-                  <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopyText(selectedRoutineDiff.remote_body || '')}>复制</Button>
+                  <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopyText(selectedRoutineDiff.remote_body || '')}>{t('sync_copy')}</Button>
                 )}
               </div>
               <TextArea
-                value={selectedRoutineDiff.remote_body || '(无)'}
+                value={selectedRoutineDiff.remote_body || t('sync_none_value')}
                 readOnly
                 rows={20}
                 style={{ fontFamily: 'monospace', fontSize: 12 }}

@@ -23,6 +23,6 @@ impl ProjectService {
 
     pub fn delete_project(&self, id: i32) -> Result<String, String> {
         self.store.delete_project(id)?;
-        Ok("项目删除成功".to_string())
+        Ok("project_delete_success".to_string())
     }
 }

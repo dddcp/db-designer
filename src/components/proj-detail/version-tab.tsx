@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -60,6 +61,7 @@ interface SnapshotRoutine {
 }
 
 const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
+  const { t, i18n } = useTranslation();
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
@@ -85,39 +87,36 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       setVersions(result);
     } catch (error) {
       console.error('加载版本列表失败:', error);
-      message.error('加载版本列表失败');
+      message.error(t('version_load_fail'));
     } finally {
       setLoading(false);
     }
   };
 
-  // 创建版本
   const handleCreateVersion = async (values: { name: string }) => {
     try {
       await invoke('create_version', { projectId: project.id, name: values.name });
-      message.success('版本创建成功');
+      message.success(t('version_create_success'));
       setIsCreateModalVisible(false);
       form.resetFields();
       await loadVersions();
     } catch (error) {
       console.error('创建版本失败:', error);
-      message.error('创建版本失败');
+      message.error(t('version_create_fail'));
     }
   };
 
-  // 删除版本
   const handleDeleteVersion = async (id: number) => {
     try {
       await invoke('delete_version', { id });
-      message.success('版本删除成功');
+      message.success(t('version_delete_success'));
       await loadVersions();
     } catch (error) {
       console.error('删除版本失败:', error);
-      message.error('删除版本失败');
+      message.error(t('version_delete_fail'));
     }
   };
 
-  // 导出版本 SQL
   const handleExportSQL = async (version: Version, dbType: string) => {
     try {
       const sql = await invoke<string>('export_version_sql', {
@@ -125,19 +124,18 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         databaseType: dbType,
       });
       const typeInfo = dbTypes.find(t => t.value === dbType);
-      setSqlTitle(`版本 "${version.name}" 完整 SQL (${typeInfo?.label || dbType})`);
+      setSqlTitle(t('version_sql_title', { name: version.name, type: typeInfo?.label || dbType }));
       setSqlContent(sql);
       setIsSqlModalVisible(true);
     } catch (error) {
       console.error('导出SQL失败:', error);
-      message.error('导出SQL失败');
+      message.error(t('version_export_fail'));
     }
   };
 
-  // 打开升级脚本对话框
   const handleOpenUpgradeModal = () => {
     if (versions.length < 2) {
-      message.warning('至少需要 2 个版本才能生成升级脚本');
+      message.warning(t('version_upgrade_need_two'));
       return;
     }
     setUpgradeOldId(undefined);
@@ -145,14 +143,13 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
     setIsUpgradeModalVisible(true);
   };
 
-  // 生成升级 SQL
   const handleGenerateUpgradeSQL = async () => {
     if (!upgradeOldId || !upgradeNewId) {
-      message.warning('请选择旧版本和新版本');
+      message.warning(t('version_select_old_new'));
       return;
     }
     if (upgradeOldId === upgradeNewId) {
-      message.warning('旧版本和新版本不能相同');
+      message.warning(t('version_same_version'));
       return;
     }
     try {
@@ -164,51 +161,51 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
       setIsUpgradeModalVisible(false);
       const oldV = versions.find(v => v.id === upgradeOldId);
       const newV = versions.find(v => v.id === upgradeNewId);
-      setSqlTitle(`升级脚本: ${oldV?.name} -> ${newV?.name}`);
+      setSqlTitle(t('version_upgrade_title', { old: oldV?.name, new: newV?.name }));
       setSqlContent(sql);
       setIsSqlModalVisible(true);
     } catch (error) {
       console.error('生成升级脚本失败:', error);
-      message.error('生成升级脚本失败');
+      message.error(t('version_upgrade_fail'));
     }
   };
 
-  // 复制 SQL
   const handleCopySQL = async () => {
     try {
       await navigator.clipboard.writeText(sqlContent);
-      message.success('已复制到剪贴板');
+      message.success(t('copy_success'));
     } catch {
-      message.error('复制失败');
+      message.error(t('copy_fail'));
     }
   };
 
-  // 解析快照摘要
   const getSnapshotSummary = (snapshotJson: string): string => {
     try {
       const snap: Snapshot = JSON.parse(snapshotJson);
       const tableCount = snap.tables.length;
       const colCount = snap.tables.reduce((sum, t) => sum + t.columns.length, 0);
       const dataCount = snap.tables.reduce((sum, t) => sum + t.init_data.length, 0);
-      let summary = `${tableCount} 张表, ${colCount} 个字段, ${dataCount} 条元数据`;
+      const parts: string[] = [
+        t('version_snapshot_tables', { tableCount }),
+        t('version_snapshot_columns', { colCount }),
+        t('version_snapshot_data', { dataCount }),
+      ];
       if (snap.routines && snap.routines.length > 0) {
         const funcCount = snap.routines.filter(r => r.type === 'function').length;
         const procCount = snap.routines.filter(r => r.type === 'procedure').length;
         const trigCount = snap.routines.filter(r => r.type === 'trigger').length;
-        const parts: string[] = [];
-        if (funcCount > 0) parts.push(`${funcCount} 个函数`);
-        if (procCount > 0) parts.push(`${procCount} 个存储过程`);
-        if (trigCount > 0) parts.push(`${trigCount} 个触发器`);
-        if (parts.length > 0) summary += `, ${parts.join(', ')}`;
+        if (funcCount > 0) parts.push(t('version_snapshot_functions', { count: funcCount }));
+        if (procCount > 0) parts.push(t('version_snapshot_procedures', { count: procCount }));
+        if (trigCount > 0) parts.push(t('version_snapshot_triggers', { count: trigCount }));
       }
-      return summary;
+      return parts.join(', ');
     } catch {
-      return '快照解析失败';
+      return t('version_snapshot_fail');
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-CN', {
+    return new Date(dateString).toLocaleDateString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -221,14 +218,14 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
     <div style={{ padding: '24px' }}>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Title level={4} style={{ margin: 0 }}>版本管理</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('version_title')}</Title>
           <Space>
             <Button
               icon={<DiffOutlined />}
               onClick={handleOpenUpgradeModal}
               disabled={versions.length < 2}
             >
-              生成升级脚本
+              {t('version_upgrade_script')}
             </Button>
             <Button
               type="primary"
@@ -238,7 +235,7 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
                 setIsCreateModalVisible(true);
               }}
             >
-              创建版本
+              {t('version_create')}
             </Button>
           </Space>
         </div>
@@ -260,16 +257,18 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
                   }}
                 >
                   <Button type="link" icon={<ExportOutlined />}>
-                    导出SQL <DownOutlined />
+                    {t('version_export_sql')} <DownOutlined />
                   </Button>
                 </Dropdown>,
                 <Popconfirm
                   key="delete"
-                  title="确定删除此版本吗？"
+                  title={t('version_delete_confirm')}
+                  okText={t('confirm')}
+                  cancelText={t('cancel')}
                   onConfirm={() => handleDeleteVersion(version.id)}
                 >
                   <Button type="link" danger icon={<DeleteOutlined />}>
-                    删除
+                    {t('delete')}
                   </Button>
                 </Popconfirm>,
               ]}
@@ -278,13 +277,12 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
                 title={
                   <Space>
                     <Text strong>{version.name}</Text>
-                    {/* <Tag color="blue">v{version.id}</Tag> */}
                   </Space>
                 }
                 description={
                   <Space direction="vertical" size={0}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      创建于: {formatDate(version.created_at)}
+                      {t('version_created_at', { date: formatDate(version.created_at) })}
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {getSnapshotSummary(version.snapshot)}
@@ -297,16 +295,15 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
           locale={{
             emptyText: (
               <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">暂无版本，点击"创建版本"快照当前表结构</Text>
+                <Text type="secondary">{t('version_empty')}</Text>
               </div>
             ),
           }}
         />
       </Card>
 
-      {/* 创建版本弹窗 */}
       <Drawer
-        title="创建版本"
+        title={t('version_create_drawer')}
         open={isCreateModalVisible}
         onClose={() => setIsCreateModalVisible(false)}
         footer={null}
@@ -314,21 +311,20 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         <Form form={form} layout="vertical" onFinish={handleCreateVersion}>
           <Form.Item
             name="name"
-            label="版本名称"
-            rules={[{ required: true, message: '请输入版本名称' }]}
+            label={t('version_name')}
+            rules={[{ required: true, message: t('version_name_required') }]}
           >
             <Input placeholder="例如: v1.0.0" />
           </Form.Item>
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit">创建</Button>
-              <Button onClick={() => setIsCreateModalVisible(false)}>取消</Button>
+              <Button type="primary" htmlType="submit">{t('create')}</Button>
+              <Button onClick={() => setIsCreateModalVisible(false)}>{t('cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>
       </Drawer>
 
-      {/* SQL 查看弹窗 */}
       <Drawer
         title={sqlTitle}
         open={isSqlModalVisible}
@@ -337,10 +333,10 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         footer={
           <Space>
             <Button icon={<CopyOutlined />} onClick={handleCopySQL}>
-              复制
+              {t('copy')}
             </Button>
             <Button onClick={() => setIsSqlModalVisible(false)}>
-              关闭
+              {t('close')}
             </Button>
           </Space>
         }
@@ -353,21 +349,20 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
         />
       </Drawer>
 
-      {/* 升级脚本弹窗 */}
       <Drawer
-        title="生成升级脚本"
+        title={t('version_upgrade_drawer')}
         open={isUpgradeModalVisible}
         onClose={() => setIsUpgradeModalVisible(false)}
         footer={
           <Space>
-            <Button type="primary" onClick={handleGenerateUpgradeSQL}>生成</Button>
-            <Button onClick={() => setIsUpgradeModalVisible(false)}>取消</Button>
+            <Button type="primary" onClick={handleGenerateUpgradeSQL}>{t('version_generate')}</Button>
+            <Button onClick={() => setIsUpgradeModalVisible(false)}>{t('cancel')}</Button>
           </Space>
         }
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
-            <Text strong>数据库类型</Text>
+            <Text strong>{t('version_db_type')}</Text>
             <Select
               style={{ width: '100%', marginTop: 4 }}
               value={upgradeDatabaseType}
@@ -379,10 +374,10 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
             </Select>
           </div>
           <div>
-            <Text strong>旧版本（基准）</Text>
+            <Text strong>{t('version_old_version')}</Text>
             <Select
               style={{ width: '100%', marginTop: 4 }}
-              placeholder="选择旧版本"
+              placeholder={t('version_select_old')}
               value={upgradeOldId}
               onChange={setUpgradeOldId}
             >
@@ -392,10 +387,10 @@ const VersionTab: React.FC<VersionTabProps> = ({ project }) => {
             </Select>
           </div>
           <div>
-            <Text strong>新版本（目标）</Text>
+            <Text strong>{t('version_new_version')}</Text>
             <Select
               style={{ width: '100%', marginTop: 4 }}
-              placeholder="选择新版本"
+              placeholder={t('version_select_new')}
               value={upgradeNewId}
               onChange={setUpgradeNewId}
             >

@@ -27,7 +27,7 @@ impl DatabaseConnectionService {
 
     pub fn delete_database_connection(&self, id: i32) -> Result<String, String> {
         self.store.delete_database_connection(id)?;
-        Ok("数据库连接配置删除成功".to_string())
+        Ok("db_connection_delete_success".to_string())
     }
 
     pub fn get_database_connection_by_id(&self, id: i32) -> Result<Option<DatabaseConnection>, String> {

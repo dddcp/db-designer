@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Layout,
   Button,
@@ -26,6 +27,7 @@ const { useToken } = theme;
 
 const Setting: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { token } = useToken();
   const [activeTab, setActiveTab] = useState('basic');
 
@@ -42,13 +44,13 @@ const Setting: React.FC = () => {
         }}
       >
         <Space>
-          <Tooltip title="返回主页">
+          <Tooltip title={t('setting_back_home')}>
             <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-              返回
+              {t('setting_back')}
             </Button>
           </Tooltip>
           <SettingOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-          <Title level={3} style={{ margin: 0 }}>设置</Title>
+          <Title level={3} style={{ margin: 0 }}>{t('setting_title')}</Title>
         </Space>
       </Header>
 
@@ -59,11 +61,11 @@ const Setting: React.FC = () => {
               activeKey={activeTab}
               onChange={setActiveTab}
               items={[
-                { key: 'basic', label: '基础设置', children: <BasicTab /> },
-                { key: 'git', label: 'Git配置', children: <GitTab /> },
-                { key: 'database', label: '数据库连接', children: <DatabaseTab /> },
-                { key: 'ai', label: 'AI配置', children: <AiTab /> },
-                { key: 'dataTypes', label: '数据类型', children: <DataTypeTab /> },
+                { key: 'basic', label: t('setting_basic'), children: <BasicTab /> },
+                { key: 'git', label: t('setting_git'), children: <GitTab /> },
+                { key: 'database', label: t('setting_db'), children: <DatabaseTab /> },
+                { key: 'ai', label: t('setting_ai'), children: <AiTab /> },
+                { key: 'dataTypes', label: t('setting_data_type'), children: <DataTypeTab /> },
               ]}
             />
           </Card>

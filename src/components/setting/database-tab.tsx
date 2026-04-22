@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
@@ -27,6 +28,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 const DatabaseTab: React.FC = () => {
+  const { t } = useTranslation();
   const [dbForm] = Form.useForm();
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [isDbModalVisible, setIsDbModalVisible] = useState(false);
@@ -44,8 +46,8 @@ const DatabaseTab: React.FC = () => {
       const connections = await invoke<DatabaseConnection[]>('get_database_connections');
       setDbConnections(connections);
     } catch (error) {
-      console.error('加载数据库连接配置失败:', error);
-      message.error('加载数据库连接配置失败');
+      console.error(t('db_conn_load_fail'), error);
+      message.error(t('db_conn_load_fail'));
     }
   };
 
@@ -85,7 +87,7 @@ const DatabaseTab: React.FC = () => {
             database: values.database,
           },
         });
-        message.success('数据库连接配置更新成功');
+        message.success(t('db_conn_update_success'));
       } else {
         await invoke('create_database_connection', {
           connection: {
@@ -98,15 +100,15 @@ const DatabaseTab: React.FC = () => {
             database: values.database,
           },
         });
-        message.success('数据库连接配置创建成功');
+        message.success(t('db_conn_create_success'));
       }
       setIsDbModalVisible(false);
       dbForm.resetFields();
       setEditingConnection(null);
       await loadDatabaseConnections();
     } catch (error) {
-      console.error('保存数据库连接配置失败:', error);
-      message.error('保存数据库连接配置失败');
+      console.error(t('db_conn_save_fail'), error);
+      message.error(t('db_conn_save_fail'));
     } finally {
       setLoading(false);
     }
@@ -115,11 +117,11 @@ const DatabaseTab: React.FC = () => {
   const handleDeleteDatabaseConnection = async (id: number) => {
     try {
       await invoke('delete_database_connection', { id });
-      message.success('数据库连接配置删除成功');
+      message.success(t('db_conn_delete_success'));
       await loadDatabaseConnections();
     } catch (error) {
-      console.error('删除数据库连接配置失败:', error);
-      message.error('删除数据库连接配置失败');
+      console.error(t('db_conn_delete_fail'), error);
+      message.error(t('db_conn_delete_fail'));
     }
   };
 
@@ -133,9 +135,9 @@ const DatabaseTab: React.FC = () => {
     <>
       <Space direction="vertical" style={{ width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>数据库连接配置</Title>
+          <Title level={4} style={{ margin: 0 }}>{t('db_conn_title')}</Title>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDatabaseConnection}>
-            添加连接
+            {t('db_conn_add')}
           </Button>
         </div>
 
@@ -144,7 +146,7 @@ const DatabaseTab: React.FC = () => {
           locale={{
             emptyText: (
               <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">暂无数据库连接配置，点击上方按钮添加</Text>
+                <Text type="secondary">{t('db_conn_empty')}</Text>
               </div>
             ),
           }}
@@ -152,16 +154,16 @@ const DatabaseTab: React.FC = () => {
             <List.Item
               actions={[
                 <Button type="link" icon={<EditOutlined />} onClick={() => handleEditDatabaseConnection(connection)}>
-                  编辑
+                  {t('db_conn_edit')}
                 </Button>,
                 <Popconfirm
-                  title="确定要删除这个数据库连接配置吗？"
+                  title={t('db_conn_confirm_delete')}
                   onConfirm={() => handleDeleteDatabaseConnection(connection.id)}
-                  okText="确定"
-                  cancelText="取消"
+                  okText={t('confirm')}
+                  cancelText={t('cancel')}
                 >
                   <Button type="link" danger icon={<DeleteOutlined />}>
-                    删除
+                    {t('delete')}
                   </Button>
                 </Popconfirm>,
               ]}
@@ -170,15 +172,15 @@ const DatabaseTab: React.FC = () => {
                 title={
                   <Space>
                     <Text strong>{connection.name}</Text>
-                    <Tag color={dbTypes.find(t => t.value === connection.type)?.color || 'blue'}>
-                      {dbTypes.find(t => t.value === connection.type)?.label || connection.type}
+                    <Tag color={dbTypes.find(dt => dt.value === connection.type)?.color || 'blue'}>
+                      {dbTypes.find(dt => dt.value === connection.type)?.label || connection.type}
                     </Tag>
                   </Space>
                 }
                 description={
                   <Space direction="vertical" size={0}>
                     <Text type="secondary">{connection.host}:{connection.port} / {connection.database}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>用户: {connection.username}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{t('db_conn_user')}: {connection.username}</Text>
                   </Space>
                 }
               />
@@ -188,7 +190,7 @@ const DatabaseTab: React.FC = () => {
       </Space>
 
       <Drawer
-        title={editingConnection ? '编辑数据库连接' : '添加数据库连接'}
+        title={editingConnection ? t('db_conn_edit_drawer') : t('db_conn_add_drawer')}
         open={isDbModalVisible}
         onClose={closeDrawer}
         footer={null}
@@ -197,15 +199,15 @@ const DatabaseTab: React.FC = () => {
         <Form form={dbForm} layout="vertical" onFinish={handleSaveDatabaseConnection}>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="name" label="连接名称" rules={[{ required: true, message: '请输入连接名称' }]}>
-                <Input placeholder="请输入连接名称" />
+              <Form.Item name="name" label={t('db_conn_name')} rules={[{ required: true, message: t('db_conn_name_required') }]}>
+                <Input placeholder={t('db_conn_name_placeholder')} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="type" label="数据库类型" rules={[{ required: true, message: '请选择数据库类型' }]}>
-                <Select placeholder="请选择数据库类型">
-                  {dbTypes.map(t => (
-                    <Option key={t.value} value={t.value}>{t.label}</Option>
+              <Form.Item name="type" label={t('db_conn_type')} rules={[{ required: true, message: t('db_conn_type_required') }]}>
+                <Select placeholder={t('db_conn_type_placeholder')}>
+                  {dbTypes.map(dt => (
+                    <Option key={dt.value} value={dt.value}>{dt.label}</Option>
                   ))}
                 </Select>
               </Form.Item>
@@ -213,37 +215,37 @@ const DatabaseTab: React.FC = () => {
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="host" label="主机地址" rules={[{ required: true, message: '请输入主机地址' }]}>
-                <Input placeholder="请输入主机地址" />
+              <Form.Item name="host" label={t('db_conn_host')} rules={[{ required: true, message: t('db_conn_host_required') }]}>
+                <Input placeholder={t('db_conn_host_placeholder')} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="port" label="端口" rules={[{ required: true, message: '请输入端口' }]}>
-                <Input type="number" placeholder="请输入端口" />
+              <Form.Item name="port" label={t('db_conn_port')} rules={[{ required: true, message: t('db_conn_port_required') }]}>
+                <Input type="number" placeholder={t('db_conn_port_placeholder')} />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
-                <Input placeholder="请输入用户名" />
+              <Form.Item name="username" label={t('db_conn_user')} rules={[{ required: true, message: t('db_conn_user_required') }]}>
+                <Input placeholder={t('db_conn_user_placeholder')} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="password" label="密码">
-                <Input.Password placeholder="请输入密码" />
+              <Form.Item name="password" label={t('db_conn_password')}>
+                <Input.Password placeholder={t('db_conn_password_placeholder')} />
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="database" label="数据库名" rules={[{ required: true, message: '请输入数据库名' }]}>
-            <Input placeholder="请输入数据库名" />
+          <Form.Item name="database" label={t('db_conn_database')} rules={[{ required: true, message: t('db_conn_database_required') }]}>
+            <Input placeholder={t('db_conn_database_placeholder')} />
           </Form.Item>
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={loading} icon={<SaveOutlined />}>
-                {editingConnection ? '更新' : '创建'}
+                {editingConnection ? t('db_conn_update_btn') : t('db_conn_create_btn')}
               </Button>
-              <Button onClick={closeDrawer}>取消</Button>
+              <Button onClick={closeDrawer}>{t('cancel')}</Button>
             </Space>
           </Form.Item>
         </Form>
