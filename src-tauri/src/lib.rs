@@ -9,6 +9,7 @@ mod version;
 mod sync;
 mod routine;
 mod ai_review;
+mod ai_sql;
 mod services;
 mod storage;
 pub mod dialect;
@@ -81,7 +82,10 @@ pub fn run() {
             routine::export_routines_sql,
             ai_review::get_ai_reviews,
             ai_review::save_ai_review,
-            ai_review::delete_ai_review
+            ai_review::delete_ai_review,
+            ai_sql::get_ai_sql_conversations,
+            ai_sql::save_ai_sql_conversation,
+            ai_sql::delete_ai_sql_conversation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

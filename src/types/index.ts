@@ -236,3 +236,33 @@ export interface AiReviewResult {
   summary: string;
   issues: AiReviewIssue[];
 }
+
+// AI SQL 对话消息
+export interface AiSqlMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  sql?: string;
+  explanation?: string;
+}
+
+// AI SQL 对话记录（后端 snake_case）
+export interface BackendAiSqlConversation {
+  id: number;
+  project_id: number;
+  title: string;
+  messages: string;
+  database_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// AI SQL 对话记录（前端 camelCase）
+export interface AiSqlConversation {
+  id: number;
+  projectId: number;
+  title: string;
+  messages: string;
+  databaseType: string;
+  createdAt: string;
+  updatedAt: string;
+}

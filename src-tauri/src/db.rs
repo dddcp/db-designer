@@ -157,6 +157,17 @@ pub fn init_database() -> Result<String, String> {
             created_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (project_id) REFERENCES t_proj(id)
         );
+
+        CREATE TABLE IF NOT EXISTS t_ai_sql_conversation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            messages TEXT NOT NULL,
+            database_type TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (project_id) REFERENCES t_proj(id)
+        );
     ").map_err(|e| format!("Error initializing database: {}", e))?;
 
     // 数据库迁移：为已存在的 t_column 表添加 scale 列

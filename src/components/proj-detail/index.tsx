@@ -50,6 +50,7 @@ import RoutineTab from './routine-tab';
 import AiDesignModal from './ai-design-modal';
 import AiModifyTableModal from './ai-modify-table-modal';
 import AiReviewTab from './ai-review-tab';
+import AiSqlTab from './ai-sql-tab';
 import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -968,6 +969,10 @@ const ProjectDetail: React.FC = () => {
                 key: 'aireview',
                 label: <span><RobotOutlined /> {t('tab_ai_review')}</span>,
               },
+              {
+                key: 'aisql',
+                label: <span><RobotOutlined /> {t('tab_ai_sql')}</span>,
+              },
             ]}
           />
         </div>
@@ -1219,6 +1224,10 @@ const ProjectDetail: React.FC = () => {
         ) : projectView === 'aireview' ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <AiReviewTab project={project} tables={tables} />
+          </div>
+        ) : projectView === 'aisql' ? (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <AiSqlTab project={project} tables={tables} />
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: 'auto' }}>
