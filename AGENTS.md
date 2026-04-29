@@ -1,153 +1,134 @@
-# AGENTS.md
+# PROJECT KNOWLEDGE BASE
 
-This file provides guidance to coding agents when working with code in this repository.
+**Generated:** 2026-04-29
+**Commit:** da3003b
+**Branch:** main
 
-## Project Overview
+## OVERVIEW
 
-DB Designer is a Tauri v2 desktop app for visually designing database table structures and generating SQL. It supports AI-powered table design, version management, remote DB comparison/sync, SQL export, Git integration, and local settings/config persistence for MySQL and PostgreSQL workflows.
+Tauri v2 desktop app for visually designing database table structures and generating SQL. Supports AI-powered table design, version management, remote DB comparison/sync (MySQL/PostgreSQL/Oracle), SQL export, Git integration, and local SQLite persistence.
 
-**Tech stack:** React 18 + TypeScript + React Router + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite 7 (build) | Tauri 2 (framework)
+**Stack:** React 18 + TypeScript + Ant Design 5 (frontend) | Rust + SQLite via rusqlite (backend) | Vite 7 + Tauri 2
 
-## Development Commands
+## STRUCTURE
 
-```bash
-# Install frontend dependencies
-yarn install
-
-# Start development (launches both Vite dev server and Rust backend)
-yarn tauri dev
-
-# Build production package
-yarn tauri build
-
-# Type-check frontend only
-npx tsc --noEmit
-
-# Type-check Rust backend only (run from src-tauri/)
-cd src-tauri && cargo check
-
-# Bump version across all config files
-powershell -ExecutionPolicy Bypass -File scripts/bump-version.ps1 -Version x.y.z
+```
+├── src/                        # React frontend
+│   ├── components/
+│   │   ├── main/               # Project list page (1 file)
+│   │   ├── proj-detail/        # Core design workspace (15 files) ← SEE AGENTS.md
+│   │   └── setting/            # Settings tabs (6 files)
+│   ├── i18n/                   # i18next (zh-CN, en-US)
+│   ├── store/                  # theme-context.tsx (only global state)
+│   ├── types/index.ts          # Shared TS types (mirrors models.rs)
+│   └── data-types.ts           # 19 built-in + custom DB column types
+├── src-tauri/src/              # Rust backend ← SEE AGENTS.md
+│   ├── lib.rs                  # Plugin + command registry (57 commands)
+│   ├── models.rs               # Shared Rust structs (mirrors types/index.ts)
+│   ├── db.rs                   # SQLite init + migrations
+│   ├── dialect.rs              # DatabaseDialect + DatabaseConnector traits
+│   ├── {project,table,...}.rs  # Command modules (flat, no subfolder)
+│   ├── services/               # Business logic layer
+│   └── storage/                # Trait definitions + sqlite/ implementations
+├── scripts/bump-version.ps1    # Sync version across 3 config files
+└── openspec/                   # OpenSpec workflow (changes + specs)
 ```
 
-There are no test suites configured. Verify changes with `cargo check` (Rust) and `npx tsc --noEmit` (TypeScript).
+## WHERE TO LOOK
 
-## Architecture
+| Task | Location | Notes |
+|------|----------|-------|
+| Add a new Tauri command | `src-tauri/src/<module>.rs` + `lib.rs` + `services/` + `storage/sqlite/` | Must register in `generate_handler![]` |
+| Add a new DB dialect | `src-tauri/src/dialect.rs` | Implement both `DatabaseDialect` + `DatabaseConnector`, add to factories |
+| Add a new frontend tab | `src/components/proj-detail/<name>-tab.tsx` | Import into `index.tsx`, add to Tabs component |
+| Add a new settings section | `src/components/setting/<name>-tab.tsx` | Import into `setting.tsx` |
+| Add a new shared type | `src/types/index.ts` (TS) + `src-tauri/src/models.rs` (Rust) | Must keep in sync |
+| Add SQLite storage | `src-tauri/src/storage/mod.rs` (trait) + `storage/sqlite/<name>_store.rs` (impl) | Follow existing Store trait pattern |
+| Add a new service | `src-tauri/src/services/<name>_service.rs` + register in `mod.rs` | Services take `Box<dyn XxxStore>` |
+| Change DB schema | `src-tauri/src/db.rs::init_database()` | Add `CREATE TABLE` or `ALTER TABLE` migration |
+| Change i18n strings | `src/i18n/locales/zh-CN.json` + `en-US.json` + `backend-messages.ts` | Backend error messages in `backend-messages.ts` |
+| Debug IPC issues | Browser DevTools → `invoke('command_name', {...})` | Frontend camelCase, backend snake_case |
 
-### Frontend ↔ Backend Communication
+## CODE MAP
 
-All frontend-backend communication uses Tauri's IPC via `invoke()`. Every Tauri command must be:
-1. Defined with `#[tauri::command]` in a Rust module
-2. Registered in `lib.rs` → `tauri::generate_handler![...]`
-3. Called from frontend: `invoke<ReturnType>('command_name', { params })`
+### Frontend Key Symbols
 
-**Naming convention:**
-- Rust 后端命令参数使用 `snake_case`（如 `project_id`, `table_id`, `database_type`）
-- 前端 invoke 调用参数使用 `camelCase`（如 `projectId`, `tableId`, `databaseType`）
-- Tauri 自动转换，无需手动处理
-- Rust struct 字段与 keyword 冲突时（如 `type`），使用 `#[serde(rename = "type")] pub r#type: String`
+| Symbol | Location | Role |
+|--------|----------|------|
+| `App` | `src/App.tsx` | Root: ThemeProvider → ConfigProvider → Router |
+| `Main` | `src/components/main/main.tsx` | Route `/` — project list, Git sync, auto-update |
+| `ProjectDetail` | `src/components/proj-detail/index.tsx` | Route `/project/:id` — core workspace (1299 lines) |
+| `Setting` | `src/components/setting/setting.tsx` | Route `/setting` — tabs for basic/AI/DB/Git/data-type |
+| `useTheme` | `src/store/theme-context.tsx` | Only global context: dark mode via localStorage |
+| `BUILT_IN_DATA_TYPES` | `src/data-types.ts` | 19 built-in column types + custom type CRUD |
+| `i18n` | `src/i18n/index.ts` | i18next init: localStorage → navigator → zh-CN fallback |
 
-### Backend Modules (`src-tauri/src/`)
+### Backend Key Symbols
 
-| Module | Role |
-|--------|------|
-| `lib.rs` | Tauri plugin registration + command handler registry |
-| `db.rs` | SQLite connection, schema creation, migrations |
-| `models.rs` | Shared Rust-side data structs |
-| `dialect.rs` | `DatabaseDialect` trait (SQL generation) + `DatabaseConnector` trait (remote connection/introspection) |
-| `project.rs` / `table.rs` / `routine.rs` / `version.rs` / `sync.rs` / `setting.rs` / `db_connection.rs` / `ai_review.rs` | Tauri command layer; validates IPC input and delegates to services |
-| `services/` | Business logic layer for projects, tables, routines, versions, sync, settings, and DB connections |
-| `storage/` | Storage abstraction layer; currently defines traits and SQLite-backed implementations entrypoint |
-| `git.rs` | Git repository integration |
-| `main.rs` | Desktop entrypoint |
+| Symbol | Location | Role |
+|--------|----------|------|
+| `run()` | `lib.rs:24` | Tauri Builder entry — registers plugins + 57 commands |
+| `DatabaseDialect` trait | `dialect.rs` | SQL generation methods (CREATE, ALTER, DROP, comments, type maps) |
+| `DatabaseConnector` trait | `dialect.rs` | Remote DB connection + table/routine introspection |
+| `get_dialect()` / `get_connector()` | `dialect.rs` | Factory functions by `db_type` string |
+| `init_database` | `db.rs` | SQLite schema creation + 3 field migrations |
+| `init_db()` | `db.rs` | SQLite connection (respects `DB_DESIGNER_DATA_PATH` env) |
+| Storage traits | `storage/mod.rs` | `ProjectStore`, `TableStore`, `VersionStore`, etc. |
+| SQLite impls | `storage/sqlite/` | Concrete `Box<dyn XxxStore>` implementations |
+| Service layer | `services/` | Business logic coordinating dialect + storage |
 
-### Backend Layering
+## CONVENTIONS
 
-When adding or refactoring backend features, prefer this flow:
+- **No ESLint/Prettier** — verification via `npx tsc --noEmit` + `cargo check` only
+- **No test suite** — no Jest, Vitest, or `#[cfg(test)]` exists
+- **ESM only** — `package.json` has `"type": "module"`
+- **Tauri IPC naming** — backend `snake_case` params, frontend `camelCase` params (auto-converted)
+- **Error handling** — all Tauri commands return `Result<T, String>` with `.map_err(|e| format!(...))`
+- **Backend layering enforcement** — `command → service → storage`; never put SQL or business logic in command modules
+- **Chinese comments** — all code comments in 中文
+- **i18n** — `src/i18n/` with `zh-CN` (default) + `en-US`; backend errors mapped in `backend-messages.ts`
+- **Version sync** — `package.json`, `Cargo.toml`, `tauri.conf.json` must have identical version; use `scripts/bump-version.ps1`
+- **DB path** — respects `DB_DESIGNER_DATA_PATH` env var, defaults to `<exe_dir>/data/db_designer.db`
+- **CSP is null** — `tauri.conf.json` has `"csp": null` (disabled for dev convenience)
+- **React state** — only `ThemeProvider` is global; all other state is component-level `useState`
 
-`Tauri command` → `service` → `storage`
+## ANTI-PATTERNS (THIS PROJECT)
 
-- Command modules own `#[tauri::command]` functions and IPC-facing parameter mapping
-- Services contain business logic and coordinate dialect / storage operations
-- Storage traits isolate persistence details so future remote/local store backends can be swapped in more easily
-- Keep database-specific SQL generation inside `dialect.rs`, not in services or command handlers
+- **NEVER** hardcode DB-specific SQL outside `dialect.rs` — use trait methods
+- **NEVER** let Rust/TS type fields drift — `models.rs` ↔ `types/index.ts` must stay in sync
+- **NEVER** commit Git without user confirmation
+- **NEVER** add test frameworks without explicit request — project verifies with `tsc --noEmit` + `cargo check`
+- **NEVER** use `as any` or `@ts-ignore` — only `@ts-expect-error` with explanation (1 existing: `vite.config.ts:4`)
+- **NEVER** skip `generate_handler![]` registration when adding Tauri commands
+- **NEVER** use `unwrap()` in production Rust code — use `expect("reason")` or `.map_err()`
+- **NEVER** auto-format without request — no Prettier/ESLint configured
 
-### Frontend Structure (`src/`)
+## UNIQUE STYLES
 
-Three routes: `/` (project list), `/project/:id` (project detail), `/setting` (settings).
+- **Flat command layer** — all Rust command modules sit at `src-tauri/src/` root, no `commands/` subfolder
+- **Monolithic type files** — `models.rs` (Rust) and `types/index.ts` (TS) are single large files
+- **Separate data-types module** — `src/data-types.ts` lives outside `types/`, does its own `invoke()` calls
+- **Storage abstraction with partial impls** — `storage/mysql/` and `storage/pg/` are empty placeholders; only `sqlite/` is implemented
+- **Dialect double-trait** — each DB type implements both `DatabaseDialect` (SQL gen) and `DatabaseConnector` (remote introspection)
+- **Backend i18n on frontend** — `src/i18n/backend-messages.ts` maps Rust error strings to localized UI messages
 
-The project detail page (`components/proj-detail/index.tsx`) is the core screen:
-- Left sidebar: table list, search, create/edit/delete actions
-- Main work area: structure editing, indexes, init data, SQL preview
-- Project-level views: table design, programmable objects (routines), version management, DB sync, SQL export
-- AI helpers: `ai-design-modal.tsx`, `ai-modify-table-modal.tsx`, `ai-recommend-index-modal.tsx`
-- Drag-and-drop column sorting is implemented with `@dnd-kit`
+## COMMANDS
 
-Type definitions live in `types/index.ts` (must stay in sync with `models.rs`). Besides table/project types, it also defines routine, remote sync diff, Git, and DB connection types used across the app. Data types are defined in `data-types.ts` (built-in + user-custom types stored in settings).
+```bash
+yarn install                    # Install frontend deps
+yarn tauri dev                  # Start dev (Vite + Rust backend)
+yarn tauri build                # Production build
+npx tsc --noEmit                # Type-check frontend
+cd src-tauri && cargo check     # Type-check backend
+powershell -File scripts/bump-version.ps1 -Version x.y.z  # Bump version
+```
 
-### Tauri Commands Currently Registered
+## NOTES
 
-`src-tauri/src/lib.rs` currently wires commands for:
-- project CRUD
-- table / column / index / init-data CRUD
-- local settings + key-value settings
-- database connection CRUD
-- version snapshot creation / deletion / SQL export
-- remote DB connect / compare / sync
-- dialect metadata (`get_supported_database_types`, `get_type_mappings`)
-- routine CRUD / remote compare / sync / SQL export
-- Git init / sync / info
-- AI review CRUD (`get_ai_reviews`, `save_ai_review`, `delete_ai_review`)
-
-If you add a new command, update both the command module and `tauri::generate_handler![...]` in `lib.rs`.
-
-### Shared Type Sync
-
-If you change Rust structs in `models.rs`, also update matching TypeScript definitions in `src/types/index.ts`. Current TS types include:
-- `Project`, `TableDef`, `ColumnDef`
-- `BackendTableDef`, `BackendColumnDef`
-- `IndexDef`, `DatabaseConnection`, `DatabaseTypeOption`
-- `GitInfo`, `GitConfig`, `GitPlatform`
-- `RoutineDef`, `RemoteRoutine`, `RoutineDiff`
-- `RemoteTable`, `RemoteColumn`, `RemoteIndex`
-- `TableDiff`, `ColumnDiff`, `IndexDiff`
-- `AiReview`, `AiReviewIssue`, `AiReviewResult`
-
-Do not let Rust/TypeScript field names drift.
-
-### Dialect System
-
-The `dialect.rs` file is the database abstraction layer:
-- `DatabaseDialect` trait: SQL generation methods (CREATE TABLE, ALTER, DROP, indexes, comments, type mapping)
-- `DatabaseConnector` trait: Remote connection testing + table introspection + routine (function/procedure/trigger) fetching
-- Factory functions: `get_dialect(db_type)` and `get_connector(db_type)`
-- Adding a new dialect: implement both traits, add match arms in factories, add to `get_supported_database_types()`
-
-SQL generation flow: raw type → `dialect.map_data_type()` → uppercase → append length/scale suffix → concatenate with dialect-specific clauses.
-
-### SQLite Schema
-
-Tables: `t_proj`, `t_table`, `t_column`, `t_index`, `t_index_field`, `t_init_data`, `t_version`, `t_routine`, `t_ai_review`, `t_setting`, `t_database_connection`. Schema is created/migrated in `db.rs::init_database()`.
-
-## Key Conventions
-
-- All Tauri commands return `Result<T, String>` with `.map_err(|e| format!(...))` for error handling
-- Rust backend command parameters use `snake_case`; frontend `invoke()` calls use `camelCase`
-- All database-specific SQL must go through `dialect.*` methods — never hardcode DB-specific logic
-- Prefer backend layering as `command -> service -> storage`
-- Code comments are in Chinese (中文注释); follow the same style
-- When modifying Rust structs in `models.rs`, update the corresponding TypeScript interface in `types/index.ts`
-- Frontend uses Ant Design components exclusively — no custom CSS framework
-- Column drag-and-drop sorting uses `@dnd-kit`
-- Verify changes with `cargo check` in `src-tauri/` and `npx tsc --noEmit` in repo root
-- Keep `lib.rs` command registration, Rust models, and frontend types in sync when adding features
-- 使用中文回复
-- 提交代码时需要将 openspec 一起提交
-- 不要自动提交 Git，需要我确认后再提交
-
-## Current Dependency Notes
-
-- Frontend routing uses `react-router-dom` v7
-- Build uses Vite 7 + TypeScript 5.8
-- Tauri plugins currently include opener, updater, process, and dialog
-- There is no dedicated automated test suite yet; type-check / cargo-check are the expected verification steps
+- Database migrations are idempotent `ALTER TABLE ADD COLUMN` with `let _ =` (errors silently ignored for existing columns)
+- `services/sync_service/` subdirectory exists but is empty — `sync_service.rs` is a flat file in `services/`
+- `src/test/` directory exists but is empty
+- `public/` directory is empty — all assets loaded via frontend bundling
+- `console.log` debug statements exist in `proj-detail/index.tsx:557-559` — should be removed before production
+- 3 `unwrap()` calls in Rust production code (dialect.rs:1123, sync_service.rs:943, routine_service.rs:126) — should be `expect()` or `.map_err()`
+- Error messages are mixed Chinese/English across backend modules
