@@ -21,7 +21,9 @@
       "Bash(mkdir -p openspec/changes/archive)",
       "Bash(mv openspec/changes/generalize-git-settings-for-gitea \"openspec/changes/archive/2026-04-02-generalize-git-settings-for-gitea\")",
       "Bash(cp -r openspec/changes/generalize-git-settings-for-gitea \"openspec/changes/archive/2026-04-02-generalize-git-settings-for-gitea\")",
-      "Bash(rm -rf openspec/changes/generalize-git-settings-for-gitea)"
+      "Bash(rm -rf openspec/changes/generalize-git-settings-for-gitea)",
+      "Bash(git log *)",
+      "Bash(git show *)"
     ]
   }
 }

@@ -250,10 +250,20 @@ impl DatabaseConnector for MysqlDialect {
                         default_value,
                         comment,
                     )| {
+                        // TEXT/BLOB 等类型的 CHARACTER_MAXIMUM_LENGTH 是隐式最大值，不应作为长度显示
+                        let no_length_types = [
+                            "tinytext", "text", "mediumtext", "longtext",
+                            "tinyblob", "blob", "mediumblob", "longblob",
+                        ];
+                        let filtered_length = if no_length_types.contains(&data_type.to_lowercase().as_str()) {
+                            None
+                        } else {
+                            length.map(|l| l as i32)
+                        };
                         RemoteColumn {
                             name,
                             data_type,
-                            length: length.map(|l| l as i32),
+                            length: filtered_length,
                             nullable: nullable == "YES",
                             column_key,
                             extra,
