@@ -490,6 +490,7 @@
   "basic_theme_load_fail": "加载主题设置失败",
 
   "ai_config_title": "AI 配置",
+  "ai_compat_tip": "兼容所有 OpenAI 格式的 API（通义千问、Deepseek、文心等均可使用）",
   "ai_base_url": "API 地址",
   "ai_base_url_required": "请输入API地址",
   "ai_base_url_placeholder": "请输入API地址，如：https://api.openai.com/v1",

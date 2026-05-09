@@ -489,6 +489,7 @@
   "basic_theme_load_fail": "Failed to load theme settings",
 
   "ai_config_title": "AI Configuration",
+  "ai_compat_tip": "Compatible with all OpenAI-format APIs (Qwen, Deepseek, ERNIE Bot, etc.)",
   "ai_base_url": "API URL",
   "ai_base_url_required": "Please enter API URL",
   "ai_base_url_placeholder": "Enter API URL, e.g. https://api.openai.com/v1",
