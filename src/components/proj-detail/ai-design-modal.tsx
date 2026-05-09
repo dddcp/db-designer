@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
@@ -68,7 +69,7 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
           .replace(/(\/v1)(\/.*)?$/, '$1')        // 保留 /v1，移除其后路径
       + (baseUrl.includes('/v1') ? '' : '/v1') // 如果没有 /v1 则添加
       + '/chat/completions';
-  const response = await fetch(url, {
+  const response = await tauriFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

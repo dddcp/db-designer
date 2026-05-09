@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import {
   Button,
   Col,
@@ -103,7 +104,7 @@ async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; ex
     content: m.content,
   }));
 
-  const response = await fetch(url, {
+  const response = await tauriFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
