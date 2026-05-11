@@ -6,7 +6,7 @@
 
 自然语言建表 / AI 索引优化 / AI 表结构重构 / 多数据库适配 / 版本管理 / 结构同步
 
-[🇺🇸 English](README.md) | [🇨🇳 简体中文](#)
+[English](README.md) | [简体中文](#)
 
 [![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/dddcp/db-designer?tab=MIT-1-ov-file#readme)

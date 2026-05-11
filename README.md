@@ -6,7 +6,7 @@
 
 Natural Language Table Design / AI Index Optimization / AI Table Refactoring / Multi-Database Support / Version Management / Schema Sync
 
-[🇺🇸 English](#) | [🇨🇳 简体中文](README.zh-CN.md)
+[English](#) | [简体中文](README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/dddcp/db-designer?tab=MIT-1-ov-file#readme)
