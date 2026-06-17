@@ -362,7 +362,7 @@ impl SyncService {
                         if col.auto_increment {
                             def.push_str(dialect.auto_increment_suffix());
                         }
-                        if col.default_null {
+                        if col.default_null && dialect.should_output_default_null() {
                             def.push_str(" DEFAULT NULL");
                         } else if let Some(default_value) = &col.default_value {
                             if !default_value.is_empty() {
@@ -388,6 +388,24 @@ impl SyncService {
                     }
                     sql.push_str(&col_defs.join(",\n"));
                     sql.push_str("\n);\n\n");
+
+                    // 新建表后，同步本地索引
+                    for idx_diff in &diff.index_diffs {
+                        if idx_diff.status == "only_local" || idx_diff.status == "different" {
+                            if let (Some(idx_type), Some(columns_str)) =
+                                (&idx_diff.local_type, &idx_diff.local_columns)
+                            {
+                                let columns: Vec<&str> = columns_str.split(", ").collect();
+                                sql.push_str(&dialect.create_index_sql(
+                                    &idx_diff.index_name,
+                                    &diff.table_name,
+                                    &columns,
+                                    idx_type,
+                                ));
+                                sql.push('\n');
+                            }
+                        }
+                    }
                 }
                 "only_remote" => {
                     sql.push_str(&format!("-- DROP TABLE: {}\n", diff.table_name));
@@ -428,7 +446,7 @@ impl SyncService {
                                 if col.auto_increment {
                                     def.push_str(dialect.auto_increment_suffix());
                                 }
-                                if col.default_null {
+                                if col.default_null && dialect.should_output_default_null() {
                                     def.push_str(" DEFAULT NULL");
                                 } else if let Some(default_value) = &col.default_value {
                                     if !default_value.is_empty() {
@@ -489,9 +507,15 @@ impl SyncService {
                                             col_diff.column_name
                                         ));
                                     }
-                                    if col.default_null {
+                                    if col.default_null && dialect.should_output_default_null() {
                                         changes.push(format!(
                                             "  ALTER COLUMN {} SET DEFAULT NULL",
+                                            col_diff.column_name
+                                        ));
+                                    } else if col.default_null {
+                                        // PostgreSQL 等方言中 DEFAULT NULL 等价于无 DEFAULT，改为 DROP DEFAULT
+                                        changes.push(format!(
+                                            "  ALTER COLUMN {} DROP DEFAULT",
                                             col_diff.column_name
                                         ));
                                     } else if let Some(default_value) = &col.default_value {
@@ -530,7 +554,7 @@ impl SyncService {
                                     if col.auto_increment {
                                         full_def.push_str(dialect.auto_increment_suffix());
                                     }
-                                    if col.default_null {
+                                    if col.default_null && dialect.should_output_default_null() {
                                         full_def.push_str(" DEFAULT NULL");
                                     } else if let Some(default_value) = &col.default_value {
                                         if !default_value.is_empty() {
@@ -567,6 +591,52 @@ impl SyncService {
                             _ => {}
                         }
                     }
+                    // 处理索引差异
+                    for idx_diff in &diff.index_diffs {
+                        match idx_diff.status.as_str() {
+                            "only_local" => {
+                                // 远程没有此索引，需要创建
+                                if let (Some(idx_type), Some(columns_str)) =
+                                    (&idx_diff.local_type, &idx_diff.local_columns)
+                                {
+                                    let columns: Vec<&str> = columns_str.split(", ").collect();
+                                    extra_sql.push_str(&dialect.create_index_sql(
+                                        &idx_diff.index_name,
+                                        &diff.table_name,
+                                        &columns,
+                                        idx_type,
+                                    ));
+                                }
+                            }
+                            "only_remote" => {
+                                // 远程多余的索引，需要删除
+                                extra_sql.push_str(&dialect.drop_index_sql(
+                                    &idx_diff.index_name,
+                                    &diff.table_name,
+                                ));
+                            }
+                            "different" => {
+                                // 索引有差异：先删除远程的，再创建本地的
+                                extra_sql.push_str(&dialect.drop_index_sql(
+                                    &idx_diff.index_name,
+                                    &diff.table_name,
+                                ));
+                                if let (Some(idx_type), Some(columns_str)) =
+                                    (&idx_diff.local_type, &idx_diff.local_columns)
+                                {
+                                    let columns: Vec<&str> = columns_str.split(", ").collect();
+                                    extra_sql.push_str(&dialect.create_index_sql(
+                                        &idx_diff.index_name,
+                                        &diff.table_name,
+                                        &columns,
+                                        idx_type,
+                                    ));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
                     if !changes.is_empty() || !extra_sql.is_empty() {
                         sql.push_str(&format!("-- 修改表: {}\n", diff.table_name));
                         if !changes.is_empty() {

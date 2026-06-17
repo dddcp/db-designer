@@ -29,7 +29,8 @@ export const BUILT_IN_DATA_TYPES: DataTypeOption[] = [
   { value: 'date', label: 'DATE', hasLength: false, hasScale: false, builtIn: true },
   { value: 'time', label: 'TIME', hasLength: false, hasScale: false, builtIn: true },
   { value: 'datetime', label: 'DATETIME', hasLength: false, hasScale: false, builtIn: true },
-  { value: 'timestamp', label: 'TIMESTAMP', hasLength: false, hasScale: false, builtIn: true },
+  { value: 'timestamp', label: 'TIMESTAMP', hasLength: false, hasScale: true, builtIn: true },
+  { value: 'timestamptz', label: 'TIMESTAMPTZ', hasLength: false, hasScale: true, builtIn: true },
   // 其他
   { value: 'boolean', label: 'BOOLEAN', hasLength: false, hasScale: false, builtIn: true },
   { value: 'blob', label: 'BLOB', hasLength: false, hasScale: false, builtIn: true },

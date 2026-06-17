@@ -614,7 +614,7 @@ impl VersionService {
         if col.auto_increment {
             def.push_str(dialect.auto_increment_suffix());
         }
-        if col.default_null {
+        if col.default_null && dialect.should_output_default_null() {
             def.push_str(" DEFAULT NULL");
         } else if let Some(dv) = &col.default_value {
             if !dv.is_empty() {

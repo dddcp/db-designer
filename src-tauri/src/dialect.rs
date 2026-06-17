@@ -3,6 +3,47 @@ use std::collections::HashMap;
 
 use crate::models::*;
 
+// ─── 辅助函数：判断默认值是否为 SQL 函数/表达式 ────────────────────────────
+
+/// 判断默认值是否为 SQL 内置函数或表达式（不应加引号）。
+/// 包括 current_timestamp / current_date / now() / uuid_generate_v4() 等，
+/// 以及以这些函数开头的表达式（如 current_timestamp::text）。
+fn is_sql_function(v: &str) -> bool {
+    let lower = v.to_lowercase();
+    // 匹配常见的 SQL 函数调用（带或不带括号）
+    let sql_functions = [
+        "current_timestamp",
+        "current_date",
+        "current_time",
+        "now(",
+        "uuid_generate_v4(",
+        "gen_random_uuid(",
+        "nextval(",
+        "currval(",
+    ];
+    for func in &sql_functions {
+        if lower.starts_with(func) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 规范化 SQL 函数默认值：current_timestamp() → CURRENT_TIMESTAMP 等。
+/// 某些函数在特定方言中语法不同（如 PostgreSQL 不接受 current_timestamp()）。
+fn normalize_default_function(v: &str) -> String {
+    let lower = v.to_lowercase();
+    if lower == "current_timestamp()" || lower == "current_timestamp" {
+        "CURRENT_TIMESTAMP".to_string()
+    } else if lower == "current_date()" || lower == "current_date" {
+        "CURRENT_DATE".to_string()
+    } else if lower == "current_time()" || lower == "current_time" {
+        "CURRENT_TIME".to_string()
+    } else {
+        v.to_string()
+    }
+}
+
 // ─── Trait 1: SQL generation dialect ────────────────────────────────────────
 
 pub trait DatabaseDialect {
@@ -19,6 +60,11 @@ pub trait DatabaseDialect {
     fn drop_index_sql(&self, idx_name: &str, table: &str) -> String;
     fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String;
     fn bool_literal(&self, value: bool) -> &str;
+    /// 方言是否需要在 nullable 列上显式输出 DEFAULT NULL。
+    /// MySQL 中 DEFAULT NULL 有时需要区分，PostgreSQL 中 DEFAULT NULL 对 nullable 列是多余的。
+    fn should_output_default_null(&self) -> bool {
+        true
+    }
 
     // === Default implementations (currently same across databases) ===
     fn create_table_prefix(&self, table: &str) -> String {
@@ -41,8 +87,11 @@ pub trait DatabaseDialect {
         if v.eq_ignore_ascii_case("NULL") {
             " DEFAULT NULL".to_string()
         } else if v.starts_with('\'') && v.ends_with('\'') && v.len() >= 2 {
-            // Already a SQL literal like '1' — use as-is
+            // 已经是 SQL 字面量如 '1' —— 直接使用
             format!(" DEFAULT {}", v)
+        } else if is_sql_function(v) {
+            // SQL 函数/表达式（如 current_timestamp）—— 规范化后不加引号
+            format!(" DEFAULT {}", normalize_default_function(v))
         } else {
             format!(" DEFAULT '{}'", v.replace('\'', "''"))
         }
@@ -434,6 +483,10 @@ impl DatabaseDialect for PostgresDialect {
     fn supports_inline_comment(&self) -> bool {
         false
     }
+    fn should_output_default_null(&self) -> bool {
+        // PostgreSQL 中 nullable 列的 DEFAULT NULL 是多余的，不应输出
+        false
+    }
 
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
         format!(
@@ -525,7 +578,7 @@ impl DatabaseDialect for PostgresDialect {
             "float" | "real" => "real",
             "double precision" | "float8" => "double precision",
             "numeric" | "decimal" => "numeric",
-            "timestamp" | "timestamp without time zone" => "timestamp without time zone",
+            "datetime" | "timestamp" | "timestamp without time zone" => "timestamp without time zone",
             "timestamptz" | "timestamp with time zone" => "timestamp with time zone",
             "bytea" | "blob" | "varbinary" => "bytea",
             "text" | "mediumtext" | "longtext" | "tinytext" => "text",

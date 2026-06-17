@@ -6,9 +6,16 @@
 
 ## [0.5.2] - 2026-06-17
 
+### 新增
+- 新增 timestamptz (TIMESTAMPTZ) 内置数据类型，timestamp 类型支持小数秒精度（hasScale）
+- PostgreSQL 方言新增 datetime → timestamp without time zone 映射
+
 ### 修复
 - 修复 PostgreSQL 远程同步时 int 与 integer 被误判为类型差异的问题；比较逻辑改用方言类型别名规范化，同时 SQL 导出时 int 正确映射为 INTEGER
 - 修复数据库同步-编程对象 Tab 中多处翻译 key 不匹配/缺失导致显示原始 key 的问题
+- 修复生成同步脚本时未包含索引变更的问题；新建表时同步创建索引，修改表时按差异状态生成 CREATE INDEX / DROP INDEX / 重建索引
+- 修复 PostgreSQL 同步脚本中 nullable 列多余输出 DEFAULT NULL 的问题；PostgreSQL 方言不再输出 DEFAULT NULL，ALTER COLUMN 场景改为 DROP DEFAULT
+- 修复 SQL 导出/同步脚本中函数默认值（如 current_timestamp、now()）被错误加引号的问题
 
 ---
 
