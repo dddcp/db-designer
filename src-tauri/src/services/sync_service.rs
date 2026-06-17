@@ -66,6 +66,7 @@ impl SyncService {
         &self,
         project_id: i32,
         remote_tables_json: String,
+        database_type: &str,
     ) -> Result<Vec<TableDiff>, String> {
         let remote_tables: Vec<RemoteTable> = serde_json::from_str(&remote_tables_json)
             .map_err(|e| format!("解析远程表数据失败: {}", e))?;
@@ -102,6 +103,8 @@ impl SyncService {
             }
         }
 
+        let dialect = get_dialect(database_type);
+
         for table in &local_tables {
             if let Some(remote_table) = remote_map.get(&table.name) {
                 let local_columns = self.table_service.get_table_columns(table.id.clone())?;
@@ -116,7 +119,9 @@ impl SyncService {
                     if let Some(remote_col) = remote_col_map.get(name) {
                         let local_type_str = self.build_local_column_type(local_col);
                         let remote_type_str = self.build_remote_column_type(remote_col);
-                        let type_diff = local_type_str.to_lowercase() != remote_type_str.to_lowercase();
+                        // 使用方言的类型规范化进行比较，避免类型别名（如 int vs integer）产生误判差异
+                        let type_diff = dialect.normalize_type_for_compare(&local_type_str)
+                            != dialect.normalize_type_for_compare(&remote_type_str);
                         let nullable_diff = local_col.nullable != remote_col.nullable;
 
                         let remote_pk = remote_col.column_key == "PRI";
@@ -318,7 +323,7 @@ impl SyncService {
         remote_tables_json: String,
         database_type: String,
     ) -> Result<String, String> {
-        let diffs = self.compare_tables(project_id, remote_tables_json)?;
+        let diffs = self.compare_tables(project_id, remote_tables_json, &database_type)?;
         let dialect = get_dialect(&database_type);
         let (length_types, scale_types) = self.get_type_length_info()?;
 

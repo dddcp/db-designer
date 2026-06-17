@@ -93,6 +93,11 @@ pub trait DatabaseDialect {
     fn type_mappings(&self) -> HashMap<String, String> {
         HashMap::new()
     }
+    /// 比较类型时将类型别名统一到规范名称。
+    /// 默认实现直接转小写，各方言可覆盖以处理类型别名（如 PostgreSQL 的 int=integer）。
+    fn normalize_type_for_compare(&self, dt: &str) -> String {
+        dt.to_lowercase()
+    }
     /// PostgreSQL 使用 ALTER COLUMN ... TYPE 语法修改列，
     /// MySQL / Oracle 使用 MODIFY (COLUMN) col full_def 语法。
     fn uses_alter_column_syntax(&self) -> bool {
@@ -468,26 +473,65 @@ impl DatabaseDialect for PostgresDialect {
     }
     fn map_data_type(&self, dt: &str) -> String {
         match dt.to_lowercase().as_str() {
+            // 类型别名：映射到 PostgreSQL 标准名称
+            "int" => "integer".to_string(),
             "tinyint" => "smallint".to_string(),
             "mediumtext" | "longtext" => "text".to_string(),
             "datetime" => "timestamp".to_string(),
             "double" => "double precision".to_string(),
             "blob" => "bytea".to_string(),
+            "bool" | "boolean" => "boolean".to_string(),
+            "smallserial" => "smallint".to_string(),
+            "serial" => "integer".to_string(),
+            "bigserial" => "bigint".to_string(),
             _ => dt.to_string(),
         }
     }
     fn type_mappings(&self) -> HashMap<String, String> {
         [
             ("tinyint", "smallint"),
+            ("int", "integer"),
             ("mediumtext", "text"),
             ("longtext", "text"),
             ("datetime", "timestamp"),
             ("double", "double precision"),
             ("blob", "bytea"),
+            ("bool", "boolean"),
+            ("smallserial", "smallint"),
+            ("serial", "integer"),
+            ("bigserial", "bigint"),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
+    }
+    fn normalize_type_for_compare(&self, dt: &str) -> String {
+        let lower = dt.to_lowercase();
+        // 分离基础类型名和长度/精度后缀
+        let (base_type, suffix) = if let Some(paren) = lower.find('(') {
+            (&lower[..paren], &lower[paren..])
+        } else {
+            (lower.as_str(), "")
+        };
+        // 将类型别名统一到 PostgreSQL information_schema 返回的标准名称
+        let normalized = match base_type.trim() {
+            "int" | "integer" => "integer",
+            "smallint" | "smallserial" => "smallint",
+            "bigint" | "bigserial" => "bigint",
+            "serial" => "integer",
+            "bool" | "boolean" => "boolean",
+            "varchar" | "character varying" => "character varying",
+            "char" | "character" => "character",
+            "float" | "real" => "real",
+            "double precision" | "float8" => "double precision",
+            "numeric" | "decimal" => "numeric",
+            "timestamp" | "timestamp without time zone" => "timestamp without time zone",
+            "timestamptz" | "timestamp with time zone" => "timestamp with time zone",
+            "bytea" | "blob" | "varbinary" => "bytea",
+            "text" | "mediumtext" | "longtext" | "tinytext" => "text",
+            _ => base_type.trim(),
+        };
+        format!("{}{}", normalized, suffix)
     }
     fn uses_alter_column_syntax(&self) -> bool {
         true

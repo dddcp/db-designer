@@ -93,14 +93,14 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         }
       }
       if (failCount === 0) {
-        message.success(t('sync_batch_routine_sync_complete', { count: successCount }));
+        message.success(t('sync_routine_batch_done', { count: successCount }));
       } else {
-        message.warning(t('sync_batch_routine_sync_partial', { success: successCount, fail: failCount }));
+        message.warning(t('sync_routine_batch_partial', { success: successCount, fail: failCount }));
       }
       setSelectedRowKeys([]);
       await refreshRoutineDiffs();
     } catch (error) {
-      message.error(t('sync_batch_sync_failed') + ': ' + error);
+      message.error(t('sync_routine_batch_fail') + ': ' + error);
     } finally {
       setBatchSyncing(false);
     }
@@ -123,7 +123,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
       message.success(t('sync_routine_sync_success', { name: diff.name }));
       await refreshRoutineDiffs();
     } catch (error) {
-      message.error(t('sync_sync_failed') + ': ' + error);
+      message.error(t('sync_sync_fail') + ': ' + error);
     } finally {
       onSyncingKeysChange(prev => {
         const next = new Set(prev);
@@ -190,7 +190,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
                 setRoutineDiffDrawerVisible(true);
               }}
             >
-              {t('sync_view_diff')}
+              {t('sync_routine_view_diff')}
             </Button>
           )}
           {(record.status === 'only_remote' || record.status === 'different') && (
@@ -201,7 +201,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
               loading={syncingKeys.has(`routine_${record.name}_${record.type}`)}
               onClick={() => handleSyncRoutineToLocal(record)}
             >
-              {t('sync_to_local')}
+              {t('sync_routine_to_local')}
             </Button>
           )}
         </Space>
@@ -222,7 +222,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
     <>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
-          <Text>{t('sync_total_routines', { count: routineDiffs.length, dbType: dbTypes.find(t2 => t2.value === dbType)?.label || dbType })}：</Text>
+          <Text>{t('sync_routine_total', { count: routineDiffs.length, dbType: dbTypes.find(t2 => t2.value === dbType)?.label || dbType })}</Text>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <Text>{t('sync_same')} {routineDiffs.filter(d => d.status === 'same').length}</Text>
@@ -236,7 +236,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
         </Space>
         <Space>
           {selectedRowKeys.length > 0 && (
-            <Text type="secondary">{t('sync_selected_items', { count: selectedRowKeys.length })}</Text>
+            <Text type="secondary">{t('sync_routine_selected_count', { count: selectedRowKeys.length })}</Text>
           )}
           <Button
             type="primary"
@@ -245,7 +245,7 @@ const SyncRoutineDiff: React.FC<SyncRoutineDiffProps> = ({
             loading={batchSyncing}
             onClick={handleBatchSync}
           >
-            {t('sync_batch_to_local')}
+            {t('sync_routine_batch_to_local')}
           </Button>
         </Space>
       </div>

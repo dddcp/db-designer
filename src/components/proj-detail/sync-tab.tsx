@@ -83,6 +83,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       const diffResult = await invoke<TableDiff[]>('compare_tables', {
         projectId: project.id,
         remoteTablesJson: JSON.stringify(tables),
+        databaseType: connections.find(c => c.id === selectedConnectionId)?.type || 'mysql',
       });
       setDiffs(diffResult);
 
@@ -150,6 +151,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
       const diffResult = await invoke<TableDiff[]>('compare_tables', {
         projectId: project.id,
         remoteTablesJson: JSON.stringify(tables),
+        databaseType: connections.find(c => c.id === selectedConnectionId)?.type || 'mysql',
       });
       setDiffs(diffResult);
     } catch (error) {
@@ -238,7 +240,7 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
                   getStatusTag={getStatusTag}
                 />
               ) : (
-                <Empty description={t('sync_no_table_diff_result')} />
+                <Empty description={t('sync_no_table_diff')} />
               ),
             },
             {
@@ -256,19 +258,19 @@ const SyncTab: React.FC<SyncTabProps> = ({ project }) => {
                   getStatusTag={getStatusTag}
                 />
               ) : (
-                <Empty description={t('sync_no_routine_diff_result')} />
+                <Empty description={t('sync_no_routine_diff')} />
               ),
             },
           ]} />
         )}
 
         {connected && diffs.length === 0 && routineDiffs.length === 0 && (
-          <Empty description={t('sync_no_diff_result')} />
+          <Empty description={t('sync_no_diff')} />
         )}
       </Card>
 
       <Drawer
-        title={t('sync_script')}
+        title={t('sync_script_title')}
         open={isSqlModalVisible}
         onClose={() => setIsSqlModalVisible(false)}
         width={800}

@@ -15,8 +15,8 @@ pub fn get_remote_tables(connection_id: i32) -> Result<Vec<RemoteTable>, String>
 
 // 比较本地表结构和远程表结构
 #[tauri::command]
-pub fn compare_tables(project_id: i32, remote_tables_json: String) -> Result<Vec<TableDiff>, String> {
-    SyncService::new().compare_tables(project_id, remote_tables_json)
+pub fn compare_tables(project_id: i32, remote_tables_json: String, database_type: String) -> Result<Vec<TableDiff>, String> {
+    SyncService::new().compare_tables(project_id, remote_tables_json, &database_type)
 }
 
 // 生成同步 SQL（将本地结构同步到远程数据库）
