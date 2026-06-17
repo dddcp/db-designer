@@ -7,7 +7,6 @@
 ## [0.5.2] - 2026-06-17
 
 ### 新增
-- 新增 timestamptz (TIMESTAMPTZ) 内置数据类型，timestamp 类型支持小数秒精度（hasScale）
 - PostgreSQL 方言新增 datetime → timestamp without time zone 映射
 
 ### 修复
