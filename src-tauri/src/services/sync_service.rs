@@ -544,7 +544,21 @@ impl SyncService {
                                                 &col_diff.column_name,
                                                 comment,
                                             ));
+                                        } else {
+                                            // 本地注释为空，清除远程注释
+                                            extra_sql.push_str(&dialect.column_comment_sql(
+                                                &diff.table_name,
+                                                &col_diff.column_name,
+                                                "",
+                                            ));
                                         }
+                                    } else {
+                                        // 本地没有 comment 字段，清除远程注释
+                                        extra_sql.push_str(&dialect.column_comment_sql(
+                                            &diff.table_name,
+                                            &col_diff.column_name,
+                                            "",
+                                        ));
                                     }
                                 } else {
                                     let mut full_def = type_str;
@@ -583,7 +597,21 @@ impl SyncService {
                                                     &col_diff.column_name,
                                                     comment,
                                                 ));
+                                            } else {
+                                                // 本地注释为空，清除远程注释
+                                                extra_sql.push_str(&dialect.column_comment_sql(
+                                                    &diff.table_name,
+                                                    &col_diff.column_name,
+                                                    "",
+                                                ));
                                             }
+                                        } else {
+                                            // 本地没有 comment 字段，清除远程注释
+                                            extra_sql.push_str(&dialect.column_comment_sql(
+                                                &diff.table_name,
+                                                &col_diff.column_name,
+                                                "",
+                                            ));
                                         }
                                     }
                                 }
