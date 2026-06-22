@@ -1,7 +1,7 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-04-29
-**Commit:** da3003b
+**Generated:** 2026-06-22
+**Commit:** 2c93699
 **Branch:** main
 
 ## OVERVIEW
@@ -23,12 +23,12 @@ Tauri v2 desktop app for visually designing database table structures and genera
 │   ├── types/index.ts          # Shared TS types (mirrors models.rs)
 │   └── data-types.ts           # 19 built-in + custom DB column types
 ├── src-tauri/src/              # Rust backend ← SEE AGENTS.md
-│   ├── lib.rs                  # Plugin + command registry (57 commands)
+│   ├── lib.rs                  # Plugin + command registry (58 commands)
 │   ├── models.rs               # Shared Rust structs (mirrors types/index.ts)
 │   ├── db.rs                   # SQLite init + migrations
 │   ├── dialect.rs              # DatabaseDialect + DatabaseConnector traits
-│   ├── {project,table,...}.rs  # Command modules (flat, no subfolder)
-│   ├── services/               # Business logic layer
+│   ├── {project,table,setting,git,version,sync,routine,db_connection,ai_review,ai_sql}.rs  # Command modules (flat, no subfolder)
+│   ├── services/               # Business logic layer (7 services)
 │   └── storage/                # Trait definitions + sqlite/ implementations
 ├── scripts/bump-version.ps1    # Sync version across 3 config files
 └── openspec/                   # OpenSpec workflow (changes + specs)
@@ -57,7 +57,7 @@ Tauri v2 desktop app for visually designing database table structures and genera
 |--------|----------|------|
 | `App` | `src/App.tsx` | Root: ThemeProvider → ConfigProvider → Router |
 | `Main` | `src/components/main/main.tsx` | Route `/` — project list, Git sync, auto-update |
-| `ProjectDetail` | `src/components/proj-detail/index.tsx` | Route `/project/:id` — core workspace (1299 lines) |
+| `ProjectDetail` | `src/components/proj-detail/index.tsx` | Route `/project/:id` — core workspace (1235 lines) |
 | `Setting` | `src/components/setting/setting.tsx` | Route `/setting` — tabs for basic/AI/DB/Git/data-type |
 | `useTheme` | `src/store/theme-context.tsx` | Only global context: dark mode via localStorage |
 | `BUILT_IN_DATA_TYPES` | `src/data-types.ts` | 19 built-in column types + custom type CRUD |
@@ -67,7 +67,7 @@ Tauri v2 desktop app for visually designing database table structures and genera
 
 | Symbol | Location | Role |
 |--------|----------|------|
-| `run()` | `lib.rs:24` | Tauri Builder entry — registers plugins + 57 commands |
+| `run()` | `lib.rs:24` | Tauri Builder entry — registers 5 plugins + 58 commands |
 | `DatabaseDialect` trait | `dialect.rs` | SQL generation methods (CREATE, ALTER, DROP, comments, type maps) |
 | `DatabaseConnector` trait | `dialect.rs` | Remote DB connection + table/routine introspection |
 | `get_dialect()` / `get_connector()` | `dialect.rs` | Factory functions by `db_type` string |
@@ -91,10 +91,12 @@ Tauri v2 desktop app for visually designing database table structures and genera
 - **DB path** — respects `DB_DESIGNER_DATA_PATH` env var, defaults to `<exe_dir>/data/db_designer.db`
 - **CSP is null** — `tauri.conf.json` has `"csp": null` (disabled for dev convenience)
 - **React state** — only `ThemeProvider` is global; all other state is component-level `useState`
+- **TypeScript strict** — `tsconfig.json` has `strict: true` + `noUnusedLocals` + `noUnusedParameters`; only 1 `@ts-expect-error` allowed (`vite.config.ts:4`)
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
 - **NEVER** hardcode DB-specific SQL outside `dialect.rs` — use trait methods
+- **NEVER** put SQL directly in command modules — `ai_sql.rs` and `ai_review.rs` currently violate this (should use service+storage layer)
 - **NEVER** let Rust/TS type fields drift — `models.rs` ↔ `types/index.ts` must stay in sync
 - **NEVER** commit Git without user confirmation
 - **NEVER** add test frameworks without explicit request — project verifies with `tsc --noEmit` + `cargo check`
@@ -111,6 +113,7 @@ Tauri v2 desktop app for visually designing database table structures and genera
 - **Storage abstraction with partial impls** — `storage/mysql/` and `storage/pg/` are empty placeholders; only `sqlite/` is implemented
 - **Dialect double-trait** — each DB type implements both `DatabaseDialect` (SQL gen) and `DatabaseConnector` (remote introspection)
 - **Backend i18n on frontend** — `src/i18n/backend-messages.ts` maps Rust error strings to localized UI messages
+- **3-layer exceptions** — `git.rs`, `ai_review.rs`, `ai_sql.rs` bypass the service layer (no corresponding service in `services/`); `db.rs` and `dialect.rs` are infrastructure modules that also expose commands
 
 ## COMMANDS
 
@@ -130,5 +133,12 @@ powershell -File scripts/bump-version.ps1 -Version x.y.z  # Bump version
 - `src/test/` directory exists but is empty
 - `public/` directory is empty — all assets loaded via frontend bundling
 - `console.log` debug statements exist in `proj-detail/index.tsx:557-559` — should be removed before production
-- 3 `unwrap()` calls in Rust production code (dialect.rs:1123, sync_service.rs:943, routine_service.rs:126) — should be `expect()` or `.map_err()`
+- 3 `unwrap()` calls in Rust production code (dialect.rs:1230, sync_service.rs:1046, routine_service.rs:126) — should be `expect()` or `.map_err()`
 - Error messages are mixed Chinese/English across backend modules
+- Orphaned `greet` boilerplate command in `lib.rs:18-21,32` — should be removed
+- 37 TypeScript `: any` type annotations across 13 frontend files — should use proper types
+- SQL in `ai_sql.rs` (6 statements) and `ai_review.rs` (4 statements) — command modules bypassing service+storage layer
+- DB-specific SQL generation in `sync_service.rs:412,672` and `version_service.rs:213` — should use `dialect.rs` trait methods
+- Type drift: `IndexDef` has different shape (Rust `fields: Vec<IndexField>` vs TS `columns: string[]`); `IndexField`, `InitData`, `Version`, `Snapshot` missing from TS types
+- `@types/react-router-dom` v5 installed alongside `react-router-dom` v7 — v7 ships own types, v5 package is dead weight
+- `bump-version.ps1` auto-commits + tags + pushes — contradicts "NEVER commit Git without user confirmation" rule

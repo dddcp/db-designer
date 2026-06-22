@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Core design workspace — the largest and most complex frontend module. 15 files covering table structure editing, AI design, DB sync, version management, SQL export, and routine management. Central component `index.tsx` weighs ~1300 lines.
+Core design workspace — the largest and most complex frontend module. 15 files covering table structure editing, AI design, DB sync, version management, SQL export, and routine management. Central component `index.tsx` weighs 1235 lines.
 
 ## WHERE TO LOOK
 
@@ -44,9 +44,9 @@ Core design workspace — the largest and most complex frontend module. 15 files
 
 | File | Lines | Role |
 |------|-------|------|
-| `index.tsx` | ~1300 | Main workspace: sidebar + tabs, holds all page state |
-| `ai-design-modal.tsx` | 497 | AI natural language table design |
-| `ai-sql-tab.tsx` | 525 | AI SQL generation chat |
+| `index.tsx` | 1235 | Main workspace: sidebar + tabs, holds all page state |
+| `ai-design-modal.tsx` | 498 | AI natural language table design |
+| `ai-sql-tab.tsx` | 526 | AI SQL generation chat |
 | `init-data-tab.tsx` | 536 | Table initial data (Excel import / INSERT export) |
 | `sync-table-diff.tsx` | 474 | Remote table comparison diff view |
 | `routine-tab.tsx` | 399 | Programmable objects CRUD + sync |
@@ -54,7 +54,7 @@ Core design workspace — the largest and most complex frontend module. 15 files
 
 ## NOTES
 
-- `index.tsx` is a monolith (~1300 lines) — consider splitting into smaller sub-components if adding new features
+- `index.tsx` is a monolith (1235 lines) — consider splitting into smaller sub-components if adding new features
 - Props are passed down from `index.tsx` to all tab components; no Context/Store pattern
 - Column drag-drop relies on `@dnd-kit` library's `SortableContext`
 - `data-types.ts` is imported from `src/` root, not from `types/`

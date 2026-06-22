@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Tauri v2 backend: 57 IPC commands, SQLite persistence, multi-database SQL generation (MySQL/PostgreSQL/Oracle), remote DB introspection, Git integration, AI review. Strict 3-layer architecture: `command → service → storage`.
+Tauri v2 backend: 58 IPC commands, SQLite persistence, multi-database SQL generation (MySQL/PostgreSQL/Oracle), remote DB introspection, Git integration, AI review. 3-layer architecture: `command → service → storage` (with exceptions — see NOTES).
 
 ## WHERE TO LOOK
 
@@ -43,16 +43,23 @@ Tauri v2 backend: 57 IPC commands, SQLite persistence, multi-database SQL genera
 
 | File | Lines | Role |
 |------|-------|------|
-| `lib.rs` | 92 | `run()` builds Tauri app: 4 plugins + 57 commands |
-| `models.rs` | 254 | All Rust data structs (mirrors TypeScript `types/index.ts`) |
-| `dialect.rs` | 1076 | `DatabaseDialect` + `DatabaseConnector` traits, MySQL/PG/Oracle impls |
-| `db.rs` | 183 | `init_database()` creates 11 tables + 3 migrations, `init_db()` returns connection |
+| `lib.rs` | 91 | `run()` builds Tauri app: 5 plugins + 58 commands |
+| `models.rs` | 231 | All Rust data structs (mirrors TypeScript `types/index.ts`) |
+| `dialect.rs` | 1180 | `DatabaseDialect` + `DatabaseConnector` traits, MySQL/PG/Oracle impls |
+| `db.rs` | 160 | `init_database()` creates 11 tables + 3 migrations, `init_db()` returns connection |
 | `git.rs` | 451 | Git init/pull/push operations via `git2` crate |
-| `sync_service.rs` | 872 | Remote DB compare/sync orchestration (largest service) |
+| `sync_service.rs` | 972 | Remote DB compare/sync orchestration (largest service) |
+| `ai_sql.rs` | 108 | AI SQL conversation CRUD (violates layering — has SQL in command module) |
+| `ai_review.rs` | 69 | AI review CRUD (violates layering — has SQL in command module) |
 
 ## NOTES
 
 - `storage/mysql/` and `storage/pg/` are empty placeholders — only `sqlite/` is implemented
 - `services/sync_service/` subdirectory exists but is empty — `sync_service.rs` is a flat file
-- 3 `unwrap()` calls need fixing: `dialect.rs:1123`, `sync_service.rs:943`, `routine_service.rs:126`
+- 3 `unwrap()` calls need fixing: `dialect.rs:1230`, `sync_service.rs:1046`, `routine_service.rs:126`
 - Error messages are mixed Chinese/English — consider standardizing
+- **3-layer exceptions**: `git.rs`, `ai_review.rs`, `ai_sql.rs` have no corresponding service in `services/` — they do work directly in command modules (violates stated layering)
+- **SQL in command modules**: `ai_sql.rs` (6 SQL statements) and `ai_review.rs` (4 SQL statements) contain SQL directly — should be refactored to use service+storage layer
+- **DB-specific SQL in services**: `sync_service.rs:412,672` and `version_service.rs:213` generate `DROP TABLE`/`ALTER TABLE` SQL — should use `dialect.rs` trait methods
+- **Type drift**: `IndexDef` has different shape (Rust `fields: Vec<IndexField>` vs TS `columns: string[]`); `IndexField`, `InitData`, `Version`, `Snapshot` missing from TS `types/index.ts`
+- **Orphaned `greet`**: `lib.rs:18-21,32` has Tauri scaffold boilerplate `greet` command — should be removed
