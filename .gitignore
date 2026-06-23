@@ -25,3 +25,4 @@ dist-ssr
 src-tauri/target/*
 .minimax/*
 .trae/*
+.understand-anything/*
