@@ -1069,10 +1069,10 @@ const ProjectDetail: React.FC = () => {
                   >
                     <List.Item.Meta
                       title={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <Text strong ellipsis style={{ minWidth: 0, flexShrink: 1 }}>{table.name}</Text>
+                        <div style={{ minWidth: 0 }}>
+                          <Text strong ellipsis={{ tooltip: table.name }} style={{ display: 'block' }}>{table.name}</Text>
                           {table.displayName && (
-                            <Text type="secondary" ellipsis style={{ fontSize: 12, minWidth: 0, flexShrink: 1 }}>
+                            <Text type="secondary" ellipsis={{ tooltip: table.displayName }} style={{ display: 'block', fontSize: 12 }}>
                               {table.displayName}
                             </Text>
                           )}
