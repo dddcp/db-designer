@@ -1069,10 +1069,14 @@ const ProjectDetail: React.FC = () => {
                   >
                     <List.Item.Meta
                       title={
-                        <Space direction="vertical" size={0}>
-                          <Text strong>{table.displayName}</Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>{table.name}</Text>
-                        </Space>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <Text strong ellipsis style={{ minWidth: 0, flexShrink: 1 }}>{table.name}</Text>
+                          {table.displayName && (
+                            <Text type="secondary" ellipsis style={{ fontSize: 12, minWidth: 0, flexShrink: 1 }}>
+                              {table.displayName}
+                            </Text>
+                          )}
+                        </div>
                       }
                     />
                   </List.Item>
@@ -1099,7 +1103,8 @@ const ProjectDetail: React.FC = () => {
                     <Space>
                       <TableOutlined />
                       <Title level={4} style={{ margin: 0 }}>
-                        {selectedTable.displayName} ({selectedTable.name})
+                        {selectedTable.name}
+                        {selectedTable.displayName && `(${selectedTable.displayName})`}
                       </Title>
                     </Space>
                   
