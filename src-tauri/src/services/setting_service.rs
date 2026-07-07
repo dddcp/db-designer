@@ -4,7 +4,8 @@ use crate::storage::{LocalSettingsStore, SettingStore};
 use crate::storage::sqlite::local_settings_store::JsonLocalSettingsStore;
 use crate::storage::sqlite::setting_store::SqliteSettingStore;
 
-const LOCAL_SETTING_KEYS: [&str; 12] = [
+const LOCAL_SETTING_KEYS: [&str; 13] = [
+    "ai_provider",
     "ai_base_url",
     "ai_api_key",
     "ai_model",

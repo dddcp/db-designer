@@ -8,6 +8,7 @@ mod db_connection;
 mod version;
 mod sync;
 mod routine;
+mod ai;
 mod ai_review;
 mod ai_sql;
 mod services;
@@ -86,7 +87,10 @@ pub fn run() {
             ai_review::delete_ai_review,
             ai_sql::get_ai_sql_conversations,
             ai_sql::save_ai_sql_conversation,
-            ai_sql::delete_ai_sql_conversation
+            ai_sql::delete_ai_sql_conversation,
+            ai::ai_chat,
+            ai::ai_fetch_models,
+            ai::ai_test_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

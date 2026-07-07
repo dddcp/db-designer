@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
@@ -62,36 +61,15 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
   }
 
-  // 标准化 URL：追加 /v1/chat/completions，确保 baseUrl 末尾没有冗余斜杠
-  const url = baseUrl
-          .replace(/\/+$/, '')                    // 移除末尾斜杠
-          .replace(/\/chat\/completions$/, '')    // 移除已有的 chat/completions
-          .replace(/(\/v1)(\/.*)?$/, '$1')        // 保留 /v1，移除其后路径
-      + (baseUrl.includes('/v1') ? '' : '/v1') // 如果没有 /v1 则添加
-      + '/chat/completions';
-  const response = await tauriFetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7
-    })
+  const content = await invoke<string>('ai_chat', {
+    baseUrl,
+    apiKey,
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
   });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`API请求失败 (${response.status}): ${errText}`);
-  }
-
-  const data = await response.json();
-  const content: string = data.choices?.[0]?.message?.content || '';
 
   let jsonStr = content.trim();
   // 剥离 markdown 代码块

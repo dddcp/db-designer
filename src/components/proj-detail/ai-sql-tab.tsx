@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import {
   Button,
   Col,
@@ -92,62 +91,41 @@ async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; ex
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
   }
 
-  const url = baseUrl
-    .replace(/\/+$/, '')
-    .replace(/\/chat\/completions$/, '')
-    .replace(/(\/v1)(\/.*)?$/, '$1')
-    + (baseUrl.includes('/v1') ? '' : '/v1')
-    + '/chat/completions';
-
   const apiMessages = messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
 
-  const response = await tauriFetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: apiMessages,
-      temperature: 0.7,
-    }),
+  const content = await invoke<string>('ai_chat', {
+    baseUrl,
+    apiKey,
+    model,
+    messages: apiMessages,
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`API请求失败 (${response.status}): ${errText}`);
-  }
-
-  const data = await response.json();
-  let content: string = data.choices?.[0]?.message?.content || '';
-
+  let text = content.trim();
   // 剥离 markdown 代码块
-  content = content.trim();
-  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (codeBlockMatch) {
-    content = codeBlockMatch[1].trim();
+    text = codeBlockMatch[1].trim();
   }
   // 剥离 thinking 标签
-  content = content.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
+  text = text.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
 
   // 尝试解析 JSON
   try {
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(text);
     return {
       sql: parsed.sql || '',
       explanation: parsed.explanation || '',
     };
   } catch {
     // 解析失败，尝试在文本中查找 JSON 对象
-    const objStart = content.indexOf('{');
-    const objEnd = content.lastIndexOf('}');
+    const objStart = text.indexOf('{');
+    const objEnd = text.lastIndexOf('}');
     if (objStart !== -1 && objEnd > objStart) {
       try {
-        const parsed = JSON.parse(content.slice(objStart, objEnd + 1));
+        const parsed = JSON.parse(text.slice(objStart, objEnd + 1));
         return {
           sql: parsed.sql || '',
           explanation: parsed.explanation || '',
@@ -157,7 +135,7 @@ async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; ex
       }
     }
     // 降级：整个文本作为 explanation
-    return { sql: '', explanation: content };
+    return { sql: '', explanation: text };
   }
 }
 
