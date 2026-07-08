@@ -1,5 +1,18 @@
 <div align="center">
 
+# DB Designer
+
+**AI-Powered Database Schema Design Tool**
+
+Natural Language Table Design / AI Index Optimization / AI Table Refactoring / Multi-Database Support / Version Management / Schema Sync
+
+[English](#) | [简体中文](README.zh-CN.md)
+
+[![Release](https://img.shields.io/github/v/release/dddcp/db-designer?style=flat-square)](https://github.com/dddcp/db-designer/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/dddcp/db-designer?tab=MIT-1-ov-file#readme)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/dddcp/db-designer/releases)
+
+</div>
 ---
 
 ## AI Capabilities
@@ -35,10 +48,10 @@ DB Designer deeply integrates large language models to cover the core aspects of
 ### AI Table Design
 
 <p align="center">
-  <img src="./doc/images/setting_ai.png" width="80%" />
+  <img src="./doc/images/top.png" width="80%" />
 </p>
 <p align="center">
-  <img src="./doc/images/ai_design.png" width="80%" />
+  <img src="./doc/images/ai_design1.png" width="80%" />
 </p>
 <p align="center">
   <img src="./doc/images/ai_index_design.png" width="80%" />

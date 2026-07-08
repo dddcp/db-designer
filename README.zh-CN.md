@@ -49,10 +49,10 @@ DB Designer 深度集成 AI 大模型，覆盖数据库设计的核心环节：
 ### AI 设计表结构
 
 <p align="center">
-  <img src="./doc/images/setting_ai.png" width="80%" />
+  <img src="./doc/images/top.png" width="80%" />
 </p>
 <p align="center">
-  <img src="./doc/images/ai_design.png" width="80%" />
+  <img src="./doc/images/ai_design1.png" width="80%" />
 </p>
 <p align="center">
   <img src="./doc/images/ai_index_design.png" width="80%" />
