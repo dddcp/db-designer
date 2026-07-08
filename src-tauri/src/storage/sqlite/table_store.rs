@@ -3,6 +3,7 @@ use rusqlite::params;
 use crate::db::init_db;
 use crate::models::{ColumnDef, IndexDef, IndexField, InitData, TableDef};
 use crate::storage::TableStore;
+use std::collections::HashMap;
 
 pub struct SqliteTableStore;
 
@@ -28,12 +29,102 @@ impl TableStore for SqliteTableStore {
                 comment: row.get(4)?,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
+                columns: Vec::new(),
             })
         }).map_err(|e| format!("Error querying tables: {}", e))?;
 
         let mut tables = Vec::new();
         for table in table_iter {
             tables.push(table.map_err(|e| format!("Error reading table: {}", e))?);
+        }
+
+        Ok(tables)
+    }
+
+    fn get_project_tables_with_columns(&self, project_id: i32) -> Result<Vec<TableDef>, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+
+        // 第 1 次查询：项目下所有表
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, project_id, name, display_name, comment, created_at, updated_at \
+                 FROM t_table WHERE project_id = ?1 ORDER BY created_at DESC",
+            )
+            .map_err(|e| format!("Error preparing tables statement: {}", e))?;
+
+        let mut tables: Vec<TableDef> = stmt
+            .query_map(params![project_id], |row| {
+                Ok(TableDef {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    name: row.get(2)?,
+                    display_name: row.get(3)?,
+                    comment: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    columns: Vec::new(),
+                })
+            })
+            .map_err(|e| format!("Error querying tables: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Error reading tables: {}", e))?;
+
+        if tables.is_empty() {
+            return Ok(tables);
+        }
+
+        // 第 2 次查询：一次性取所有列（IN 子句）
+        let table_ids: Vec<String> = tables.iter().map(|t| t.id.clone()).collect();
+        let placeholders = std::iter::repeat("?")
+            .take(table_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT table_id, id, name, display_name, data_type, length, scale, nullable, \
+                    primary_key, auto_increment, default_value, default_null, comment, sort_order \
+             FROM t_column WHERE table_id IN ({}) ORDER BY table_id, sort_order",
+            placeholders
+        );
+
+        let mut col_stmt = conn
+            .prepare(&sql)
+            .map_err(|e| format!("Error preparing columns statement: {}", e))?;
+
+        let params_iter = rusqlite::params_from_iter(table_ids.iter());
+        let column_iter = col_stmt
+            .query_map(params_iter, |row| {
+                Ok(ColumnDef {
+                    table_id: row.get(0)?,
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                    display_name: row.get(3)?,
+                    data_type: row.get(4)?,
+                    length: row.get(5)?,
+                    scale: row.get(6)?,
+                    nullable: row.get(7)?,
+                    primary_key: row.get(8)?,
+                    auto_increment: row.get(9)?,
+                    default_value: row.get(10)?,
+                    default_null: row.get(11)?,
+                    comment: row.get(12)?,
+                    sort_order: row.get(13)?,
+                })
+            })
+            .map_err(|e| format!("Error querying columns: {}", e))?;
+
+        let mut columns_by_table: HashMap<String, Vec<ColumnDef>> = HashMap::new();
+        for col in column_iter {
+            let col = col.map_err(|e| format!("Error reading column: {}", e))?;
+            columns_by_table
+                .entry(col.table_id.clone())
+                .or_default()
+                .push(col);
+        }
+
+        for table in tables.iter_mut() {
+            if let Some(cols) = columns_by_table.remove(&table.id) {
+                table.columns = cols;
+            }
         }
 
         Ok(tables)
@@ -54,6 +145,7 @@ impl TableStore for SqliteTableStore {
                 comment: row.get(4)?,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
+                columns: Vec::new(),
             })
         }).map_err(|e| format!("Error querying table: {}", e))?;
 

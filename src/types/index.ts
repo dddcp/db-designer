@@ -41,6 +41,8 @@ export interface BackendTableDef {
   comment?: string;
   created_at: string;
   updated_at: string;
+  // 列定义：仅 get_project_tables_with_columns 命令会填充
+  columns?: BackendColumnDef[];
 }
 
 // 后端列定义

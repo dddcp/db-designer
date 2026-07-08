@@ -27,6 +27,9 @@ pub struct TableDef {
     pub comment: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    // 列定义：仅在 get_project_tables_with_columns 等需要时填充，默认空数组以保持向后兼容
+    #[serde(default)]
+    pub columns: Vec<ColumnDef>,
 }
 
 // 列定义数据结构

@@ -24,6 +24,7 @@ pub trait ProjectStore {
 
 pub trait TableStore {
     fn get_project_tables(&self, project_id: i32) -> Result<Vec<TableDef>, String>;
+    fn get_project_tables_with_columns(&self, project_id: i32) -> Result<Vec<TableDef>, String>;
     fn get_table_by_id(&self, table_id: &str) -> Result<Option<TableDef>, String>;
     fn save_table_structure(&self, project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<(), String>;
     fn get_table_columns(&self, table_id: &str) -> Result<Vec<ColumnDef>, String>;

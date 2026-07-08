@@ -41,6 +41,7 @@ pub fn run() {
             git::pull_git_repository,
             git::init_git_repository,
             table::get_project_tables,
+            table::get_project_tables_with_columns,
             table::save_table_structure,
             table::get_table_columns,
             table::save_table_indexes,

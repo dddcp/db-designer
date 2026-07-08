@@ -17,6 +17,10 @@ impl TableService {
         self.store.get_project_tables(project_id)
     }
 
+    pub fn get_project_tables_with_columns(&self, project_id: i32) -> Result<Vec<TableDef>, String> {
+        self.store.get_project_tables_with_columns(project_id)
+    }
+
     pub fn get_table_by_id(&self, table_id: String) -> Result<Option<TableDef>, String> {
         self.store.get_table_by_id(&table_id)
     }

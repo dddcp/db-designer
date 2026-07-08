@@ -7,6 +7,12 @@ pub fn get_project_tables(project_id: i32) -> Result<Vec<TableDef>, String> {
     TableService::new().get_project_tables(project_id)
 }
 
+// 获取项目下的所有表（一次性带列定义，避免 N+1 IPC）
+#[tauri::command]
+pub fn get_project_tables_with_columns(project_id: i32) -> Result<Vec<TableDef>, String> {
+    TableService::new().get_project_tables_with_columns(project_id)
+}
+
 // 保存表结构
 #[tauri::command]
 pub fn save_table_structure(project_id: i32, table: TableDef, columns: Vec<ColumnDef>) -> Result<String, String> {

@@ -61,7 +61,7 @@ const { Title, Text } = Typography;
 const { useToken } = theme;
 const { Option } = Select;
 
-import type { Project, TableDef, ColumnDef, BackendTableDef, BackendColumnDef } from '../../types';
+import type { Project, TableDef, ColumnDef, BackendTableDef } from '../../types';
 
 // 拖拽手柄 Context：将 listeners 从行组件传递给手柄图标（必须在组件外部定义，避免每次渲染重新创建）
 const DragHandleContext = React.createContext<any>({});
@@ -169,35 +169,28 @@ const ProjectDetail: React.FC = () => {
    */
   const loadTables = async (projectId: number) => {
     try {
-      const projectTables: BackendTableDef[] = await invoke('get_project_tables', {
+      const projectTables: BackendTableDef[] = await invoke('get_project_tables_with_columns', {
         projectId,
       });
-      const tablesData: TableDef[] = await Promise.all(
-        projectTables.map(async (table) => {
-          const columns: BackendColumnDef[] = await invoke('get_table_columns', {
-            tableId: table.id,
-          });
-          return {
-            id: table.id,
-            name: table.name,
-            displayName: table.display_name,
-            columns: columns.map(col => ({
-              id: col.id,
-              name: col.name,
-              displayName: col.display_name,
-              type: col.data_type,
-              length: col.length,
-              nullable: col.nullable,
-              primaryKey: col.primary_key,
-              autoIncrement: col.auto_increment,
-              defaultValue: col.default_value,
-              defaultNull: col.default_null ?? false,
-              comment: col.comment,
-              order: col.sort_order,
-            })),
-          };
-        })
-      );
+      const tablesData: TableDef[] = projectTables.map(table => ({
+        id: table.id,
+        name: table.name,
+        displayName: table.display_name,
+        columns: (table.columns ?? []).map(col => ({
+          id: col.id,
+          name: col.name,
+          displayName: col.display_name,
+          type: col.data_type,
+          length: col.length,
+          nullable: col.nullable,
+          primaryKey: col.primary_key,
+          autoIncrement: col.auto_increment,
+          defaultValue: col.default_value,
+          defaultNull: col.default_null ?? false,
+          comment: col.comment,
+          order: col.sort_order,
+        })),
+      }));
       setTables(tablesData);
       setSelectedTable(prev => {
         if (prev) {

@@ -4,6 +4,13 @@
 
 ---
 
+## [Unreleased]
+
+### 修复
+- 操作系统窗口标题栏颜色不跟随应用深色/浅色模式切换的问题：新增 Tauri 命令 `apply_window_theme`，通过 `WebviewWindow::set_theme()` 实时同步 Windows 11 / macOS 标题栏颜色；首次启动与运行时切换均生效
+
+---
+
 ## [0.5.6] - 2026-07-07
 
 ### 新增
