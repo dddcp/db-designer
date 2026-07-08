@@ -1,31 +1,34 @@
 import {
   ClockCircleOutlined,
   DatabaseOutlined,
+  DeleteOutlined,
   DownloadOutlined,
   PlusOutlined,
+  RightOutlined,
+  RocketOutlined,
   SettingOutlined,
-  SyncOutlined
+  SyncOutlined,
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import {
-  Avatar,
   Button,
-  Card,
+  Col,
+  Divider,
+  Drawer,
   Form,
   Input,
   Layout,
-  List,
-  Drawer,
   Modal,
   Popconfirm,
+  Row,
   Space,
   Tag,
   Tooltip,
   Typography,
   message,
-  theme
+  theme,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -33,10 +36,32 @@ import { useNavigate } from 'react-router-dom';
 import { translateBackendMessage } from '../../i18n/backend-messages';
 import { useTheme } from '../../store/theme-context';
 import type { Project } from '../../types';
+import styles from './main.module.css';
 
 const { Header, Content } = Layout;
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { useToken } = theme;
+
+/** 项目卡片渐变色板（按 id 稳定取色） */
+const CARD_GRADIENTS: [string, string][] = [
+  ['#1677ff', '#0958d9'],
+  ['#722ed1', '#531dab'],
+  ['#13c2c2', '#08979c'],
+  ['#52c41a', '#389e0d'],
+  ['#fa8c16', '#d46b08'],
+  ['#eb2f96', '#c41d7f'],
+];
+
+const pickGradient = (id: number): [string, string] => {
+  const idx = Math.abs(id) % CARD_GRADIENTS.length;
+  return CARD_GRADIENTS[idx];
+};
+
+const getInitial = (name: string): string => {
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  return trimmed.charAt(0).toUpperCase();
+};
 
 /**
  * 主页面组件
@@ -69,16 +94,9 @@ const Main: React.FC = () => {
    */
   const initializeApp = async () => {
     try {
-      // 初始化数据库
       await invoke('init_database');
-      
-      // 加载项目列表
       await loadProjects();
-      
-      // 检查Git配置
       await checkGitConfig();
-      
-      // 检查应用更新
       await checkForUpdates();
     } catch (error) {
       console.error(t('main_init_fail'), error);
@@ -269,267 +287,343 @@ const Main: React.FC = () => {
     navigate(`/project/${projectId}`);
   };
 
+  /**
+   * 打开新建项目抽屉
+   */
+  const handleOpenCreate = () => {
+    setIsModalVisible(true);
+  };
+
   return (
-      <Layout style={{ height: '100vh' }}>
-        {/* 头部 */}
-        <Header
-          style={{
-            background: isDarkMode ? '#141414' : '#fff',
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-            padding: '0 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0, height: 24, lineHeight: '24px', color: isDarkMode ? '#fff' : '#000' }}>
-              {t('app_title')}
-            </Title>
+    <Layout style={{ height: '100vh' }}>
+      {/* 头部 */}
+      <Header
+        style={{
+          background: isDarkMode ? '#141414' : '#fff',
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          padding: '0 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className={styles.brandLogo}>
+            <DatabaseOutlined />
           </div>
-          
-          <Space>
-            {gitConfigSaved && (
-              <>
-                <Tooltip title={t('main_pull_data')}>
-                  <Button
-                    type="text"
-                    icon={<DownloadOutlined />}
-                    onClick={handlePull}
-                  >
-                    {t('main_pull')}
-                  </Button>
-                </Tooltip>
-                <Tooltip title={t('main_sync_data')}>
-                  <Button
-                    type="text"
-                    icon={<SyncOutlined />}
-                    onClick={handleSync}
-                  >
-                    {t('main_sync')}
-                  </Button>
-                </Tooltip>
-              </>
-            )}
-            {updateAvailable && (
+          <Text
+            strong
+            style={{
+              fontSize: 17,
+              color: isDarkMode ? '#fff' : '#1f1f1f',
+              letterSpacing: 0.3
+            }}
+          >
+            {t('app_title')}
+          </Text>
+        </div>
+
+        <Space size={4}>
+          {gitConfigSaved && (
+            <Space.Compact>
+              <Tooltip title={t('main_pull_data')}>
+                <Button
+                  type="text"
+                  icon={<DownloadOutlined />}
+                  onClick={handlePull}
+                >
+                  {t('main_pull')}
+                </Button>
+              </Tooltip>
+              <Tooltip title={t('main_sync_data')}>
+                <Button
+                  type="text"
+                  icon={<SyncOutlined />}
+                  onClick={handleSync}
+                >
+                  {t('main_sync')}
+                </Button>
+              </Tooltip>
+            </Space.Compact>
+          )}
+          {updateAvailable && (
+            <>
               <Tooltip title={t('main_new_version_found', { version: updateAvailable.version })}>
                 <Button
                   type="primary"
+                  size="small"
                   onClick={handleInstallUpdate}
                   loading={updateLoading}
                 >
                   {t('main_new_version')}
                 </Button>
               </Tooltip>
-            )}
-            <Tooltip title={t('main_settings')}>
-              <Button
-                type="text"
-                icon={<SettingOutlined />}
-                onClick={() => navigate('/setting')}
-              >
-                {t('main_settings')}
-              </Button>
-            </Tooltip>
-          </Space>
-        </Header>
-
-        {/* 主要内容区域 */}
-        <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* 操作栏 */}
-            <Card
-              style={{ marginBottom: 24, flexShrink: 0 }}
-              bodyStyle={{ padding: '16px 24px' }}
+              <Divider type="vertical" style={{ margin: '0 4px' }} />
+            </>
+          )}
+          <Tooltip title={t('main_settings')}>
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={() => navigate('/setting')}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Space>
-                  <Title level={4} style={{ margin: 0 }}>
-                    {t('main_project_list')}
-                  </Title>
-                  <Text type="secondary">
-                    {t('main_total_projects', { count: projects.length })}
-                  </Text>
-                </Space>
-                
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />}
-                  onClick={() => setIsModalVisible(true)}
-                >
-                  {t('main_new_project')}
-                </Button>
+              {t('main_settings')}
+            </Button>
+          </Tooltip>
+        </Space>
+      </Header>
+
+      {/* 主要内容区域 */}
+      <Content
+        className={isDarkMode ? 'theme-dark' : ''}
+        style={{
+          padding: '20px 24px',
+          background: isDarkMode ? '#000' : '#f5f5f5',
+          overflow: 'auto'
+        }}
+      >
+        <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto' }}>
+          {/* Hero Banner */}
+          <div className={`${styles.hero} ${isDarkMode ? styles.dark : ''}`}>
+            <div className={`${styles.heroOrb} ${styles.heroOrb1}`} />
+            <div className={`${styles.heroOrb} ${styles.heroOrb2}`} />
+            <div className={`${styles.heroOrb} ${styles.heroOrb3}`} />
+
+            <div className={styles.heroInner}>
+              <div className={styles.heroText}>
+                <div className={styles.heroBadge}>
+                  <RocketOutlined />
+                  <span>{t('main_hero_badge')}</span>
+                </div>
+                <p className={styles.heroSubtitle}>{t('main_hero_subtitle')}</p>
+
+                <div className={styles.heroFeatures}>
+                  <span className={styles.heroFeature}>{t('main_hero_feature_visual')}</span>
+                  <span className={styles.heroFeature}>{t('main_hero_feature_dialect')}</span>
+                  <span className={styles.heroFeature}>{t('main_hero_feature_version')}</span>
+                  <span className={styles.heroFeature}>{t('main_hero_feature_ai')}</span>
+                </div>
               </div>
-            </Card>
-
-            {/* 项目列表 */}
-            <Card
-              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
-              bodyStyle={{ padding: 0, overflow: 'auto', flex: 1, minHeight: 0 }}
-            >
-              <List
-                dataSource={projects}
-                renderItem={(project) => (
-                  <List.Item
-                    style={{ padding: '12px 24px' }}
-                    actions={[
-                      <Space key="meta-info" size="small" style={{ marginRight: 16, color: token.colorTextSecondary, fontSize: 12 }}>
-                        <ClockCircleOutlined />
-                        <span>{formatDate(project.created_at)}</span>
-                      </Space>,
-                      <Button type="link" key="view" onClick={() => handleProjectClick(project.id)}>
-                        {t('main_view_detail')}
-                      </Button>,
-                      <Popconfirm
-                        key="delete"
-                        title={t('main_confirm_delete_project')}
-                        description={t('main_delete_project_desc')}
-                        onConfirm={() => handleDeleteProject(project.id)}
-                        okText={t('confirm')}
-                        cancelText={t('cancel')}
-                      >
-                        <Button type="link" danger>{t('delete')}</Button>
-                      </Popconfirm>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      avatar={
-                        <Avatar
-                          style={{ backgroundColor: token.colorPrimary }}
-                          icon={<DatabaseOutlined />}
-                        />
-                      }
-                      title={
-                        <Space>
-                          <Text strong>{project.name}</Text>
-                          <Tag color="blue">{t('main_project')}</Tag>
-                        </Space>
-                      }
-                      description={
-                        <Text type="secondary" ellipsis={{ tooltip: project.description || t('main_no_description') }}>
-                          {project.description || t('main_no_description')}
-                        </Text>
-                      }
-                    />
-                  </List.Item>
-                )}
-                locale={{
-                  emptyText: (
-                    <div style={{ textAlign: 'center', padding: 40 }}>
-                      <DatabaseOutlined style={{ fontSize: 48, color: token.colorTextDisabled, marginBottom: 16 }} />
-                      <div style={{ color: token.colorTextDisabled }}>{t('main_empty')}</div>
-                    </div>
-                  )
-                }}
-              />
-            </Card>
-          </div>
-        </Content>
-    
-
-        {/* 移除设置模态框 */}
-
-        {/* 创建项目模态框 */}
-        <Drawer
-          title={t('main_create_project')}
-          open={isModalVisible}
-          onClose={() => {
-            setIsModalVisible(false);
-            form.resetFields();
-          }}
-          footer={null}
-          width={520}
-        >
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleCreateProject}
-          >
-            <Form.Item
-              name="name"
-              label={t('main_project_name')}
-              rules={[{ required: true, message: t('main_project_name_required') }]}
-            >
-              <Input placeholder={t('main_project_name_required')} />
-            </Form.Item>
-            
-            <Form.Item
-              name="description"
-              label={t('main_project_desc')}
-            >
-              <Input.TextArea 
-                placeholder={t('main_project_desc_placeholder')} 
-                rows={4}
-              />
-            </Form.Item>
-
-            <Form.Item>
-              <Space>
-                <Button 
-                  type="primary" 
-                  htmlType="submit" 
-                  loading={loading}
-                >
-                  {t('create')}
-                </Button>
-                <Button 
-                  onClick={() => {
-                    setIsModalVisible(false);
-                    form.resetFields();
-                  }}
-                >
-                  {t('cancel')}
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
-        </Drawer>
-
-        {/* 同步提交信息弹窗 */}
-        <Modal
-          title={t('main_git_sync')}
-          open={syncModalVisible}
-          onOk={handleConfirmSync}
-          onCancel={() => setSyncModalVisible(false)}
-          confirmLoading={syncLoading}
-          okText={t('main_sync')}
-          cancelText={t('cancel')}
-        >
-          <div style={{ marginBottom: 8 }}>
-            <Text type="warning" strong>{t('main_git_sync_warning')}</Text>
-            <br/>
-            <Text type="secondary">{t('main_git_commit_msg')}</Text>
-          </div>
-          <Input.TextArea
-            value={commitMessage}
-            onChange={(e) => setCommitMessage(e.target.value)}
-            placeholder="Auto sync: database changes"
-            rows={3}
-          />
-        </Modal>
-
-        {/* 拉取确认弹窗 */}
-        <Modal
-          title={t('main_git_pull')}
-          open={pullModalVisible}
-          onOk={handleConfirmPull}
-          onCancel={() => setPullModalVisible(false)}
-          confirmLoading={pullLoading}
-          okText={t('main_git_pull_confirm')}
-          cancelText={t('cancel')}
-          okButtonProps={{ danger: true }}
-        >
-          <div>
-            <Text type="warning" strong>{t('main_git_pull_warning')}</Text>
-            <div style={{ marginTop: 12 }}>
-              <Text type="secondary">
-                {t('main_git_pull_desc')}
-              </Text>
             </div>
           </div>
-        </Modal>
-      </Layout>
+
+          {/* 章节标题 */}
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionTitle}>
+              <h2>{t('main_project_list')}</h2>
+              <span className={styles.sectionCount}>
+                {t('main_total_projects', { count: projects.length })}
+              </span>
+            </div>
+            <Button
+              className={styles.newButton}
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleOpenCreate}
+            >
+              {t('main_new_project')}
+            </Button>
+          </div>
+
+          {/* 项目卡片网格 / 空状态 */}
+          {projects.length === 0 ? (
+            <div className={styles.emptyWrap}>
+              <div className={styles.emptyIcon}>
+                <DatabaseOutlined />
+              </div>
+              <p className={styles.emptyTitle}>{t('main_empty_title')}</p>
+              <p className={styles.emptyHint}>{t('main_empty')}</p>
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={handleOpenCreate}
+              >
+                {t('main_new_project')}
+              </Button>
+            </div>
+          ) : (
+            <Row gutter={[16, 16]}>
+              {projects.map((project) => {
+                const [colorStart, colorEnd] = pickGradient(project.id);
+                return (
+                  <Col xs={24} sm={12} md={12} lg={8} xl={8} xxl={6} key={project.id}>
+                    <div
+                      className={styles.projectCard}
+                      onClick={() => handleProjectClick(project.id)}
+                    >
+                      <div
+                        className={styles.projectCardStripe}
+                        style={{ background: `linear-gradient(90deg, ${colorStart}, ${colorEnd})` }}
+                      />
+                      <div className={styles.projectCardBody}>
+                        <div className={styles.projectCardHeader}>
+                          <div
+                            className={styles.projectAvatar}
+                            style={{ background: `linear-gradient(135deg, ${colorStart}, ${colorEnd})` }}
+                          >
+                            {getInitial(project.name)}
+                          </div>
+                          <div className={styles.projectTitleArea}>
+                            <div className={styles.projectTitle}>{project.name}</div>
+                            <Tag
+                              className={styles.projectTag}
+                              color={colorStart}
+                              bordered={false}
+                            >
+                              {t('main_project')}
+                            </Tag>
+                          </div>
+                        </div>
+
+                        <p className={styles.projectDescription}>
+                          {project.description || t('main_no_description')}
+                        </p>
+
+                        <div className={styles.projectFooter}>
+                          <span className={styles.projectDate}>
+                            <ClockCircleOutlined />
+                            <span>{formatDate(project.created_at)}</span>
+                          </span>
+                          <Space size={2} className={styles.projectActions} onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              type="text"
+                              size="small"
+                              className={styles.projectActionBtn}
+                              icon={<RightOutlined />}
+                              onClick={() => handleProjectClick(project.id)}
+                            >
+                              {t('main_view_detail')}
+                            </Button>
+                            <Popconfirm
+                              title={t('main_confirm_delete_project')}
+                              description={t('main_delete_project_desc')}
+                              onConfirm={() => handleDeleteProject(project.id)}
+                              onCancel={(e) => e?.stopPropagation()}
+                              okText={t('confirm')}
+                              cancelText={t('cancel')}
+                            >
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                className={styles.projectActionBtn}
+                                icon={<DeleteOutlined />}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </Popconfirm>
+                          </Space>
+                        </div>
+                      </div>
+                    </div>
+                  </Col>
+                );
+              })}
+            </Row>
+          )}
+        </div>
+      </Content>
+
+      {/* 创建项目抽屉 */}
+      <Drawer
+        title={t('main_create_project')}
+        open={isModalVisible}
+        onClose={() => {
+          setIsModalVisible(false);
+          form.resetFields();
+        }}
+        footer={null}
+        width={520}
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleCreateProject}
+        >
+          <Form.Item
+            name="name"
+            label={t('main_project_name')}
+            rules={[{ required: true, message: t('main_project_name_required') }]}
+          >
+            <Input placeholder={t('main_project_name_required')} />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label={t('main_project_desc')}
+          >
+            <Input.TextArea
+              placeholder={t('main_project_desc_placeholder')}
+              rows={4}
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Space>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={loading}
+              >
+                {t('create')}
+              </Button>
+              <Button
+                onClick={() => {
+                  setIsModalVisible(false);
+                  form.resetFields();
+                }}
+              >
+                {t('cancel')}
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Drawer>
+
+      {/* 同步提交信息弹窗 */}
+      <Modal
+        title={t('main_git_sync')}
+        open={syncModalVisible}
+        onOk={handleConfirmSync}
+        onCancel={() => setSyncModalVisible(false)}
+        confirmLoading={syncLoading}
+        okText={t('main_sync')}
+        cancelText={t('cancel')}
+      >
+        <div style={{ marginBottom: 8 }}>
+          <Text type="warning" strong>{t('main_git_sync_warning')}</Text>
+          <br/>
+          <Text type="secondary">{t('main_git_commit_msg')}</Text>
+        </div>
+        <Input.TextArea
+          value={commitMessage}
+          onChange={(e) => setCommitMessage(e.target.value)}
+          placeholder="Auto sync: database changes"
+          rows={3}
+        />
+      </Modal>
+
+      {/* 拉取确认弹窗 */}
+      <Modal
+        title={t('main_git_pull')}
+        open={pullModalVisible}
+        onOk={handleConfirmPull}
+        onCancel={() => setPullModalVisible(false)}
+        confirmLoading={pullLoading}
+        okText={t('main_git_pull_confirm')}
+        cancelText={t('cancel')}
+        okButtonProps={{ danger: true }}
+      >
+        <div>
+          <Text type="warning" strong>{t('main_git_pull_warning')}</Text>
+          <div style={{ marginTop: 12 }}>
+            <Text type="secondary">
+              {t('main_git_pull_desc')}
+            </Text>
+          </div>
+        </div>
+      </Modal>
+    </Layout>
   );
 };
 
