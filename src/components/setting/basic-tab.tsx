@@ -52,6 +52,7 @@ const BasicTab: React.FC = () => {
         key: 'theme',
         value: checked ? 'dark' : 'light',
       });
+      await invoke('apply_window_theme', { isDark: checked });
       localStorage.setItem('theme', checked ? 'dark' : 'light');
       window.location.reload();
     } catch (error) {

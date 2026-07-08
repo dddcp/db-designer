@@ -14,6 +14,7 @@ mod ai_sql;
 mod services;
 mod storage;
 pub mod dialect;
+mod window;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -90,7 +91,8 @@ pub fn run() {
             ai_sql::delete_ai_sql_conversation,
             ai::ai_chat,
             ai::ai_fetch_models,
-            ai::ai_test_connection
+            ai::ai_test_connection,
+            window::apply_window_theme
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
