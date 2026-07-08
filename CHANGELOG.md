@@ -9,9 +9,14 @@
 ### 新增
 - 项目表加载优化：新增 Tauri 命令 `get_project_tables_with_columns`，一次性返回项目下所有表及其列定义（先查所有表再用 `IN` 子句批量查列），将原本的 N+1 次 IPC 降为 2 次，显著提升大项目首屏加载速度；`TableDef` 新增 `columns` 字段（默认空数组以保持向后兼容）
 - 启动画面优化：`index.html` 的 `lang` 改为 `zh-CN`，标题设为「DB Designer」；新增内嵌 splash（Logo + spinner），通过内联 script 在 React 加载前同步读取 `localStorage` 中的主题应用到 `documentElement`，避免闪一下浅色；`main.tsx` 使用双 `requestAnimationFrame` 在首帧渲染后淡出并移除 splash，`transitionend` + `setTimeout` 兜底
+- 项目详情页全屏加载动画：替换原先朴素的「Loading...」文本为全屏居中的双环 + Logo 脉冲动画，外环 1.2s 顺时针、内环 0.9s 逆时针旋转、中心 `DatabaseOutlined` 1.6s 缩放呼吸；动画通过 `App.css` 新增的 `@keyframes`（`page-loading-spin` / `page-loading-pulse`）实现，加载背景根据主题切换
+
+### 优化
+- 首页项目列表样式重构：`Layout` 由 `minHeight: 100vh` 改为 `height: 100vh` 并配合 `Content` 的 flex 列布局，使列表卡可滚动占满剩余空间；项目卡片 `padding` 收紧至 `12px 24px`，创建时间由描述区移至右侧操作区并用 `ClockCircleOutlined` + 灰色小字展示；描述区移除多余嵌套的 `Space direction="vertical"`，改为单行省略号 + `tooltip` 悬浮显示完整内容
 
 ### 修复
 - 操作系统窗口标题栏颜色不跟随应用深色/浅色模式切换的问题：新增 Tauri 命令 `apply_window_theme`，通过 `WebviewWindow::set_theme()` 实时同步 Windows 11 / macOS 标题栏颜色；首次启动与运行时切换均生效
+- 修复首页 Header 中应用名称与左侧图标、设置页 Header 中设置标题与图标不在同一水平线的问题：将 `Space` 替换为显式 flex 容器，并将 `Title` 高度与 `lineHeight` 锁定为 `24px` 与图标 `fontSize` 对齐
 
 ---
 
