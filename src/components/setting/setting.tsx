@@ -1,17 +1,13 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Layout,
-  Button,
   Card,
   Tabs,
   theme,
-  Tooltip,
   Typography,
 } from 'antd';
 import {
-  ArrowLeftOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import BasicTab from './basic-tab';
@@ -19,13 +15,13 @@ import GitTab from './git-tab';
 import DatabaseTab from './database-tab';
 import AiTab from './ai-tab';
 import DataTypeTab from './data-type-tab';
+import BackButton from '../common/BackButton';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { useToken } = theme;
 
 const Setting: React.FC = () => {
-  const navigate = useNavigate();
   const { t } = useTranslation();
   const { token } = useToken();
   const [activeTab, setActiveTab] = useState('basic');
@@ -43,11 +39,10 @@ const Setting: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Tooltip title={t('setting_back_home')}>
-            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
-              {t('setting_back')}
-            </Button>
-          </Tooltip>
+          <BackButton
+            label={t('setting_back')}
+            tooltip={t('setting_back_home')}
+          />
           <SettingOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
           <Title level={3} style={{ margin: 0, height: 24, lineHeight: '24px' }}>{t('setting_title')}</Title>
         </div>

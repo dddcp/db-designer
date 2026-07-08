@@ -1,5 +1,4 @@
 import {
-  ArrowLeftOutlined,
   CloudSyncOutlined,
   CodeOutlined,
   DatabaseOutlined,
@@ -40,6 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme-context';
 import { getAllDataTypes, findDataType } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
+import BackButton from '../common/BackButton';
 import DatabaseCodeTab from './database-code-tab';
 import IndexTab from './index-tab';
 import InitDataTab from './init-data-tab';
@@ -969,21 +969,25 @@ const ProjectDetail: React.FC = () => {
             justifyContent: 'space-between'
           }}
         >
-          <Space>
-            <Tooltip title={t('proj_back_home')}>
-              <Button 
-                type="text" 
-                icon={<ArrowLeftOutlined />}
-                onClick={handleBack}
-              >
-                {t('proj_back')}
-              </Button>
-            </Tooltip>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <BackButton
+              label={t('proj_back')}
+              tooltip={t('proj_back_home')}
+              onClick={handleBack}
+            />
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
+            <Title
+              level={3}
+              style={{
+                margin: 0,
+                height: 24,
+                lineHeight: '24px',
+                color: isDarkMode ? '#fff' : '#000'
+              }}
+            >
               {project.name}
             </Title>
-          </Space>
+          </div>
         </Header>
 
         {/* 项目级视图切换 */}

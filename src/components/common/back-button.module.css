@@ -1,0 +1,52 @@
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--ant-color-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.backButton:hover {
+  background: rgba(22, 119, 255, 0.08);
+  border-color: rgba(22, 119, 255, 0.35);
+  color: var(--ant-color-primary);
+}
+
+.backButton:hover .icon {
+  transform: translateX(-3px);
+}
+
+.backButton:active {
+  transform: scale(0.97);
+}
+
+.icon {
+  font-size: 12px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+:global(.theme-dark) .backButton {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+:global(.theme-dark) .backButton:hover {
+  background: rgba(22, 119, 255, 0.18);
+  border-color: rgba(22, 119, 255, 0.45);
+  color: #fff;
+}
