@@ -5,7 +5,6 @@ import {
   Layout,
   Button,
   Card,
-  Space,
   Tabs,
   theme,
   Tooltip,
@@ -43,15 +42,15 @@ const Setting: React.FC = () => {
           justifyContent: 'space-between',
         }}
       >
-        <Space>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Tooltip title={t('setting_back_home')}>
             <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/')}>
               {t('setting_back')}
             </Button>
           </Tooltip>
           <SettingOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-          <Title level={3} style={{ margin: 0 }}>{t('setting_title')}</Title>
-        </Space>
+          <Title level={3} style={{ margin: 0, height: 24, lineHeight: '24px' }}>{t('setting_title')}</Title>
+        </div>
       </Header>
 
       <Content style={{ padding: '24px', background: token.colorBgLayout }}>

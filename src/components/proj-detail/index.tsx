@@ -886,8 +886,63 @@ const ProjectDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 50 }}>
-        <Text>{t('loading')}</Text>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: isDarkMode ? '#0a0a0a' : '#fafafa',
+          gap: 28,
+        }}
+      >
+        <div style={{ position: 'relative', width: 120, height: 120 }}>
+          <div
+            className="page-loading-ring-outer"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              border: `3px solid ${token.colorBorderSecondary}`,
+              borderTopColor: token.colorPrimary,
+            }}
+          />
+          <div
+            className="page-loading-ring-inner"
+            style={{
+              position: 'absolute',
+              inset: 18,
+              borderRadius: '50%',
+              border: `2px solid ${token.colorBorderSecondary}`,
+              borderBottomColor: token.colorPrimary,
+            }}
+          />
+          <div
+            className="page-loading-icon"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: token.colorPrimary,
+            }}
+          >
+            <DatabaseOutlined style={{ fontSize: 36 }} />
+          </div>
+        </div>
+        <Text
+          style={{
+            fontSize: 15,
+            color: token.colorTextSecondary,
+            letterSpacing: 1,
+            fontWeight: 500,
+          }}
+        >
+          {t('loading')}
+        </Text>
       </div>
     );
   }

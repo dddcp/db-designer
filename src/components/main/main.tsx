@@ -1,4 +1,5 @@
 import {
+  ClockCircleOutlined,
   DatabaseOutlined,
   DownloadOutlined,
   PlusOutlined,
@@ -269,10 +270,10 @@ const Main: React.FC = () => {
   };
 
   return (
-      <Layout style={{ minHeight: '100vh' }}>
+      <Layout style={{ height: '100vh' }}>
         {/* 头部 */}
-        <Header 
-          style={{ 
+        <Header
+          style={{
             background: isDarkMode ? '#141414' : '#fff',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
             padding: '0 24px',
@@ -281,12 +282,12 @@ const Main: React.FC = () => {
             justifyContent: 'space-between'
           }}
         >
-          <Space>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title level={3} style={{ margin: 0, color: isDarkMode ? '#fff' : '#000' }}>
+            <Title level={3} style={{ margin: 0, height: 24, lineHeight: '24px', color: isDarkMode ? '#fff' : '#000' }}>
               {t('app_title')}
             </Title>
-          </Space>
+          </div>
           
           <Space>
             {gitConfigSaved && (
@@ -335,11 +336,11 @@ const Main: React.FC = () => {
         </Header>
 
         {/* 主要内容区域 */}
-        <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5' }}>
-          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {/* 操作栏 */}
-            <Card 
-              style={{ marginBottom: 24 }}
+            <Card
+              style={{ marginBottom: 24, flexShrink: 0 }}
               bodyStyle={{ padding: '16px 24px' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -363,12 +364,20 @@ const Main: React.FC = () => {
             </Card>
 
             {/* 项目列表 */}
-            <Card>
+            <Card
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
+              bodyStyle={{ padding: 0, overflow: 'auto', flex: 1, minHeight: 0 }}
+            >
               <List
                 dataSource={projects}
                 renderItem={(project) => (
                   <List.Item
+                    style={{ padding: '12px 24px' }}
                     actions={[
+                      <Space key="meta-info" size="small" style={{ marginRight: 16, color: token.colorTextSecondary, fontSize: 12 }}>
+                        <ClockCircleOutlined />
+                        <span>{formatDate(project.created_at)}</span>
+                      </Space>,
                       <Button type="link" key="view" onClick={() => handleProjectClick(project.id)}>
                         {t('main_view_detail')}
                       </Button>,
@@ -386,7 +395,7 @@ const Main: React.FC = () => {
                   >
                     <List.Item.Meta
                       avatar={
-                        <Avatar 
+                        <Avatar
                           style={{ backgroundColor: token.colorPrimary }}
                           icon={<DatabaseOutlined />}
                         />
@@ -398,17 +407,9 @@ const Main: React.FC = () => {
                         </Space>
                       }
                       description={
-                        <Space direction="vertical" size={0}>
-                          <Text type="secondary">
-                            {project.description || t('main_no_description')}
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {t('main_created_at', { date: formatDate(project.created_at) })}
-                          </Text>
-                          {/*<Text type="secondary" style={{ fontSize: 12 }}>*/}
-                          {/*  更新于: {formatDate(project.updated_at)}*/}
-                          {/*</Text>*/}
-                        </Space>
+                        <Text type="secondary" ellipsis={{ tooltip: project.description || t('main_no_description') }}>
+                          {project.description || t('main_no_description')}
+                        </Text>
                       }
                     />
                   </List.Item>

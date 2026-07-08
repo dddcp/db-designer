@@ -126,6 +126,36 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* 项目详情页全屏加载动画 */
+@keyframes page-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes page-loading-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+.page-loading-ring-outer {
+  animation: page-loading-spin 1.2s linear infinite;
+  transform-origin: 50% 50%;
+}
+.page-loading-ring-inner {
+  animation: page-loading-spin 0.9s linear infinite reverse;
+  transform-origin: 50% 50%;
+}
+.page-loading-icon {
+  animation: page-loading-pulse 1.6s ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
 /* 自定义空状态样式 */
 .ant-empty {
   padding: 40px 0;
