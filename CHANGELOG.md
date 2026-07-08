@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### 新增
+- 项目表加载优化：新增 Tauri 命令 `get_project_tables_with_columns`，一次性返回项目下所有表及其列定义（先查所有表再用 `IN` 子句批量查列），将原本的 N+1 次 IPC 降为 2 次，显著提升大项目首屏加载速度；`TableDef` 新增 `columns` 字段（默认空数组以保持向后兼容）
+
 ### 修复
 - 操作系统窗口标题栏颜色不跟随应用深色/浅色模式切换的问题：新增 Tauri 命令 `apply_window_theme`，通过 `WebviewWindow::set_theme()` 实时同步 Windows 11 / macOS 标题栏颜色；首次启动与运行时切换均生效
 
