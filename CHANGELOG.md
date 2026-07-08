@@ -8,6 +8,7 @@
 
 ### 新增
 - 项目表加载优化：新增 Tauri 命令 `get_project_tables_with_columns`，一次性返回项目下所有表及其列定义（先查所有表再用 `IN` 子句批量查列），将原本的 N+1 次 IPC 降为 2 次，显著提升大项目首屏加载速度；`TableDef` 新增 `columns` 字段（默认空数组以保持向后兼容）
+- 启动画面优化：`index.html` 的 `lang` 改为 `zh-CN`，标题设为「DB Designer」；新增内嵌 splash（Logo + spinner），通过内联 script 在 React 加载前同步读取 `localStorage` 中的主题应用到 `documentElement`，避免闪一下浅色；`main.tsx` 使用双 `requestAnimationFrame` 在首帧渲染后淡出并移除 splash，`transitionend` + `setTimeout` 兜底
 
 ### 修复
 - 操作系统窗口标题栏颜色不跟随应用深色/浅色模式切换的问题：新增 Tauri 命令 `apply_window_theme`，通过 `WebviewWindow::set_theme()` 实时同步 Windows 11 / macOS 标题栏颜色；首次启动与运行时切换均生效
