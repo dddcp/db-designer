@@ -13,7 +13,7 @@ Natural Language Table Design / AI Index Optimization / AI Table Refactoring / M
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/dddcp/db-designer/releases)
 
 </div>
----
+
 
 ## AI Capabilities
 
