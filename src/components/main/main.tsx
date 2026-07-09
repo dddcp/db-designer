@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { translateBackendMessage } from '../../i18n/backend-messages';
 import { useTheme } from '../../store/theme-context';
+import { getThemedBg } from '../../theme/dark-colors';
 import type { Project } from '../../types';
 import styles from './main.module.css';
 
@@ -472,7 +473,7 @@ const Main: React.FC = () => {
         className={isDarkMode ? 'theme-dark' : ''}
         style={{
           padding: '20px 24px',
-          background: isDarkMode ? '#000' : '#f5f5f5',
+          background: getThemedBg(isDarkMode, 'page'),
           overflow: 'auto'
         }}
       >

@@ -8,6 +8,7 @@ import Main from './components/main/main';
 import ProjectDetail from './components/proj-detail';
 import Setting from './components/setting/setting';
 import { ThemeProvider, useTheme } from './store/theme-context';
+import { DARK_BG_PAGE, DARK_BG_PANEL } from './theme/dark-colors';
 
 function AppContent() {
   const { isDarkMode } = useTheme();
@@ -22,6 +23,13 @@ function AppContent() {
         token: {
           colorPrimary: '#1890ff',
           borderRadius: 8,
+          // dark mode 下覆盖 Ant Design 默认的近黑色 token（与 dark-colors.ts 保持一致）
+          // 浅色模式不覆盖，沿用 Ant Design 默认浅色 token
+          ...(isDarkMode && {
+            colorBgLayout: DARK_BG_PAGE,
+            colorBgContainer: DARK_BG_PANEL,
+            colorBgElevated: DARK_BG_PANEL,
+          }),
         },
       }}
     >

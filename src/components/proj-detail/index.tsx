@@ -37,6 +37,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme-context';
+import { getThemedBg } from '../../theme/dark-colors';
 import { getAllDataTypes, findDataType } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 import BackButton from '../common/BackButton';
@@ -894,7 +895,7 @@ const ProjectDetail: React.FC = () => {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: isDarkMode ? '#0a0a0a' : '#fafafa',
+          background: getThemedBg(isDarkMode, 'overlay'),
           gap: 28,
         }}
       >
@@ -961,7 +962,7 @@ const ProjectDetail: React.FC = () => {
         {/* 头部 */}
         <Header 
           style={{ 
-            background: isDarkMode ? '#141414' : '#fff',
+            background: getThemedBg(isDarkMode, 'panel'),
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
             padding: '0 24px',
             display: 'flex',
@@ -991,7 +992,7 @@ const ProjectDetail: React.FC = () => {
         </Header>
 
         {/* 项目级视图切换 */}
-        <div style={{ padding: '0 24px', background: isDarkMode ? '#141414' : '#fff', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <div style={{ padding: '0 24px', background: getThemedBg(isDarkMode, 'panel'), borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
           <Tabs
             activeKey={projectView}
             onChange={setProjectView}
@@ -1035,7 +1036,7 @@ const ProjectDetail: React.FC = () => {
           <Sider
             width={300}
             style={{
-              background: isDarkMode ? '#141414' : '#fff',
+              background: getThemedBg(isDarkMode, 'panel'),
               borderRight: `1px solid ${token.colorBorderSecondary}`,
               overflow: 'hidden',
               display: 'flex',
@@ -1147,7 +1148,7 @@ const ProjectDetail: React.FC = () => {
           </Sider>
 
           {/* 右侧内容 - 表设计 */}
-          <Content style={{ padding: '24px', background: isDarkMode ? '#000' : '#f5f5f5', overflowY: 'auto' }}>
+          <Content style={{ padding: '24px', background: getThemedBg(isDarkMode, 'page'), overflowY: 'auto' }}>
             <div style={{ maxWidth: '100%', margin: '0 auto' }}>
               {selectedTable ? (
                 <Card>

@@ -16,8 +16,9 @@
 }
 
 .header.dark {
-  /* 深色下用更"抬起"的底色，与黑色页面背景区分开 */
-  background: linear-gradient(180deg, rgba(32, 35, 42, 0.82) 0%, rgba(20, 22, 28, 0.78) 100%);
+  /* L3 玻璃浮层：比 L2 面板更亮，比 L1 页面更亮，形成 Aurora 玻璃质感
+     数值与 src/theme/dark-colors.ts 保持同步（该处无法直接 import TS） */
+  background: linear-gradient(180deg, rgba(70, 72, 80, 0.88) 0%, rgba(56, 58, 65, 0.85) 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.25);
 }
