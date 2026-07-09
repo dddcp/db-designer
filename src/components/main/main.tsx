@@ -1,22 +1,24 @@
 import {
+  BulbOutlined,
   ClockCircleOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
+  MoonOutlined,
   PlusOutlined,
-  RocketOutlined,
   SettingOutlined,
+  SunOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import {
   Button,
   Col,
-  Divider,
   Form,
   Input,
   Layout,
@@ -28,7 +30,6 @@ import {
   Tooltip,
   Typography,
   message,
-  theme,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,9 +39,8 @@ import { useTheme } from '../../store/theme-context';
 import type { Project } from '../../types';
 import styles from './main.module.css';
 
-const { Header, Content } = Layout;
+const { Content } = Layout;
 const { Text } = Typography;
-const { useToken } = theme;
 
 /** 项目卡片渐变色板（按 id 稳定取色） */
 const CARD_GRADIENTS: [string, string][] = [
@@ -81,14 +81,15 @@ const Main: React.FC = () => {
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
   const [form] = Form.useForm();
-  const { token } = useToken();
   const navigate = useNavigate();
-  const { isDarkMode } = useTheme();
+  const { isDarkMode, toggleTheme } = useTheme();
 
   // 初始化数据库和加载数据
   useEffect(() => {
     initializeApp();
+    getVersion().then((v) => setAppVersion(v)).catch(() => setAppVersion(''));
   }, []);
 
   /**
@@ -344,6 +345,13 @@ const Main: React.FC = () => {
   };
 
   /**
+   * 切换深浅模式
+   */
+  const handleToggleTheme = () => {
+    toggleTheme(!isDarkMode);
+  };
+
+  /**
    * 打开编辑项目弹窗
    */
   const openEditModal = (project: Project) => {
@@ -358,82 +366,106 @@ const Main: React.FC = () => {
 
   return (
     <Layout style={{ height: '100vh' }}>
-      {/* 头部 */}
-      <Header
-        style={{
-          background: isDarkMode ? '#141414' : '#fff',
-          borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* 顶部 Aurora 风格导航条（已合并原 Hero Banner 内容） */}
+      <div className={`${styles.header} ${isDarkMode ? styles.dark : ''}`}>
+        <div className={styles.signatureLine} />
+
+        {/* 左侧：品牌 + 版本/项目数副标识 */}
+        <div className={styles.brand}>
           <div className={styles.brandLogo}>
             <DatabaseOutlined />
           </div>
-          <Text
-            strong
-            style={{
-              fontSize: 17,
-              color: isDarkMode ? '#fff' : '#1f1f1f',
-              letterSpacing: 0.3
-            }}
-          >
-            {t('app_title')}
-          </Text>
+          <div className={styles.brandText}>
+            <span className={styles.brandTitle}>{t('app_title')}</span>
+            <span className={styles.brandSubtitle}>v{appVersion}</span>
+          </div>
         </div>
 
-        <Space size={4}>
+        {/* 中段：产品能力徽章（吸收自原 Hero Banner） */}
+        <div className={styles.features}>
+          <span className={styles.featurePill}>
+            <span className={`${styles.featureDot} ${styles.dotVisual}`} />
+            {t('main_hero_feature_visual')}
+          </span>
+          <span className={styles.featurePill}>
+            <span className={`${styles.featureDot} ${styles.dotDialect}`} />
+            {t('main_hero_feature_dialect')}
+          </span>
+          <span className={styles.featurePill}>
+            <span className={`${styles.featureDot} ${styles.dotVersion}`} />
+            {t('main_hero_feature_version')}
+          </span>
+          <span className={styles.featurePill}>
+            <span className={`${styles.featureDot} ${styles.dotAi}`} />
+            {t('main_hero_feature_ai')}
+          </span>
+        </div>
+
+        {/* 右侧：主操作 + 工具图标 */}
+        <div className={styles.actions}>
+          <Button
+            className={styles.createBtn}
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openCreateModal}
+          >
+            {t('main_new_project')}
+          </Button>
+
+          <div className={styles.actionDivider} />
+
           {gitConfigSaved && (
-            <Space.Compact>
+            <>
               <Tooltip title={t('main_pull_data')}>
                 <Button
+                  className={styles.actionBtn}
                   type="text"
                   icon={<DownloadOutlined />}
                   onClick={handlePull}
-                >
-                  {t('main_pull')}
-                </Button>
+                />
               </Tooltip>
               <Tooltip title={t('main_sync_data')}>
                 <Button
+                  className={styles.actionBtn}
                   type="text"
                   icon={<SyncOutlined />}
                   onClick={handleSync}
-                >
-                  {t('main_sync')}
-                </Button>
+                />
               </Tooltip>
-            </Space.Compact>
-          )}
-          {updateAvailable && (
-            <>
-              <Tooltip title={t('main_new_version_found', { version: updateAvailable.version })}>
-                <Button
-                  type="primary"
-                  size="small"
-                  onClick={handleInstallUpdate}
-                  loading={updateLoading}
-                >
-                  {t('main_new_version')}
-                </Button>
-              </Tooltip>
-              <Divider type="vertical" style={{ margin: '0 4px' }} />
             </>
           )}
+
+          {updateAvailable && (
+            <Tooltip title={t('main_new_version_found', { version: updateAvailable.version })}>
+              <Button
+                className={styles.actionBtn}
+                type="text"
+                icon={<BulbOutlined style={{ color: '#faad14' }} />}
+                onClick={handleInstallUpdate}
+                loading={updateLoading}
+              />
+            </Tooltip>
+          )}
+
           <Tooltip title={t('main_settings')}>
             <Button
+              className={styles.actionBtn}
               type="text"
               icon={<SettingOutlined />}
               onClick={() => navigate('/setting')}
-            >
-              {t('main_settings')}
-            </Button>
+            />
           </Tooltip>
-        </Space>
-      </Header>
+
+          <Tooltip title={isDarkMode ? t('basic_dark_on') : t('basic_dark_off')}>
+            <Button
+              className={styles.actionBtn}
+              type="text"
+              icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+              onClick={handleToggleTheme}
+            />
+          </Tooltip>
+        </div>
+      </div>
 
       {/* 主要内容区域 */}
       <Content
@@ -445,31 +477,7 @@ const Main: React.FC = () => {
         }}
       >
         <div style={{ maxWidth: 1200, width: '100%', margin: '0 auto' }}>
-          {/* Hero Banner */}
-          <div className={`${styles.hero} ${isDarkMode ? styles.dark : ''}`}>
-            <div className={`${styles.heroOrb} ${styles.heroOrb1}`} />
-            <div className={`${styles.heroOrb} ${styles.heroOrb2}`} />
-            <div className={`${styles.heroOrb} ${styles.heroOrb3}`} />
-
-            <div className={styles.heroInner}>
-              <div className={styles.heroText}>
-                <div className={styles.heroBadge}>
-                  <RocketOutlined />
-                  <span>{t('main_hero_badge')}</span>
-                </div>
-                <p className={styles.heroSubtitle}>{t('main_hero_subtitle')}</p>
-
-                <div className={styles.heroFeatures}>
-                  <span className={styles.heroFeature}>{t('main_hero_feature_visual')}</span>
-                  <span className={styles.heroFeature}>{t('main_hero_feature_dialect')}</span>
-                  <span className={styles.heroFeature}>{t('main_hero_feature_version')}</span>
-                  <span className={styles.heroFeature}>{t('main_hero_feature_ai')}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 章节标题 */}
+          {/* 章节标题（"+ 新建项目"已上移到顶栏，项目数保留在标题旁） */}
           <div className={styles.sectionHeader}>
             <div className={styles.sectionTitle}>
               <h2>{t('main_project_list')}</h2>
@@ -477,14 +485,6 @@ const Main: React.FC = () => {
                 {t('main_total_projects', { count: projects.length })}
               </span>
             </div>
-            <Button
-              className={styles.newButton}
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={openCreateModal}
-            >
-              {t('main_new_project')}
-            </Button>
           </div>
 
           {/* 项目卡片网格 / 空状态 */}

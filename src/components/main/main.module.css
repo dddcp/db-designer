@@ -1,15 +1,103 @@
-/* ================== Header 品牌区 ================== */
+/* ================== 顶栏容器（Aurora） ================== */
+.header {
+  position: relative;
+  height: 84px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.header.dark {
+  /* 深色下用更"抬起"的底色，与黑色页面背景区分开 */
+  background: linear-gradient(180deg, rgba(32, 35, 42, 0.82) 0%, rgba(20, 22, 28, 0.78) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Aurora 背景光晕：左蓝 / 右紫 / 底青 三色径向渐变 */
+.header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 50% 80% at 10% 50%, rgba(22, 119, 255, 0.10), transparent 60%),
+    radial-gradient(ellipse 45% 70% at 90% 50%, rgba(115, 46, 209, 0.08), transparent 60%),
+    radial-gradient(ellipse 60% 60% at 50% 110%, rgba(19, 194, 194, 0.06), transparent 70%);
+  pointer-events: none;
+}
+
+.header.dark::before {
+  /* 深色下大幅提高可见度，避免"一片黑" */
+  background:
+    radial-gradient(ellipse 55% 90% at 10% 50%, rgba(22, 119, 255, 0.40), transparent 60%),
+    radial-gradient(ellipse 50% 80% at 90% 50%, rgba(140, 56, 245, 0.35), transparent 60%),
+    radial-gradient(ellipse 65% 70% at 50% 110%, rgba(19, 220, 220, 0.20), transparent 70%);
+}
+
+/* 顶部 1px 高光细线，模拟玻璃边缘折射 */
+.header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.5) 50%, transparent 100%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.header.dark::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(140, 170, 255, 0.4) 50%, transparent 100%);
+  opacity: 0.7;
+}
+
+/* 底部签名光带：贯穿全宽的渐变细线 */
+.signatureLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, #1677ff 0%, #722ed1 50%, #13c2c2 100%);
+  opacity: 0.7;
+}
+
+.header.dark .signatureLine {
+  /* 深色下提亮并增加发光感 */
+  opacity: 1;
+  height: 2px;
+  box-shadow: 0 0 12px rgba(115, 46, 209, 0.5), 0 0 24px rgba(22, 119, 255, 0.3);
+}
+
+/* ================== 品牌区 ================== */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 .brandLogo {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, #1677ff 0%, #0958d9 60%, #061178 100%);
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #1677ff 0%, #0958d9 60%, #722ed1 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 20px;
-  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.35);
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.28);
   position: relative;
   overflow: hidden;
 }
@@ -18,114 +106,206 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 60%);
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 60%);
   pointer-events: none;
 }
 
-/* ================== Hero Banner ================== */
-.hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: 14px;
-  padding: 18px 24px 16px;
-  color: #fff;
-  background: linear-gradient(120deg, #1677ff 0%, #0958d9 45%, #5b21b6 100%);
-  box-shadow: 0 6px 18px rgba(22, 119, 255, 0.18);
-  margin-bottom: 14px;
+.header.dark .brandLogo {
+  /* 深色下 logo 更亮 + 强发光 */
+  background: linear-gradient(135deg, #4096ff 0%, #1677ff 45%, #9254de 100%);
+  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-.hero.dark {
-  background: linear-gradient(120deg, #1d39c4 0%, #061178 50%, #2c1a82 100%);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-}
-
-.heroOrb {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.heroOrb1 {
-  right: -50px;
-  top: -60px;
-  width: 180px;
-  height: 180px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
-}
-
-.heroOrb2 {
-  right: 60px;
-  bottom: -70px;
-  width: 150px;
-  height: 150px;
-  background: radial-gradient(circle, rgba(82, 196, 26, 0.22) 0%, rgba(82, 196, 26, 0) 70%);
-}
-
-.heroInner {
-  position: relative;
-  z-index: 1;
+.brandText {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
 }
 
-.heroText {
-  flex: 1;
-  min-width: 0;
+.brandTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
-.heroBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 10px;
+.header.dark .brandTitle {
+  /* 深色下用近白确保对比 */
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.brandSubtitle {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
   letter-spacing: 0.3px;
 }
 
-.heroSubtitle {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0 0 12px;
-  max-width: 680px;
-  line-height: 1.6;
+.header.dark .brandSubtitle {
+  /* 深色下提亮副标识 */
+  color: rgba(255, 255, 255, 0.55);
 }
 
-.heroFeatures {
+/* ================== Feature Pills ================== */
+.features {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-top: 10px;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  justify-content: flex-start;
 }
 
-.heroFeature {
-  font-size: 11px;
-  padding: 2px 9px;
+.features::-webkit-scrollbar {
+  display: none;
+}
+
+.featurePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(22, 119, 255, 0.06);
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  font-size: 11px;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  cursor: default;
+}
+
+.featurePill:hover {
+  background: rgba(22, 119, 255, 0.1);
+  border-color: rgba(22, 119, 255, 0.28);
+}
+
+.header.dark .featurePill {
+  /* 深色下：用玻璃白底 + 微弱彩色边框，与深色顶栏区分 */
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.header.dark .featurePill:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.featureDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotVisual { background: #1677ff; box-shadow: 0 0 6px rgba(22, 119, 255, 0.5); }
+.dotDialect { background: #722ed1; box-shadow: 0 0 6px rgba(115, 46, 209, 0.5); }
+.dotVersion { background: #13c2c2; box-shadow: 0 0 6px rgba(19, 194, 194, 0.5); }
+.dotAi { background: #52c41a; box-shadow: 0 0 6px rgba(82, 196, 26, 0.5); }
+
+/* 深色下圆点更亮、发光更强 */
+.header.dark .dotVisual { background: #4096ff; box-shadow: 0 0 8px rgba(64, 150, 255, 0.8); }
+.header.dark .dotDialect { background: #b37feb; box-shadow: 0 0 8px rgba(179, 127, 235, 0.8); }
+.header.dark .dotVersion { background: #36cfc9; box-shadow: 0 0 8px rgba(54, 207, 201, 0.8); }
+.header.dark .dotAi { background: #73d13d; box-shadow: 0 0 8px rgba(115, 209, 61, 0.8); }
+
+/* ================== 操作区 ================== */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--ant-color-text-secondary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.actionBtn:hover {
+  background: rgba(22, 119, 255, 0.08);
+  color: var(--ant-color-primary);
+}
+
+.header.dark .actionBtn {
+  /* 深色下按钮默认就有微亮描边，避免融入黑底 */
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.header.dark .actionBtn:hover {
+  background: rgba(64, 150, 255, 0.18);
+  color: #fff;
+  border-color: rgba(64, 150, 255, 0.4);
+  box-shadow: 0 0 12px rgba(64, 150, 255, 0.25);
+}
+
+.actionDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--ant-color-border-secondary);
+  margin: 0 4px;
+}
+
+.header.dark .actionDivider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.createBtn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.createBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.35);
+}
+
+.header.dark .createBtn {
+  /* 深色下"+ 新建项目"按钮提亮、加发光 */
+  background: linear-gradient(135deg, #4096ff 0%, #1677ff 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.header.dark .createBtn:hover {
+  box-shadow: 0 6px 20px rgba(22, 119, 255, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 /* ================== 章节标题栏 ================== */
 .sectionHeader {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   margin-bottom: 16px;
 }
 
 .sectionTitle {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 10px;
 }
 
 .sectionTitle h2 {
@@ -136,11 +316,16 @@
 
 .sectionCount {
   font-size: 13px;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text-tertiary);
+  font-weight: 400;
 }
 
-.newButton {
-  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.25);
+:global(.theme-dark) .sectionTitle h2 {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+:global(.theme-dark) .sectionCount {
+  color: rgba(255, 255, 255, 0.45);
 }
 
 /* ================== 项目卡片 ================== */
