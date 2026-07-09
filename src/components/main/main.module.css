@@ -175,10 +175,10 @@
 }
 
 .projectCardBody {
-  padding: 18px 18px 14px;
+  padding: 14px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
@@ -242,19 +242,17 @@
   font-size: 13px;
   color: var(--ant-color-text-secondary);
   margin: 0;
-  line-height: 1.55;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 40px;
 }
 
 .projectFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
   margin-top: auto;
   border-top: 1px dashed var(--ant-color-border-secondary);
   font-size: 12px;
@@ -274,8 +272,8 @@
 }
 
 .projectActionBtn {
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 6px 14px;
+  font-size: 13px;
   height: auto;
 }
 

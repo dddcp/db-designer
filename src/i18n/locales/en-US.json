@@ -29,6 +29,7 @@
   "main_create_project": "Create New Project",
   "main_edit_project": "Edit Project",
   "main_edit": "Edit",
+  "main_delete": "Delete",
   "main_update_success": "Project updated successfully",
   "main_update_fail": "Failed to update project",
   "main_hero_badge": "Professional · Efficient · Smart",
