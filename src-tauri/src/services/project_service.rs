@@ -1,4 +1,4 @@
-use crate::models::{CreateProjectRequest, Project};
+use crate::models::{CreateProjectRequest, Project, UpdateProjectRequest};
 use crate::storage::ProjectStore;
 use crate::storage::sqlite::project_store::SqliteProjectStore;
 
@@ -19,6 +19,10 @@ impl ProjectService {
 
     pub fn create_project(&self, project: CreateProjectRequest) -> Result<Project, String> {
         self.store.create_project(project)
+    }
+
+    pub fn update_project(&self, project: UpdateProjectRequest) -> Result<Project, String> {
+        self.store.update_project(project)
     }
 
     pub fn delete_project(&self, id: i32) -> Result<String, String> {

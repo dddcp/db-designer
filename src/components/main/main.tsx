@@ -3,8 +3,9 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  EditOutlined,
+  EyeOutlined,
   PlusOutlined,
-  RightOutlined,
   RocketOutlined,
   SettingOutlined,
   SyncOutlined,
@@ -16,7 +17,6 @@ import {
   Button,
   Col,
   Divider,
-  Drawer,
   Form,
   Input,
   Layout,
@@ -70,6 +70,8 @@ const Main: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -191,14 +193,58 @@ const Main: React.FC = () => {
       };
       await invoke('create_project', { project: projectData });
       message.success(t('main_create_success'));
-      setIsModalVisible(false);
-      form.resetFields();
+      closeProjectModal();
       await loadProjects();
     } catch (error) {
       console.error(t('main_create_fail'), error);
       message.error(t('main_create_fail'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * 更新项目
+   */
+  const handleUpdateProject = async (values: { name: string; description?: string }) => {
+    if (!editingProject) return;
+    setLoading(true);
+    try {
+      const description = values.description?.trim() || null;
+      const projectData = {
+        id: editingProject.id,
+        name: values.name,
+        description,
+      };
+      await invoke('update_project', { project: projectData });
+      message.success(t('main_update_success'));
+      closeProjectModal();
+      await loadProjects();
+    } catch (error) {
+      console.error(t('main_update_fail'), error);
+      message.error(t('main_update_fail'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * 关闭项目表单弹窗
+   */
+  const closeProjectModal = () => {
+    setIsModalVisible(false);
+    setEditingProject(null);
+    form.resetFields();
+  };
+
+  /**
+   * 提交项目表单（按 mode 分发到创建或更新）
+   */
+  const handleProjectModalFinish = (values: { name: string; description?: string }) => {
+    if (modalMode === 'edit') {
+      handleUpdateProject(values);
+    } else {
+      handleCreateProject(values);
     }
   };
 
@@ -288,9 +334,25 @@ const Main: React.FC = () => {
   };
 
   /**
-   * 打开新建项目抽屉
+   * 打开新建项目弹窗
    */
-  const handleOpenCreate = () => {
+  const openCreateModal = () => {
+    setModalMode('create');
+    setEditingProject(null);
+    form.resetFields();
+    setIsModalVisible(true);
+  };
+
+  /**
+   * 打开编辑项目弹窗
+   */
+  const openEditModal = (project: Project) => {
+    setModalMode('edit');
+    setEditingProject(project);
+    form.setFieldsValue({
+      name: project.name,
+      description: project.description ?? '',
+    });
     setIsModalVisible(true);
   };
 
@@ -419,7 +481,7 @@ const Main: React.FC = () => {
               className={styles.newButton}
               type="primary"
               icon={<PlusOutlined />}
-              onClick={handleOpenCreate}
+              onClick={openCreateModal}
             >
               {t('main_new_project')}
             </Button>
@@ -437,7 +499,7 @@ const Main: React.FC = () => {
                 type="primary"
                 size="large"
                 icon={<PlusOutlined />}
-                onClick={handleOpenCreate}
+                onClick={openCreateModal}
               >
                 {t('main_new_project')}
               </Button>
@@ -486,15 +548,30 @@ const Main: React.FC = () => {
                             <span>{formatDate(project.created_at)}</span>
                           </span>
                           <Space size={2} className={styles.projectActions} onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              type="text"
-                              size="small"
-                              className={styles.projectActionBtn}
-                              icon={<RightOutlined />}
-                              onClick={() => handleProjectClick(project.id)}
-                            >
-                              {t('main_view_detail')}
-                            </Button>
+                            <Tooltip title={t('main_view_detail')}>
+                              <Button
+                                type="text"
+                                size="small"
+                                className={styles.projectActionBtn}
+                                icon={<EyeOutlined />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleProjectClick(project.id);
+                                }}
+                              />
+                            </Tooltip>
+                            <Tooltip title={t('main_edit')}>
+                              <Button
+                                type="text"
+                                size="small"
+                                className={styles.projectActionBtn}
+                                icon={<EditOutlined />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditModal(project);
+                                }}
+                              />
+                            </Tooltip>
                             <Popconfirm
                               title={t('main_confirm_delete_project')}
                               description={t('main_delete_project_desc')}
@@ -503,14 +580,16 @@ const Main: React.FC = () => {
                               okText={t('confirm')}
                               cancelText={t('cancel')}
                             >
-                              <Button
-                                type="text"
-                                size="small"
-                                danger
-                                className={styles.projectActionBtn}
-                                icon={<DeleteOutlined />}
-                                onClick={(e) => e.stopPropagation()}
-                              />
+                              <Tooltip title={t('main_delete')}>
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  danger
+                                  className={styles.projectActionBtn}
+                                  icon={<DeleteOutlined />}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </Tooltip>
                             </Popconfirm>
                           </Space>
                         </div>
@@ -524,21 +603,18 @@ const Main: React.FC = () => {
         </div>
       </Content>
 
-      {/* 创建项目抽屉 */}
-      <Drawer
-        title={t('main_create_project')}
+      {/* 创建/编辑项目弹窗 */}
+      <Modal
+        title={modalMode === 'edit' ? t('main_edit_project') : t('main_create_project')}
         open={isModalVisible}
-        onClose={() => {
-          setIsModalVisible(false);
-          form.resetFields();
-        }}
+        onCancel={closeProjectModal}
         footer={null}
-        width={520}
+        destroyOnClose
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={handleCreateProject}
+          onFinish={handleProjectModalFinish}
         >
           <Form.Item
             name="name"
@@ -565,20 +641,15 @@ const Main: React.FC = () => {
                 htmlType="submit"
                 loading={loading}
               >
-                {t('create')}
+                {modalMode === 'edit' ? t('save') : t('create')}
               </Button>
-              <Button
-                onClick={() => {
-                  setIsModalVisible(false);
-                  form.resetFields();
-                }}
-              >
+              <Button onClick={closeProjectModal}>
                 {t('cancel')}
               </Button>
             </Space>
           </Form.Item>
         </Form>
-      </Drawer>
+      </Modal>
 
       {/* 同步提交信息弹窗 */}
       <Modal

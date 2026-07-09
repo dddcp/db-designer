@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::models::{ColumnDef, CreateDatabaseConnectionRequest, CreateProjectRequest, DatabaseConnection, IndexDef, InitData, Project, RoutineDef, TableDef, UpdateDatabaseConnectionRequest, Version};
+use crate::models::{ColumnDef, CreateDatabaseConnectionRequest, CreateProjectRequest, DatabaseConnection, IndexDef, InitData, Project, RoutineDef, TableDef, UpdateDatabaseConnectionRequest, UpdateProjectRequest, Version};
 
 pub mod sqlite;
 
@@ -19,6 +19,7 @@ pub trait LocalSettingsStore {
 pub trait ProjectStore {
     fn get_projects(&self) -> Result<Vec<Project>, String>;
     fn create_project(&self, project: CreateProjectRequest) -> Result<Project, String>;
+    fn update_project(&self, project: UpdateProjectRequest) -> Result<Project, String>;
     fn delete_project(&self, id: i32) -> Result<(), String>;
 }
 

@@ -1,7 +1,7 @@
 use rusqlite::params;
 
 use crate::db::init_db;
-use crate::models::{CreateProjectRequest, Project};
+use crate::models::{CreateProjectRequest, Project, UpdateProjectRequest};
 use crate::storage::ProjectStore;
 
 pub struct SqliteProjectStore;
@@ -9,6 +9,30 @@ pub struct SqliteProjectStore;
 impl SqliteProjectStore {
     pub fn new() -> Self {
         Self
+    }
+
+    fn map_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
+        Ok(Project {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            description: row.get(2)?,
+            created_at: row.get(3)?,
+            updated_at: row.get(4)?,
+        })
+    }
+
+    fn fetch_project_by_id(&self, id: i32) -> Result<Project, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT id, name, description, created_at, updated_at FROM t_proj WHERE id = ?1")
+            .map_err(|e| format!("Error preparing statement: {}", e))?;
+        let mut iter = stmt
+            .query_map(params![id], Self::map_project)
+            .map_err(|e| format!("Error querying project: {}", e))?;
+        match iter.next() {
+            Some(p) => p.map_err(|e| format!("Error reading project: {}", e)),
+            None => Err(format!("Project not found: {}", id)),
+        }
     }
 }
 
@@ -19,15 +43,8 @@ impl ProjectStore for SqliteProjectStore {
         let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj ORDER BY created_at")
             .map_err(|e| format!("Error preparing statement: {}", e))?;
 
-        let project_iter = stmt.query_map([], |row| {
-            Ok(Project {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-            })
-        }).map_err(|e| format!("Error querying projects: {}", e))?;
+        let project_iter = stmt.query_map([], Self::map_project)
+            .map_err(|e| format!("Error querying projects: {}", e))?;
 
         let mut projects = Vec::new();
         for project in project_iter {
@@ -46,25 +63,23 @@ impl ProjectStore for SqliteProjectStore {
         ).map_err(|e| format!("Error creating project: {}", e))?;
 
         let id = conn.last_insert_rowid() as i32;
+        self.fetch_project_by_id(id)
+    }
 
-        let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj WHERE id = ?1")
-            .map_err(|e| format!("Error preparing statement: {}", e))?;
+    fn update_project(&self, project: UpdateProjectRequest) -> Result<Project, String> {
+        let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
-        let mut project_iter = stmt.query_map(params![id], |row| {
-            Ok(Project {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-            })
-        }).map_err(|e| format!("Error fetching created project: {}", e))?;
+        let affected = conn.execute(
+            "UPDATE t_proj SET name = ?1, description = ?2, updated_at = datetime('now') WHERE id = ?3",
+            params![project.name, project.description, project.id],
+        )
+        .map_err(|e| format!("Error updating project: {}", e))?;
 
-        if let Some(project) = project_iter.next() {
-            project.map_err(|e| format!("Error reading project: {}", e))
-        } else {
-            Err("Failed to fetch created project".to_string())
+        if affected == 0 {
+            return Err(format!("Project not found: {}", project.id));
         }
+
+        self.fetch_project_by_id(project.id)
     }
 
     fn delete_project(&self, id: i32) -> Result<(), String> {

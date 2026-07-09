@@ -35,6 +35,7 @@ pub fn run() {
             db::init_database,
             project::get_projects,
             project::create_project,
+            project::update_project,
             project::delete_project,
             git::get_git_info,
             git::sync_git_repository,

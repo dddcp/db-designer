@@ -17,6 +17,14 @@ pub struct CreateProjectRequest {
     pub description: Option<String>,
 }
 
+// 更新项目的请求结构
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateProjectRequest {
+    pub id: i32,
+    pub name: String,
+    pub description: Option<String>,
+}
+
 // 表结构数据结构
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableDef {
