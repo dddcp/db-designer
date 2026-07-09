@@ -508,11 +508,16 @@ const Main: React.FC = () => {
             <Row gutter={[16, 16]}>
               {projects.map((project) => {
                 const [colorStart, colorEnd] = pickGradient(project.id);
+                // 边框颜色与卡片自身配色保持一致
+                const cardBorderStyle = {
+                  '--project-card-border': colorStart,
+                } as React.CSSProperties;
                 return (
                   <Col xs={24} sm={12} md={12} lg={8} xl={8} xxl={6} key={project.id}>
                     <div
                       className={styles.projectCard}
                       onClick={() => handleProjectClick(project.id)}
+                      style={cardBorderStyle}
                     >
                       <div
                         className={styles.projectCardStripe}

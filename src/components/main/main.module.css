@@ -149,7 +149,8 @@
   height: 100%;
   border-radius: 14px;
   background: var(--ant-color-bg-container);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  /* 边框颜色由 main.tsx 通过 --project-card-border 注入（卡片自身渐变起始色） */
+  border: 1px solid var(--project-card-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   overflow: hidden;
   cursor: pointer;
@@ -159,14 +160,12 @@
 }
 
 :global(.theme-dark) .projectCard {
-  border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .projectCard:hover {
   transform: translateY(-4px);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.1);
-  border-color: var(--ant-color-primary);
 }
 
 .projectCardStripe {
