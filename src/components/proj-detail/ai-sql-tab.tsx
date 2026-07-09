@@ -13,6 +13,7 @@ import {
   Select,
   Space,
   Spin,
+  theme,
   Typography,
 } from 'antd';
 import {
@@ -146,6 +147,7 @@ interface AiSqlTabProps {
 
 const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
   const { t, i18n } = useTranslation();
+  const { token } = theme.useToken();
   const [conversations, setConversations] = useState<AiSqlConversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<AiSqlConversation | null>(null);
   const [localMessages, setLocalMessages] = useState<AiSqlMessage[]>([]);
@@ -358,7 +360,7 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
 
       <Row gutter={16} style={{ height: 'calc(100% - 72px)' }}>
         {/* 左侧：对话列表 */}
-        <Col span={7} style={{ height: '100%', overflowY: 'auto', borderRight: '1px solid #f0f0f0' }}>
+        <Col span={7} style={{ height: '100%', overflowY: 'auto', borderRight: `1px solid ${token.colorBorderSecondary}` }}>
           <Spin spinning={convLoading}>
             {conversations.length === 0 ? (
               <Empty description={t('ai_sql_empty')} style={{ paddingTop: 40 }} />
@@ -370,7 +372,7 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
                     style={{
                       cursor: 'pointer',
                       padding: '10px 12px',
-                      background: selectedConv?.id === conv.id ? '#e6f4ff' : 'transparent',
+                      background: selectedConv?.id === conv.id ? token.colorPrimaryBg : 'transparent',
                       borderRadius: 6,
                     }}
                     onClick={() => setSelectedConv(conv)}
@@ -430,7 +432,7 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
               {/* 消息列表 */}
               <div style={{ flex: 1, overflowY: 'auto', marginBottom: 12 }}>
                 {localMessages.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+                  <div style={{ textAlign: 'center', padding: 40, color: token.colorTextTertiary }}>
                     <RobotOutlined style={{ fontSize: 32, marginBottom: 8 }} />
                     <div>{t('ai_sql_input_placeholder')}</div>
                   </div>
@@ -448,15 +450,15 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
                       style={{
                         maxWidth: msg.role === 'user' ? '70%' : '100%',
                         padding: msg.role === 'user' ? '10px 16px' : 0,
-                        background: msg.role === 'user' ? '#e6f4ff' : 'transparent',
+                        background: msg.role === 'user' ? token.colorPrimaryBg : 'transparent',
                         borderRadius: msg.role === 'user' ? 8 : 0,
                         alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                       }}
                     >
                       {msg.role === 'user' ? (
-                        <Text>{msg.content}</Text>
+                        <Text style={{ color: token.colorText }}>{msg.content}</Text>
                       ) : (
-                        <div style={{ border: '1px solid #f0f0f0', borderRadius: 8, padding: 12 }}>
+                        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 12 }}>
                           {/* SQL 区域 */}
                           {msg.sql !== undefined && msg.sql !== '' && (
                             <div style={{ marginBottom: 8 }}>

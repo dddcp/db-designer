@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-const REQUEST_TIMEOUT_SECS: u64 = 15;
+/// AI 接口超时（秒）。
+/// AI 评审等长任务会把项目所有表结构送进 LLM 推理，
+/// 大模型常需 30~60s 甚至更久，统一用一个较宽的值避免误杀。
+const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 /// 聊天消息条目
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,14 +99,11 @@ pub async fn ai_chat(
 
     let req = apply_auth(reqwest::Method::POST, client.post(&url), &api_key).json(&payload);
 
-    let response = match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), req.send()).await {
-        Ok(Ok(r)) => r,
-        Ok(Err(e)) => return Err(classify_reqwest_error(e)),
-        Err(_) => return Err("网络超时".to_string()),
-    };
-
+    // reqwest 自身的 .timeout 已覆盖整次请求（含读取 body），
+    // 无需再套一层 tokio::time::timeout。
+    let response = req.send().await.map_err(classify_reqwest_error)?;
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = response.text().await.map_err(classify_reqwest_error)?;
     if !status.is_success() {
         return Err(status_message(status, &body));
     }
@@ -134,14 +134,11 @@ pub async fn ai_fetch_models(base_url: String, api_key: String) -> Result<Vec<St
 
     let req = apply_auth(reqwest::Method::GET, client.get(&url), &api_key);
 
-    let response = match tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), req.send()).await {
-        Ok(Ok(r)) => r,
-        Ok(Err(e)) => return Err(classify_reqwest_error(e)),
-        Err(_) => return Err("网络超时".to_string()),
-    };
-
+    // reqwest 自身的 .timeout 已覆盖整次请求（含读取 body），
+    // 无需再套一层 tokio::time::timeout。
+    let response = req.send().await.map_err(classify_reqwest_error)?;
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = response.text().await.map_err(classify_reqwest_error)?;
     if !status.is_success() {
         return Err(status_message(status, &body));
     }

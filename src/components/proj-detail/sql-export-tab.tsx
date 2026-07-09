@@ -67,9 +67,12 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+    <div style={{ padding: 24, height: '100%', display: 'flex' }}>
+      <Card
+        style={{ flex: 1, minHeight: 0 }}
+        styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', padding: 24 } }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexShrink: 0 }}>
           <Title level={4} style={{ margin: 0 }}>{t('sql_export_title')}</Title>
           <Space>
             <Select
@@ -99,15 +102,21 @@ const SqlExportTab: React.FC<SqlExportTabProps> = ({ project }) => {
           </Space>
         </div>
 
-        <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+        <Text type="secondary" style={{ display: 'block', marginBottom: 12, flexShrink: 0 }}>
           {t('sql_export_desc')}
         </Text>
 
         <TextArea
           value={sqlContent}
           readOnly
-          rows={24}
-          style={{ fontFamily: 'monospace', fontSize: 13 }}
+          style={{
+            flex: 1,
+            height: '100%',
+            minHeight: 0,
+            fontFamily: 'monospace',
+            fontSize: 13,
+            resize: 'none',
+          }}
           placeholder={t('sql_export_placeholder')}
         />
       </Card>
