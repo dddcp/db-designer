@@ -472,6 +472,13 @@
   "ai_sql_load_fail": "Failed to load conversations",
   "ai_sql_delete_fail": "Failed to delete conversation",
   "ai_sql_no_tables": "No table structure in the project",
+  "ai_sql_empty_title": "Start a conversation with AI",
+  "ai_sql_empty_desc": "Describe your needs in natural language, and AI will generate SQL based on the project schema",
+  "ai_sql_suggestion_1": "Query the daily order count and total amount for the last 30 days",
+  "ai_sql_suggestion_2": "Count products per category, sorted by count descending",
+  "ai_sql_suggestion_3": "Find active users who haven't logged in for the last 7 days",
+  "ai_sql_suggestion_4": "Delete orders with cancelled status created more than 90 days ago",
+  "ai_sql_input_hint_enter": "Enter to send · Shift+Enter for newline",
 
   "setting_title": "Settings",
   "setting_subtitle": "Manage app preferences, integrations and extensions",

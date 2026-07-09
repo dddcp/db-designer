@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import hljs from 'highlight.js/lib/core';
+import sql from 'highlight.js/lib/languages/sql';
+import { format as formatSql, SqlLanguage } from 'sql-formatter';
+import 'highlight.js/styles/atom-one-dark.css';
 import {
   Button,
-  Col,
   Empty,
-  Input,
-  List,
   message,
   Popconfirm,
-  Row,
   Select,
   Space,
   Spin,
-  theme,
   Typography,
 } from 'antd';
 import {
@@ -23,10 +22,23 @@ import {
   PlusOutlined,
   RobotOutlined,
   SendOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import type { Project, TableDef, AiSqlMessage, BackendAiSqlConversation, AiSqlConversation, DatabaseTypeOption } from '../../types';
+import styles from './ai-sql-tab.module.css';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title } = Typography;
+
+// 注册 SQL 语言（只引入 sql 一种语言，最小化体积）
+hljs.registerLanguage('sql', sql);
+
+const SQL_SUGGESTION_KEYS = [
+  'ai_sql_suggestion_1',
+  'ai_sql_suggestion_2',
+  'ai_sql_suggestion_3',
+  'ai_sql_suggestion_4',
+];
 
 /** 将后端 snake_case 转为前端 camelCase */
 function toConversation(b: BackendAiSqlConversation): AiSqlConversation {
@@ -140,6 +152,52 @@ async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; ex
   }
 }
 
+/** 把项目数据库类型映射为 sql-formatter 支持的语言 */
+function mapToFormatterLanguage(dbType: string): SqlLanguage {
+  const lower = (dbType || '').toLowerCase();
+  if (lower === 'postgresql') return 'postgresql';
+  if (lower === 'oracle') return 'plsql';
+  if (lower === 'mysql') return 'mysql';
+  return 'sql';
+}
+
+/** 对 SQL 做格式化（换行 + 缩进 + 关键字大写），失败时返回原文本 */
+function formatSqlForDisplay(sqlText: string, dbType: string): string {
+  if (!sqlText.trim()) return '';
+  try {
+    return formatSql(sqlText, {
+      language: mapToFormatterLanguage(dbType),
+      keywordCase: 'upper',
+      tabWidth: 2,
+      useTabs: false,
+      logicalOperatorNewline: 'before',
+    });
+  } catch {
+    return sqlText;
+  }
+}
+
+/** SQL 美化 + 高亮（失败时降级到原始转义文本） */
+function formatAndHighlightSql(sqlText: string, dbType: string): string {
+  if (!sqlText.trim()) return '';
+  const formatted = formatSqlForDisplay(sqlText, dbType);
+  try {
+    return hljs.highlight(formatted, { language: 'sql', ignoreIllegals: true }).value;
+  } catch {
+    return escapeHtml(formatted);
+  }
+}
+
+/** 简单的 HTML 转义 */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 interface AiSqlTabProps {
   project: Project;
   tables: TableDef[];
@@ -147,7 +205,6 @@ interface AiSqlTabProps {
 
 const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
   const { t, i18n } = useTranslation();
-  const { token } = theme.useToken();
   const [conversations, setConversations] = useState<AiSqlConversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<AiSqlConversation | null>(null);
   const [localMessages, setLocalMessages] = useState<AiSqlMessage[]>([]);
@@ -164,6 +221,10 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
 
   useEffect(() => {
     loadConversations();
+    // 切换项目时重置选中和消息
+    setSelectedConv(null);
+    setLocalMessages([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
   // 选择对话时加载消息
@@ -183,6 +244,18 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
   // 消息变化时自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [localMessages, loading]);
+
+  // 缓存美化+高亮结果（避免每次渲染重新计算）
+  const highlightedSqlMap = useMemo(() => {
+    const map = new Map<number, string>();
+    const dbType = selectedConv?.databaseType || 'mysql';
+    localMessages.forEach((m, idx) => {
+      if (m.sql) {
+        map.set(idx, formatAndHighlightSql(m.sql, dbType));
+      }
+    });
+    return map;
   }, [localMessages]);
 
   const loadConversations = async () => {
@@ -191,9 +264,8 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
       const list = await invoke<BackendAiSqlConversation[]>('get_ai_sql_conversations', { projectId: project.id });
       const converted = list.map(toConversation);
       setConversations(converted);
-      if (converted.length > 0 && !selectedConv) {
-        setSelectedConv(converted[0]);
-      }
+      // 若当前没有选中，自动选中第一条
+      setSelectedConv((prev) => prev ?? (converted[0] ?? null));
     } catch (e) {
       message.error(t('ai_sql_load_fail') + ': ' + e);
     } finally {
@@ -282,6 +354,10 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
     }
   };
 
+  const handleSendSuggestion = (text: string) => {
+    setInputText(text);
+  };
+
   const handleDelete = async (id: number) => {
     try {
       await invoke('delete_ai_sql_conversation', { id });
@@ -327,26 +403,27 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
     }
   };
 
-  const handleSqlChange = (msgIndex: number, newSql: string) => {
-    setLocalMessages((prev) =>
-      prev.map((m, i) => (i === msgIndex ? { ...m, sql: newSql } : m))
-    );
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
-    <div style={{ padding: 24, height: '100%' }}>
+    <div className={styles.container}>
       {/* 顶部操作栏 */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <RobotOutlined style={{ marginRight: 8 }} />
+      <div className={styles.headerBar}>
+        <Title level={4} className={styles.headerTitle}>
+          <RobotOutlined style={{ color: 'var(--ant-color-primary, #1677ff)' }} />
           {t('ai_sql_title')}
         </Title>
-        <Space>
+        <Space className={styles.headerActions}>
           <Select
             value={newConvDbType}
             onChange={setNewConvDbType}
             style={{ width: 140 }}
-            size="small"
+            size="middle"
           >
             {dbTypes.map((dt) => (
               <Select.Option key={dt.value} value={dt.value}>{dt.label}</Select.Option>
@@ -358,200 +435,275 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
         </Space>
       </div>
 
-      <Row gutter={16} style={{ height: 'calc(100% - 72px)' }}>
+      <div className={styles.body}>
         {/* 左侧：对话列表 */}
-        <Col span={7} style={{ height: '100%', overflowY: 'auto', borderRight: `1px solid ${token.colorBorderSecondary}` }}>
-          <Spin spinning={convLoading}>
-            {conversations.length === 0 ? (
-              <Empty description={t('ai_sql_empty')} style={{ paddingTop: 40 }} />
-            ) : (
-              <List
-                dataSource={conversations}
-                renderItem={(conv) => (
-                  <List.Item
-                    style={{
-                      cursor: 'pointer',
-                      padding: '10px 12px',
-                      background: selectedConv?.id === conv.id ? token.colorPrimaryBg : 'transparent',
-                      borderRadius: 6,
-                    }}
-                    onClick={() => setSelectedConv(conv)}
-                    actions={[
-                      <Popconfirm
-                        key="del"
-                        title={t('ai_sql_delete_confirm')}
-                        onConfirm={(e) => {
-                          e?.stopPropagation();
-                          handleDelete(conv.id);
-                        }}
-                      >
-                        <Button
-                          type="text"
-                          danger
-                          size="small"
-                          icon={<DeleteOutlined />}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </Popconfirm>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={<Text ellipsis={{ tooltip: conv.title }}>{conv.title}</Text>}
-                      description={
-                        <Space size={4}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {new Date(conv.updatedAt).toLocaleString(i18n.language === 'en-US' ? 'en-US' : 'zh-CN')}
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>{conv.databaseType}</Text>
-                        </Space>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
-            )}
+        <div className={styles.sidebar}>
+          <Spin spinning={convLoading} style={{ flex: 1 }}>
+            <div className={styles.sidebarList}>
+              {conversations.length === 0 ? (
+                <Empty
+                  description={t('ai_sql_empty')}
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  style={{ paddingTop: 40 }}
+                />
+              ) : (
+                conversations.map((conv) => {
+                  const isActive = selectedConv?.id === conv.id;
+                  return (
+                    <div
+                      key={conv.id}
+                      className={`${styles.conversationItem} ${isActive ? styles.conversationItemActive : ''}`}
+                      onClick={() => setSelectedConv(conv)}
+                    >
+                      <div className={styles.conversationTitle} title={conv.title}>
+                        {conv.title}
+                      </div>
+                      <div className={styles.conversationMeta}>
+                        <span>
+                          {new Date(conv.updatedAt).toLocaleDateString(
+                            i18n.language === 'en-US' ? 'en-US' : 'zh-CN'
+                          )}
+                        </span>
+                        <span className={styles.conversationDbTag}>{conv.databaseType}</span>
+                        <Popconfirm
+                          title={t('ai_sql_delete_confirm')}
+                          onConfirm={(e) => {
+                            e?.stopPropagation();
+                            handleDelete(conv.id);
+                          }}
+                          onCancel={(e) => e?.stopPropagation()}
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ marginLeft: 'auto' }}
+                          />
+                        </Popconfirm>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </Spin>
-        </Col>
+        </div>
 
         {/* 右侧：对话内容 */}
-        <Col span={17} style={{ height: '100%', display: 'flex', flexDirection: 'column', paddingLeft: 16 }}>
+        <div className={styles.chatPanel}>
           {!selectedConv ? (
-            <Empty description={t('ai_sql_select')} style={{ paddingTop: 80 }} />
+            // 全局空状态（未选中对话）
+            <div className={styles.emptyState}>
+              <div className={styles.emptyStateIcon}>
+                <RobotOutlined />
+              </div>
+              <div className={styles.emptyStateTitle}>{t('ai_sql_select')}</div>
+            </div>
           ) : (
             <>
-              {/* 对话标题与操作 */}
-              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text strong style={{ fontSize: 15 }}>{selectedConv.title}</Text>
+              {/* 对话标题条 */}
+              <div className={styles.chatHeader}>
+                <div className={styles.chatHeaderTitle}>
+                  <RobotOutlined style={{ color: 'var(--ant-color-primary, #1677ff)' }} />
+                  {selectedConv.title}
+                  <span className={styles.chatHeaderDbTag}>{selectedConv.databaseType}</span>
+                </div>
                 <Popconfirm title={t('ai_sql_clear_confirm')} onConfirm={handleClearContext}>
-                  <Button size="small" icon={<ClearOutlined />}>
+                  <Button size="small" type="text" icon={<ClearOutlined />}>
                     {t('ai_sql_clear_context')}
                   </Button>
                 </Popconfirm>
               </div>
 
-              {/* 消息列表 */}
-              <div style={{ flex: 1, overflowY: 'auto', marginBottom: 12 }}>
-                {localMessages.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 40, color: token.colorTextTertiary }}>
-                    <RobotOutlined style={{ fontSize: 32, marginBottom: 8 }} />
-                    <div>{t('ai_sql_input_placeholder')}</div>
-                  </div>
-                )}
-                {localMessages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      marginBottom: 16,
-                      display: 'flex',
-                      flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-                    }}
-                  >
-                    <div
-                      style={{
-                        maxWidth: msg.role === 'user' ? '70%' : '100%',
-                        padding: msg.role === 'user' ? '10px 16px' : 0,
-                        background: msg.role === 'user' ? token.colorPrimaryBg : 'transparent',
-                        borderRadius: msg.role === 'user' ? 8 : 0,
-                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                      }}
-                    >
-                      {msg.role === 'user' ? (
-                        <Text style={{ color: token.colorText }}>{msg.content}</Text>
-                      ) : (
-                        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 12 }}>
-                          {/* SQL 区域 */}
-                          {msg.sql !== undefined && msg.sql !== '' && (
-                            <div style={{ marginBottom: 8 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                <Text strong style={{ fontSize: 13 }}>SQL</Text>
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<CopyOutlined />}
-                                  onClick={() => handleCopy(msg.sql || '')}
-                                >
-                                  {t('ai_sql_copy')}
-                                </Button>
-                              </div>
-                              <Input.TextArea
-                                value={msg.sql}
-                                onChange={(e) => handleSqlChange(idx, e.target.value)}
-                                autoSize={{ minRows: 2, maxRows: 15 }}
-                                style={{ fontFamily: 'monospace', fontSize: 13 }}
-                              />
-                            </div>
-                          )}
-                          {/* 说明区域 */}
-                          {msg.explanation && (
-                            <div>
-                              <Text type="secondary" style={{ fontSize: 12 }}>{t('ai_sql_explanation')}：</Text>
-                              <Paragraph style={{ fontSize: 13, margin: '4px 0 0' }}>{msg.explanation}</Paragraph>
-                            </div>
-                          )}
-                          {/* 降级情况：只有 content，无 SQL */}
-                          {!msg.sql && !msg.explanation && msg.content && (
-                            <div>
-                              <Input.TextArea
-                                value={msg.content}
-                                onChange={(e) => handleSqlChange(idx, e.target.value)}
-                                autoSize={{ minRows: 2, maxRows: 15 }}
-                                style={{ fontFamily: 'monospace', fontSize: 13 }}
-                              />
-                              <div style={{ marginTop: 4 }}>
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<CopyOutlined />}
-                                  onClick={() => handleCopy(msg.content)}
-                                >
-                                  {t('ai_sql_copy')}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+              {/* 消息流 */}
+              <div className={styles.messageList}>
+                {localMessages.length === 0 ? (
+                  // 单会话内的空状态：推荐问题
+                  <div className={styles.emptyState}>
+                    <div className={styles.emptyStateIcon}>
+                      <ThunderboltOutlined />
+                    </div>
+                    <div className={styles.emptyStateTitle}>{t('ai_sql_empty_title')}</div>
+                    <div className={styles.emptyStateDesc}>{t('ai_sql_empty_desc')}</div>
+                    <div className={styles.suggestionList}>
+                      {SQL_SUGGESTION_KEYS.map((key) => (
+                        <button
+                          key={key}
+                          className={styles.suggestionItem}
+                          onClick={() => handleSendSuggestion(t(key))}
+                        >
+                          <ThunderboltOutlined className={styles.suggestionItemIcon} />
+                          <span>{t(key)}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                ))}
+                ) : (
+                  localMessages.map((msg, idx) =>
+                    msg.role === 'user' ? (
+                      <UserBubble key={idx} content={msg.content} />
+                    ) : (
+                      <AssistantBubble
+                        key={idx}
+                        msg={msg}
+                        highlightedSql={highlightedSqlMap.get(idx)}
+                        dbType={selectedConv?.databaseType || 'mysql'}
+                        onCopy={handleCopy}
+                        t={t}
+                      />
+                    )
+                  )
+                )}
                 {loading && (
-                  <div style={{ textAlign: 'center', padding: 16 }}>
-                    <Spin tip={t('ai_sql_generating')} />
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div className={`${styles.avatar} ${styles.avatarAi}`}>
+                      <RobotOutlined />
+                    </div>
+                    <div className={styles.typing}>
+                      <span className={styles.typingDot} />
+                      <span className={styles.typingDot} />
+                      <span className={styles.typingDot} />
+                    </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* 输入区域 */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Input.TextArea
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={t('ai_sql_input_placeholder')}
-                  autoSize={{ minRows: 1, maxRows: 4 }}
-                  onPressEnter={(e) => {
-                    if (!e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  disabled={loading}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  onClick={handleSend}
-                  loading={loading}
-                  disabled={!inputText.trim()}
-                >
-                  {t('ai_sql_send')}
-                </Button>
+              {/* 输入区 */}
+              <div className={styles.inputArea}>
+                <div className={styles.inputBox}>
+                  <textarea
+                    className={styles.inputTextarea}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t('ai_sql_input_placeholder')}
+                    rows={1}
+                    disabled={loading}
+                  />
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    onClick={handleSend}
+                    loading={loading}
+                    disabled={!inputText.trim()}
+                  >
+                    {t('ai_sql_send')}
+                  </Button>
+                </div>
+                <div className={styles.inputHint}>
+                  <span>{t('ai_sql_input_hint_enter')}</span>
+                </div>
               </div>
             </>
           )}
-        </Col>
-      </Row>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** 用户消息气泡 */
+const UserBubble: React.FC<{ content: string }> = ({ content }) => (
+  <div className={`${styles.messageRow} ${styles.messageRowUser}`}>
+    <div className={`${styles.avatar} ${styles.avatarUser}`}>
+      <UserOutlined />
+    </div>
+    <div className={`${styles.bubbleWrapper} ${styles.bubbleWrapperUser}`}>
+      <div className={styles.userBubble}>{content}</div>
+    </div>
+  </div>
+);
+
+/** AI 消息气泡（含 SQL 代码块 + 说明） */
+const AssistantBubble: React.FC<{
+  msg: AiSqlMessage;
+  highlightedSql?: string;
+  dbType: string;
+  onCopy: (text: string) => void;
+  t: (key: string) => string;
+}> = ({ msg, highlightedSql, dbType, onCopy, t }) => {
+  const hasSql = msg.sql !== undefined && msg.sql !== '';
+  const hasExplanation = !!msg.explanation;
+  // 降级情况：没有 SQL 也没有 explanation，把 content 当 SQL 展示
+  const fallbackContent = !hasSql && !hasExplanation && msg.content ? msg.content : '';
+
+  // 复制到剪贴板的内容：优先用美化格式后的纯文本（多行 + 缩进 + 关键字大写）
+  // fallback 情况也走格式化，保证用户复制的和看到的一致
+  const copyableText = useMemo(() => {
+    if (hasSql && msg.sql) return formatSqlForDisplay(msg.sql, dbType);
+    if (fallbackContent) return formatSqlForDisplay(fallbackContent, dbType);
+    return '';
+  }, [hasSql, msg.sql, fallbackContent, dbType]);
+
+  // fallback 的高亮 HTML（单行转多行 + 高亮）
+  const fallbackHtml = useMemo(
+    () => (fallbackContent ? formatAndHighlightSql(fallbackContent, dbType) : ''),
+    [fallbackContent, dbType]
+  );
+
+  return (
+    <div className={styles.messageRow}>
+      <div className={`${styles.avatar} ${styles.avatarAi}`}>
+        <RobotOutlined />
+      </div>
+      <div className={`${styles.bubbleWrapper}`}>
+        <div className={styles.aiBubble}>
+          {hasSql && (
+            <div className={styles.sqlBlock}>
+              <div className={styles.sqlBlockHeader}>
+                <span>SQL</span>
+                <button
+                  className={styles.copyButton}
+                  onClick={() => onCopy(copyableText)}
+                >
+                  <CopyOutlined />
+                  {t('ai_sql_copy')}
+                </button>
+              </div>
+              {/*
+                pre.hljs + code.hljs 双层结构：让 atom-one-dark 主题的
+                pre code.hljs 规则能匹配上；hljs.highlight 输出的 span 类名
+                （hljs-keyword 等）是全局 CSS，可正常上色。
+              */}
+              <pre className={`${styles.sqlBlockBody} hljs`}>
+                <code
+                  className="hljs language-sql"
+                  dangerouslySetInnerHTML={{ __html: highlightedSql || '' }}
+                />
+              </pre>
+            </div>
+          )}
+          {fallbackContent && (
+            <div className={styles.sqlBlock}>
+              <div className={styles.sqlBlockHeader}>
+                <span>SQL</span>
+                <button
+                  className={styles.copyButton}
+                  onClick={() => onCopy(copyableText)}
+                >
+                  <CopyOutlined />
+                  {t('ai_sql_copy')}
+                </button>
+              </div>
+              <pre className={`${styles.sqlBlockBody} hljs`}>
+                <code
+                  className="hljs language-sql"
+                  dangerouslySetInnerHTML={{ __html: fallbackHtml }}
+                />
+              </pre>
+            </div>
+          )}
+          {hasExplanation && (
+            <div className={styles.explanation}>
+              <div className={styles.explanationLabel}>{t('ai_sql_explanation')}</div>
+              <div>{msg.explanation}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

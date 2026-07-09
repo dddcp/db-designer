@@ -473,6 +473,13 @@
   "ai_sql_load_fail": "加载对话失败",
   "ai_sql_delete_fail": "删除对话失败",
   "ai_sql_no_tables": "项目暂无表结构",
+  "ai_sql_empty_title": "开始与 AI 对话",
+  "ai_sql_empty_desc": "用自然语言描述需求，AI 会基于项目表结构生成 SQL",
+  "ai_sql_suggestion_1": "查询最近 30 天每天的订单总数和总金额",
+  "ai_sql_suggestion_2": "统计每个分类下的商品数量并按数量降序排列",
+  "ai_sql_suggestion_3": "查找近 7 天没有登录过的活跃用户",
+  "ai_sql_suggestion_4": "删除状态为已取消且创建超过 90 天的订单",
+  "ai_sql_input_hint_enter": "Enter 发送 · Shift+Enter 换行",
 
   "setting_title": "设置",
   "setting_subtitle": "管理应用偏好、集成与扩展",
