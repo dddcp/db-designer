@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { translateBackendMessage } from '../../i18n/backend-messages';
 import {
   Button,
+  Card,
   Form,
   Input,
   message,
@@ -11,16 +12,21 @@ import {
   Radio,
   Select,
   Space,
+  theme,
   Typography,
 } from 'antd';
 import {
   CodeOutlined,
   SaveOutlined,
   DeleteOutlined,
+  BranchesOutlined,
+  SafetyCertificateOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import type { GitAuthType, GitPlatform, GitRemoteMode } from '../../types';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+const { useToken } = theme;
 const { Option } = Select;
 
 interface GitFormValues {
@@ -47,6 +53,7 @@ const GIT_SETTING_KEYS = [
 
 const GitTab: React.FC = () => {
   const { t } = useTranslation();
+  const { token } = useToken();
   const [gitForm] = Form.useForm<GitFormValues>();
   const [loading, setLoading] = useState(false);
   const [gitConfigSaved, setGitConfigSaved] = useState(false);
@@ -184,7 +191,9 @@ const GitTab: React.FC = () => {
   return (
     <Form
       form={gitForm}
-      layout="vertical"
+      layout="horizontal"
+      labelCol={{ span: 4 }}
+      wrapperCol={{ span: 20 }}
       onFinish={handleSaveGitConfig}
       initialValues={{
         remoteMode: 'preset',
@@ -194,153 +203,182 @@ const GitTab: React.FC = () => {
       }}
       onValuesChange={(_, allValues) => setGitConfigSaved(isGitConfigComplete(allValues))}
     >
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>{t('git_config_title')}</Title>
-
-        <Form.Item
-          name="remoteMode"
-          label={t('git_remote_mode')}
-          rules={[{ required: true, message: t('git_remote_mode_required') }]}
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        {/* 远程仓库卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <BranchesOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_remote_repo')}</span>
+            </Space>
+          }
         >
-          <Radio.Group>
-            <Radio.Button value="preset">{t('git_preset')}</Radio.Button>
-            <Radio.Button value="custom">{t('git_custom_url')}</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
+          <Form.Item
+            name="remoteMode"
+            label={t('git_remote_mode')}
+            rules={[{ required: true, message: t('git_remote_mode_required') }]}
+          >
+            <Radio.Group>
+              <Radio.Button value="preset">{t('git_preset')}</Radio.Button>
+              <Radio.Button value="custom">{t('git_custom_url')}</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
 
-        <Form.Item noStyle dependencies={['remoteMode', 'platform']}>
-          {({ getFieldValue }) => {
-            const remoteMode = getFieldValue('remoteMode') || 'preset';
-            const platform = getFieldValue('platform') || 'github';
+          <Form.Item noStyle dependencies={['remoteMode', 'platform']}>
+            {({ getFieldValue }) => {
+              const remoteMode = getFieldValue('remoteMode') || 'preset';
+              const platform = getFieldValue('platform') || 'github';
 
-            if (remoteMode === 'preset') {
+              if (remoteMode === 'preset') {
+                return (
+                  <>
+                    <Form.Item
+                      name="platform"
+                      label={t('git_platform')}
+                      rules={[{ required: true, message: t('git_platform_required') }]}
+                    >
+                      <Select placeholder={t('git_platform_placeholder')}>
+                        <Option value="github">GitHub</Option>
+                        <Option value="gitlab">GitLab</Option>
+                        <Option value="gitee">Gitee</Option>
+                        <Option value="gitea">Gitea</Option>
+                      </Select>
+                    </Form.Item>
+
+                    {platform === 'gitea' && (
+                      <Form.Item
+                        name="baseUrl"
+                        label={t('git_base_url')}
+                        rules={[
+                          { required: true, message: t('git_base_url_required') },
+                          { pattern: /^https?:\/\//, message: t('git_base_url_invalid') },
+                        ]}
+                      >
+                        <Input placeholder={t('git_base_url_placeholder')} />
+                      </Form.Item>
+                    )}
+
+                    <Form.Item
+                      name="repository"
+                      label={t('git_repository')}
+                      rules={[
+                        { required: true, message: t('git_repository_required') },
+                        { pattern: /^[^/\s]+\/[^/\s]+$/, message: t('git_repository_invalid') },
+                      ]}
+                      extra={t('git_repository_extra')}
+                    >
+                      <Input placeholder={t('git_repository_placeholder')} />
+                    </Form.Item>
+                  </>
+                );
+              }
+
+              return (
+                <Form.Item
+                  name="remoteUrl"
+                  label={t('git_remote_url')}
+                  rules={[
+                    { required: true, message: t('git_remote_url_required') },
+                    () => ({
+                      validator(_, value) {
+                        const authType = getFieldValue('authType') || 'token';
+                        const input = (value || '').trim();
+                        if (!input) {
+                          return Promise.resolve();
+                        }
+                        if (authType === 'ssh') {
+                          return /^(git@|ssh:\/\/)/.test(input)
+                            ? Promise.resolve()
+                            : Promise.reject(new Error(t('git_ssh_url_error')));
+                        }
+                        return /^https?:\/\//.test(input)
+                          ? Promise.resolve()
+                          : Promise.reject(new Error(t('git_token_url_error')));
+                      },
+                    }),
+                  ]}
+                >
+                  <Input placeholder={t('git_remote_url_placeholder')} />
+                </Form.Item>
+              );
+            }}
+          </Form.Item>
+        </Card>
+
+        {/* 认证卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <SafetyCertificateOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_auth')}</span>
+            </Space>
+          }
+        >
+          <Form.Item
+            name="authType"
+            label={t('git_auth_type')}
+            rules={[{ required: true, message: t('git_auth_type_required') }]}
+          >
+            <Radio.Group>
+              <Radio.Button value="token">Token</Radio.Button>
+              <Radio.Button value="ssh">SSH</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item noStyle dependencies={['authType', 'remoteMode', 'platform']}>
+            {({ getFieldValue }) => {
+              const authType = getFieldValue('authType') || 'token';
+              const remoteMode = getFieldValue('remoteMode') || 'preset';
+              const platform = getFieldValue('platform') || 'github';
+              const showUsername = authType === 'token' && (remoteMode === 'custom' || platform === 'gitea');
+
+              if (authType === 'ssh') {
+                return (
+                  <Form.Item>
+                    <Text type="secondary">{t('git_ssh_mode_tip')}</Text>
+                  </Form.Item>
+                );
+              }
+
               return (
                 <>
-                  <Form.Item
-                    name="platform"
-                    label={t('git_platform')}
-                    rules={[{ required: true, message: t('git_platform_required') }]}
-                  >
-                    <Select placeholder={t('git_platform_placeholder')}>
-                      <Option value="github">GitHub</Option>
-                      <Option value="gitlab">GitLab</Option>
-                      <Option value="gitee">Gitee</Option>
-                      <Option value="gitea">Gitea</Option>
-                    </Select>
-                  </Form.Item>
-
-                  {platform === 'gitea' && (
+                  {showUsername && (
                     <Form.Item
-                      name="baseUrl"
-                      label={t('git_base_url')}
-                      rules={[
-                        { required: true, message: t('git_base_url_required') },
-                        { pattern: /^https?:\/\//, message: t('git_base_url_invalid') },
-                      ]}
+                      name="username"
+                      label={t('git_username')}
+                      rules={[{ required: true, message: t('git_username_placeholder') }]}
+                      extra={remoteMode === 'custom' ? t('git_username_custom_tip') : t('git_username_gitea_tip')}
                     >
-                      <Input placeholder={t('git_base_url_placeholder')} />
+                      <Input placeholder={t('git_username_placeholder')} />
                     </Form.Item>
                   )}
 
                   <Form.Item
-                    name="repository"
-                    label={t('git_repository')}
-                    rules={[
-                      { required: true, message: t('git_repository_required') },
-                      { pattern: /^[^/\s]+\/[^/\s]+$/, message: t('git_repository_invalid') },
-                    ]}
-                    extra={t('git_repository_extra')}
+                    name="token"
+                    label={t('git_token')}
+                    rules={[{ required: true, message: t('git_token_required') }]}
                   >
-                    <Input placeholder={t('git_repository_placeholder')} />
+                    <Input.Password placeholder={t('git_token_placeholder')} />
                   </Form.Item>
                 </>
               );
-            }
+            }}
+          </Form.Item>
+        </Card>
 
-            return (
-              <Form.Item
-                name="remoteUrl"
-                label={t('git_remote_url')}
-                rules={[
-                  { required: true, message: t('git_remote_url_required') },
-                  () => ({
-                    validator(_, value) {
-                      const authType = getFieldValue('authType') || 'token';
-                      const input = (value || '').trim();
-                      if (!input) {
-                        return Promise.resolve();
-                      }
-                      if (authType === 'ssh') {
-                        return /^(git@|ssh:\/\/)/.test(input)
-                          ? Promise.resolve()
-                          : Promise.reject(new Error(t('git_ssh_url_error')));
-                      }
-                      return /^https?:\/\//.test(input)
-                        ? Promise.resolve()
-                        : Promise.reject(new Error(t('git_token_url_error')));
-                    },
-                  }),
-                ]}
-              >
-                <Input placeholder={t('git_remote_url_placeholder')} />
-              </Form.Item>
-            );
-          }}
-        </Form.Item>
-
-        <Form.Item
-          name="authType"
-          label={t('git_auth_type')}
-          rules={[{ required: true, message: t('git_auth_type_required') }]}
+        {/* 操作卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <ToolOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_operations')}</span>
+            </Space>
+          }
         >
-          <Radio.Group>
-            <Radio.Button value="token">Token</Radio.Button>
-            <Radio.Button value="ssh">SSH</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
-
-        <Form.Item noStyle dependencies={['authType', 'remoteMode', 'platform']}>
-          {({ getFieldValue }) => {
-            const authType = getFieldValue('authType') || 'token';
-            const remoteMode = getFieldValue('remoteMode') || 'preset';
-            const platform = getFieldValue('platform') || 'github';
-            const showUsername = authType === 'token' && (remoteMode === 'custom' || platform === 'gitea');
-
-            if (authType === 'ssh') {
-              return (
-                <Form.Item>
-                  <Text type="secondary">{t('git_ssh_mode_tip')}</Text>
-                </Form.Item>
-              );
-            }
-
-            return (
-              <>
-                {showUsername && (
-                  <Form.Item
-                    name="username"
-                    label={t('git_username')}
-                    rules={[{ required: true, message: t('git_username_placeholder') }]}
-                    extra={remoteMode === 'custom' ? t('git_username_custom_tip') : t('git_username_gitea_tip')}
-                  >
-                    <Input placeholder={t('git_username_placeholder')} />
-                  </Form.Item>
-                )}
-
-                <Form.Item
-                  name="token"
-                  label={t('git_token')}
-                  rules={[{ required: true, message: t('git_token_required') }]}
-                >
-                  <Input.Password placeholder={t('git_token_placeholder')} />
-                </Form.Item>
-              </>
-            );
-          }}
-        </Form.Item>
-
-        <Form.Item>
-          <Space>
+          <Space wrap>
             <Button
               type="primary"
               htmlType="submit"
@@ -374,7 +412,7 @@ const GitTab: React.FC = () => {
               </Button>
             </Popconfirm>
           </Space>
-        </Form.Item>
+        </Card>
       </Space>
     </Form>
   );

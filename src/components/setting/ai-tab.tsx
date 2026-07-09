@@ -2,26 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  Alert,
   AutoComplete,
   Button,
+  Card,
   Form,
   Input,
   message,
   Select,
   Space,
-  Typography,
+  theme,
 } from 'antd';
 import {
   ApiOutlined,
   SaveOutlined,
+  RobotOutlined,
+  KeyOutlined,
+  FileTextOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { AI_PROVIDER_PRESETS, getPresetById } from '../../data/ai-providers';
 
-const { Title, Text } = Typography;
+const { useToken } = theme;
 const { Option } = Select;
 
 const AiTab: React.FC = () => {
   const { t } = useTranslation();
+  const { token } = useToken();
   const [aiForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -136,85 +143,134 @@ const AiTab: React.FC = () => {
   const docs = currentPreset.docsUrl;
 
   return (
-    <Form form={aiForm} layout="vertical" onFinish={handleSaveAiConfig}>
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>{t('ai_config_title')}</Title>
-        <Text type="secondary">
-          {t('ai_compat_tip')}
-        </Text>
+    <Form
+      form={aiForm}
+      layout="horizontal"
+      labelCol={{ span: 4 }}
+      wrapperCol={{ span: 20 }}
+      onFinish={handleSaveAiConfig}
+    >
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Alert
+          type="info"
+          showIcon
+          message={t('ai_config_title')}
+          description={t('ai_compat_tip')}
+        />
 
-        <Form.Item name="ai_provider" label={t('ai_provider_label')} rules={[{ required: true, message: t('ai_provider_required') }]}>
-          <Select onChange={handleProviderChange}>
-            {AI_PROVIDER_PRESETS.map((p) => (
-              <Option key={p.id} value={p.id}>{t(p.i18nKey)}</Option>
-            ))}
-          </Select>
-        </Form.Item>
-
-        <Form.Item name="ai_base_url" label={t('ai_base_url')} rules={[{ required: true, message: t('ai_base_url_required') }]}>
-          <Input
-            placeholder={providerId === 'custom' ? t('ai_base_url_placeholder_custom') : t('ai_base_url_placeholder')}
-            addonAfter={
-              docs ? (
-                <a href={docs} target="_blank" rel="noopener noreferrer">{t('ai_get_api_key')}</a>
-              ) : null
-            }
-          />
-        </Form.Item>
-
-        <Form.Item
-          name="ai_api_key"
-          label={t('ai_api_key')}
-          rules={[{ required: true, message: t('ai_api_key_required') }]}
+        {/* 供应商卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <RobotOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_provider')}</span>
+            </Space>
+          }
         >
-          <Input.Password
-            placeholder={t('ai_api_key_placeholder')}
-            addonAfter={
-              <Button
-                type="link"
-                size="small"
-                icon={<ApiOutlined />}
-                loading={fetchingModels}
-                onClick={handleGetModels}
-                style={{ padding: 0 }}
-              >
-                {t('ai_get_models')}
-              </Button>
-            }
-          />
-        </Form.Item>
+          <Form.Item
+            name="ai_provider"
+            label={t('ai_provider_label')}
+            rules={[{ required: true, message: t('ai_provider_required') }]}
+          >
+            <Select onChange={handleProviderChange}>
+              {AI_PROVIDER_PRESETS.map((p) => (
+                <Option key={p.id} value={p.id}>{t(p.i18nKey)}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Card>
 
-        <Form.Item
-          name="ai_model"
-          label={t('ai_model')}
-          rules={[{ required: true, message: t('ai_model_required') }]}
+        {/* 凭证卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <KeyOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_credentials')}</span>
+            </Space>
+          }
         >
-          <AutoComplete
-            placeholder={t('ai_model_placeholder')}
-            options={models.map((m) => ({ value: m }))}
-            allowClear
-            filterOption={(input, option) =>
-              (option?.value as string).toLowerCase().includes(input.toLowerCase())
-            }
-          />
-        </Form.Item>
+          <Form.Item
+            name="ai_base_url"
+            label={t('ai_base_url')}
+            rules={[{ required: true, message: t('ai_base_url_required') }]}
+          >
+            <Input
+              placeholder={providerId === 'custom' ? t('ai_base_url_placeholder_custom') : t('ai_base_url_placeholder')}
+              addonAfter={
+                docs ? (
+                  <a href={docs} target="_blank" rel="noopener noreferrer">{t('ai_get_api_key')}</a>
+                ) : null
+              }
+            />
+          </Form.Item>
 
-        <Form.Item name="ai_design_common_prompt" label={t('ai_common_prompt')}>
-          <Input.TextArea
-            rows={6}
-            placeholder={t('ai_common_prompt_placeholder')}
-          />
-        </Form.Item>
+          <Form.Item
+            name="ai_api_key"
+            label={t('ai_api_key')}
+            rules={[{ required: true, message: t('ai_api_key_required') }]}
+          >
+            <Input.Password
+              placeholder={t('ai_api_key_placeholder')}
+              addonAfter={
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<ApiOutlined />}
+                  loading={fetchingModels}
+                  onClick={handleGetModels}
+                  style={{ padding: 0 }}
+                >
+                  {t('ai_get_models')}
+                </Button>
+              }
+            />
+          </Form.Item>
 
-        <Text type="secondary">
-          {t('ai_common_prompt_desc')}
-        </Text>
+          <Form.Item
+            name="ai_model"
+            label={t('ai_model')}
+            rules={[{ required: true, message: t('ai_model_required') }]}
+          >
+            <AutoComplete
+              placeholder={t('ai_model_placeholder')}
+              options={models.map((m) => ({ value: m }))}
+              allowClear
+              filterOption={(input, option) =>
+                (option?.value as string).toLowerCase().includes(input.toLowerCase())
+              }
+            />
+          </Form.Item>
+        </Card>
 
-        <Form.Item>
-          <Space>
+        {/* 通用提示词卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <FileTextOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_common_prompt')}</span>
+            </Space>
+          }
+        >
+          <Form.Item
+            name="ai_design_common_prompt"
+            help={t('ai_common_prompt_desc')}
+          >
+            <Input.TextArea
+              rows={6}
+              placeholder={t('ai_common_prompt_placeholder')}
+            />
+          </Form.Item>
+        </Card>
+
+        {/* 操作卡片 */}
+        <Card>
+          <Space wrap>
             <Button
-              type="link"
-              icon={<ApiOutlined />}
+              type="default"
+              icon={<ThunderboltOutlined />}
               loading={testing}
               onClick={handleTestConnection}
             >
@@ -224,7 +280,7 @@ const AiTab: React.FC = () => {
               {t('ai_save_config')}
             </Button>
           </Space>
-        </Form.Item>
+        </Card>
       </Space>
     </Form>
   );

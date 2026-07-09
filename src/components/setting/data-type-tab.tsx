@@ -2,16 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Divider,
+  Card,
+  Col,
   Drawer,
+  Empty,
   Form,
   Input,
-  List,
   message,
   Popconfirm,
+  Row,
   Space,
   Switch,
   Tag,
+  theme,
+  Tooltip,
   Typography,
 } from 'antd';
 import {
@@ -19,14 +23,18 @@ import {
   EditOutlined,
   DeleteOutlined,
   SaveOutlined,
+  DatabaseOutlined,
+  TagsOutlined,
 } from '@ant-design/icons';
 import { BUILT_IN_DATA_TYPES, loadCustomDataTypes, saveCustomDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+const { useToken } = theme;
 
 const DataTypeTab: React.FC = () => {
   const { t } = useTranslation();
+  const { token } = useToken();
   const [dataTypeForm] = Form.useForm();
   const [customDataTypes, setCustomDataTypes] = useState<DataTypeOption[]>([]);
   const [isDataTypeDrawerVisible, setIsDataTypeDrawerVisible] = useState(false);
@@ -117,68 +125,91 @@ const DataTypeTab: React.FC = () => {
 
   return (
     <>
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Title level={4}>{t('data_type_builtin')}</Title>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {BUILT_IN_DATA_TYPES.map(dt => (
-            <Tag key={dt.value} color="blue">{dt.label}</Tag>
-          ))}
-        </div>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        {/* 内置类型卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <DatabaseOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_builtin_types')}</span>
+              <Tag>{BUILT_IN_DATA_TYPES.length}</Tag>
+            </Space>
+          }
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {BUILT_IN_DATA_TYPES.map(dt => (
+              <Tag key={dt.value} color="blue">{dt.label}</Tag>
+            ))}
+          </div>
+        </Card>
 
-        <Divider />
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>{t('data_type_custom')}</Title>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDataType}>
-            {t('data_type_add_btn')}
-          </Button>
-        </div>
-
-        <List
-          dataSource={customDataTypes}
-          locale={{
-            emptyText: (
-              <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">{t('data_type_empty_custom')}</Text>
-              </div>
-            ),
-          }}
-          renderItem={(dt) => (
-            <List.Item
-              actions={[
-                <Button type="link" icon={<EditOutlined />} onClick={() => handleEditDataType(dt)}>
-                  {t('data_type_edit')}
-                </Button>,
-                <Popconfirm
-                  title={t('data_type_delete_confirm')}
-                  onConfirm={() => handleDeleteDataType(dt.value)}
-                  okText={t('confirm')}
-                  cancelText={t('cancel')}
-                >
-                  <Button type="link" danger icon={<DeleteOutlined />}>
-                    {t('delete')}
-                  </Button>
-                </Popconfirm>,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    <Text strong>{dt.label}</Text>
-                    <Text type="secondary">({dt.value})</Text>
-                  </Space>
-                }
-                description={
-                  <Space>
-                    {dt.hasLength && <Tag>{t('data_type_support_length')}</Tag>}
-                    {dt.hasScale && <Tag>{t('data_type_support_scale')}</Tag>}
-                    {!dt.hasLength && !dt.hasScale && <Text type="secondary">{t('data_type_no_params')}</Text>}
-                  </Space>
-                }
-              />
-            </List.Item>
+        {/* 自定义类型卡片 */}
+        <Card
+          styles={{ header: { fontSize: 17 } }}
+          title={
+            <Space>
+              <TagsOutlined style={{ color: token.colorPrimary }} />
+              <span>{t('setting_card_custom_types')}</span>
+              <Tag>{customDataTypes.length}</Tag>
+            </Space>
+          }
+          extra={
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDataType}>
+              {t('data_type_add_btn')}
+            </Button>
+          }
+        >
+          {customDataTypes.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={t('data_type_empty_custom')}
+              style={{ padding: '32px 0' }}
+            />
+          ) : (
+            <Row gutter={[16, 16]}>
+              {customDataTypes.map((dt) => (
+                <Col key={dt.value} xs={24} sm={12} lg={8}>
+                  <Card
+                    size="small"
+                    hoverable
+                    style={{ height: '100%' }}
+                    actions={[
+                      <Tooltip title={t('data_type_edit')} key="edit">
+                        <EditOutlined onClick={() => handleEditDataType(dt)} />
+                      </Tooltip>,
+                      <Popconfirm
+                        key="delete"
+                        title={t('data_type_delete_confirm')}
+                        onConfirm={() => handleDeleteDataType(dt.value)}
+                        okText={t('confirm')}
+                        cancelText={t('cancel')}
+                      >
+                        <Tooltip title={t('delete')}>
+                          <DeleteOutlined style={{ color: token.colorError }} />
+                        </Tooltip>
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                      <Space size={6} wrap>
+                        <Text strong style={{ fontSize: 15 }}>{dt.label}</Text>
+                        <Text type="secondary" style={{ fontSize: 13 }}>({dt.value})</Text>
+                      </Space>
+                      <Space size={4} wrap>
+                        {dt.hasLength && <Tag color="cyan">{t('data_type_support_length')}</Tag>}
+                        {dt.hasScale && <Tag color="purple">{t('data_type_support_scale')}</Tag>}
+                        {!dt.hasLength && !dt.hasScale && (
+                          <Text type="secondary" style={{ fontSize: 13 }}>{t('data_type_no_params')}</Text>
+                        )}
+                      </Space>
+                    </Space>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
           )}
-        />
+        </Card>
       </Space>
 
       <Drawer

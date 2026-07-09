@@ -3,17 +3,20 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Button,
+  Card,
   Col,
   Drawer,
+  Empty,
   Form,
   Input,
-  List,
   message,
   Popconfirm,
   Row,
   Select,
   Space,
   Tag,
+  theme,
+  Tooltip,
   Typography,
 } from 'antd';
 import {
@@ -21,14 +24,19 @@ import {
   EditOutlined,
   DeleteOutlined,
   SaveOutlined,
+  DatabaseOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
 import type { DatabaseConnection, DatabaseTypeOption } from '../../types';
+import styles from './setting.module.css';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
+const { useToken } = theme;
 const { Option } = Select;
 
 const DatabaseTab: React.FC = () => {
   const { t } = useTranslation();
+  const { token } = useToken();
   const [dbForm] = Form.useForm();
   const [dbConnections, setDbConnections] = useState<DatabaseConnection[]>([]);
   const [isDbModalVisible, setIsDbModalVisible] = useState(false);
@@ -133,61 +141,88 @@ const DatabaseTab: React.FC = () => {
 
   return (
     <>
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={4} style={{ margin: 0 }}>{t('db_conn_title')}</Title>
+      <Card
+        styles={{ header: { fontSize: 17 } }}
+        title={
+          <Space>
+            <DatabaseOutlined style={{ color: token.colorPrimary }} />
+            <span>{t('setting_card_connections')}</span>
+            <Tag>{dbConnections.length}</Tag>
+          </Space>
+        }
+        extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDatabaseConnection}>
             {t('db_conn_add')}
           </Button>
-        </div>
-
-        <List
-          dataSource={dbConnections}
-          locale={{
-            emptyText: (
-              <div style={{ textAlign: 'center', padding: 40 }}>
-                <Text type="secondary">{t('db_conn_empty')}</Text>
-              </div>
-            ),
-          }}
-          renderItem={(connection) => (
-            <List.Item
-              actions={[
-                <Button type="link" icon={<EditOutlined />} onClick={() => handleEditDatabaseConnection(connection)}>
-                  {t('db_conn_edit')}
-                </Button>,
-                <Popconfirm
-                  title={t('db_conn_confirm_delete')}
-                  onConfirm={() => handleDeleteDatabaseConnection(connection.id)}
-                  okText={t('confirm')}
-                  cancelText={t('cancel')}
-                >
-                  <Button type="link" danger icon={<DeleteOutlined />}>
-                    {t('delete')}
-                  </Button>
-                </Popconfirm>,
-              ]}
-            >
-              <List.Item.Meta
-                title={
-                  <Space>
-                    <Text strong>{connection.name}</Text>
-                    <Tag color={dbTypes.find(dt => dt.value === connection.type)?.color || 'blue'}>
-                      {dbTypes.find(dt => dt.value === connection.type)?.label || connection.type}
-                    </Tag>
-                  </Space>
-                }
-                description={
-                  <Space direction="vertical" size={0}>
-                    <Text type="secondary">{connection.host}:{connection.port} / {connection.database}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{t('db_conn_user')}: {connection.username}</Text>
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
-        />
-      </Space>
+        }
+      >
+        {dbConnections.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t('db_conn_empty')}
+            style={{ padding: '32px 0' }}
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {dbConnections.map((connection) => {
+              const typeOption = dbTypes.find(dt => dt.value === connection.type);
+              return (
+                <Col key={connection.id} xs={24} sm={12} lg={8}>
+                  <Card
+                    size="small"
+                    hoverable
+                    style={{ height: '100%' }}
+                    actions={[
+                      <Tooltip title={t('db_conn_edit')} key="edit">
+                        <EditOutlined onClick={() => handleEditDatabaseConnection(connection)} />
+                      </Tooltip>,
+                      <Popconfirm
+                        key="delete"
+                        title={t('db_conn_delete_confirm')}
+                        onConfirm={() => handleDeleteDatabaseConnection(connection.id)}
+                        okText={t('confirm')}
+                        cancelText={t('cancel')}
+                      >
+                        <Tooltip title={t('delete')}>
+                          <DeleteOutlined style={{ color: token.colorError }} />
+                        </Tooltip>
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                      <Space size={6} wrap>
+                        <Text strong style={{ fontSize: 15 }}>{connection.name}</Text>
+                        <Tag color={typeOption?.color || 'blue'}>
+                          {typeOption?.label || connection.type}
+                        </Tag>
+                      </Space>
+                      <Space size={4} style={{ width: '100%' }} align="start">
+                        <LinkOutlined style={{ color: token.colorTextTertiary, fontSize: 13, marginTop: 3 }} />
+                        <Tooltip
+                          title={`${connection.host}:${connection.port} / ${connection.database}`}
+                          placement="topLeft"
+                        >
+                          <div className={styles.lineClamp2} style={{ flex: 1, minWidth: 0, fontSize: 13, color: token.colorTextSecondary }}>
+                            {connection.host}:{connection.port} / {connection.database}
+                          </div>
+                        </Tooltip>
+                      </Space>
+                      <Tooltip title={`${t('db_conn_user')}: ${connection.username}`} placement="topLeft">
+                        <div
+                          className={styles.lineClamp2}
+                          style={{ fontSize: 13, color: token.colorTextSecondary }}
+                        >
+                          {t('db_conn_user')}: {connection.username}
+                        </div>
+                      </Tooltip>
+                    </Space>
+                  </Card>
+                </Col>
+              );
+            })}
+          </Row>
+        )}
+      </Card>
 
       <Drawer
         title={editingConnection ? t('db_conn_edit_drawer') : t('db_conn_add_drawer')}
