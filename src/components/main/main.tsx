@@ -538,7 +538,7 @@ const Main: React.FC = () => {
                               color={colorStart}
                               bordered={false}
                             >
-                              {t('main_project')}
+                              {t('main_table_count', { count: project.table_count ?? 0 })}
                             </Tag>
                           </div>
                         </div>

@@ -18,13 +18,21 @@ impl SqliteProjectStore {
             description: row.get(2)?,
             created_at: row.get(3)?,
             updated_at: row.get(4)?,
+            table_count: row.get(5)?,
         })
     }
 
     fn fetch_project_by_id(&self, id: i32) -> Result<Project, String> {
         let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, name, description, created_at, updated_at FROM t_proj WHERE id = ?1")
+            .prepare(
+                "SELECT p.id, p.name, p.description, p.created_at, p.updated_at, \
+                        COALESCE(t.cnt, 0) AS table_count \
+                 FROM t_proj p \
+                 LEFT JOIN (SELECT project_id, COUNT(*) AS cnt FROM t_table GROUP BY project_id) t \
+                   ON t.project_id = p.id \
+                 WHERE p.id = ?1",
+            )
             .map_err(|e| format!("Error preparing statement: {}", e))?;
         let mut iter = stmt
             .query_map(params![id], Self::map_project)
@@ -40,7 +48,16 @@ impl ProjectStore for SqliteProjectStore {
     fn get_projects(&self) -> Result<Vec<Project>, String> {
         let conn = init_db().map_err(|e| format!("Error connecting to database: {}", e))?;
 
-        let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM t_proj ORDER BY created_at")
+        // 通过 LEFT JOIN 一次性统计每个项目下的表数量，避免 N+1 查询
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.name, p.description, p.created_at, p.updated_at, \
+                        COALESCE(t.cnt, 0) AS table_count \
+                 FROM t_proj p \
+                 LEFT JOIN (SELECT project_id, COUNT(*) AS cnt FROM t_table GROUP BY project_id) t \
+                   ON t.project_id = p.id \
+                 ORDER BY p.created_at",
+            )
             .map_err(|e| format!("Error preparing statement: {}", e))?;
 
         let project_iter = stmt.query_map([], Self::map_project)

@@ -8,6 +8,9 @@ pub struct Project {
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    // 项目下的表数量（get_projects 时由 LEFT JOIN 统计填充，其他接口默认 0）
+    #[serde(default)]
+    pub table_count: i32,
 }
 
 // 创建项目的请求结构

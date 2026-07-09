@@ -21,7 +21,7 @@
   "main_view_detail": "查看详情",
   "main_confirm_delete_project": "确定删除此项目吗？",
   "main_delete_project_desc": "删除后将同时删除项目下的所有表和索引数据",
-  "main_project": "项目",
+  "main_table_count": "{{count}} 张表",
   "main_no_description": "暂无描述",
   "main_created_at": "创建于: {{date}}",
   "main_empty": "暂无项目，点击上方按钮创建第一个项目",

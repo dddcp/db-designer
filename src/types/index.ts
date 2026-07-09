@@ -5,6 +5,8 @@ export interface Project {
   description?: string;
   created_at: string;
   updated_at: string;
+  // 项目下的表数量，仅 get_projects 时填充，其他接口可能为 undefined
+  table_count?: number;
 }
 
 // 前端列定义

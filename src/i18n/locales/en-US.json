@@ -21,7 +21,7 @@
   "main_view_detail": "View Details",
   "main_confirm_delete_project": "Are you sure you want to delete this project?",
   "main_delete_project_desc": "This will also delete all tables and index data under this project",
-  "main_project": "Project",
+  "main_table_count": "{{count}} tables",
   "main_no_description": "No description",
   "main_created_at": "Created: {{date}}",
   "main_empty": "No projects yet. Click the button above to create your first project",
