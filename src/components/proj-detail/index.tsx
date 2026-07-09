@@ -56,6 +56,7 @@ import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import styles from './proj-detail.module.css';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text } = Typography;
@@ -128,6 +129,12 @@ const ProjectDetail: React.FC = () => {
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
   }, []);
+
+  // 主区容器 className（含 24px 仪表盘网格 + 深色适配）
+  const gridClassName = `${styles.viewGrid}${isDarkMode ? ' theme-dark' : ''}`;
+
+  // Header KPI 派生：表数 / 字段数（零后端调用）
+  const totalFields = tables.reduce((sum, t) => sum + t.columns.length, 0);
 
   // 加载项目详情
   useEffect(() => {
@@ -958,7 +965,10 @@ const ProjectDetail: React.FC = () => {
 
   return (
     <>
-      <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Layout
+        className={`${styles.pageBg}${isDarkMode ? ' theme-dark' : ''}`}
+        style={{ height: '100vh', overflow: 'hidden' }}
+      >
         {/* 头部 */}
         <Header 
           style={{ 
@@ -1001,6 +1011,18 @@ const ProjectDetail: React.FC = () => {
               </Text>
             </div>
           </div>
+
+          {/* 右侧 KPI 摘要条：表数 / 字段数（等宽数字 + 等高对齐） */}
+          <div className={styles.summaryBar}>
+            <div className={`${styles.summaryMetric}${isDarkMode ? ' theme-dark' : ''}`}>
+              <span className={`${styles.summaryMetricValue}${isDarkMode ? ' theme-dark' : ''}`}>{tables.length}</span>
+              <span className={styles.summaryMetricLabel}>表</span>
+            </div>
+            <div className={`${styles.summaryMetric}${isDarkMode ? ' theme-dark' : ''}`}>
+              <span className={`${styles.summaryMetricValue}${isDarkMode ? ' theme-dark' : ''}`}>{totalFields}</span>
+              <span className={styles.summaryMetricLabel}>字段</span>
+            </div>
+          </div>
         </Header>
 
         {/* 项目级视图切换 */}
@@ -1008,6 +1030,7 @@ const ProjectDetail: React.FC = () => {
           <Tabs
             activeKey={projectView}
             onChange={setProjectView}
+            className={styles.tabBarGlow}
             style={{ marginBottom: 0 }}
             items={[
               {
@@ -1095,7 +1118,7 @@ const ProjectDetail: React.FC = () => {
                 })}
                 renderItem={(table) => (
                   <List.Item
-                    style={{ 
+                    style={{
                       cursor: 'pointer',
                       background: selectedTable?.id === table.id ? token.colorPrimaryBg : 'transparent',
                       padding: '8px 12px',
@@ -1104,8 +1127,8 @@ const ProjectDetail: React.FC = () => {
                     }}
                     onClick={() => setSelectedTable(table)}
                     actions={[
-                      <Button 
-                        type="text" 
+                      <Button
+                        type="text"
                         icon={<EditOutlined />}
                         size="small"
                         onClick={(e) => {
@@ -1122,9 +1145,9 @@ const ProjectDetail: React.FC = () => {
                           handleDeleteTable(table.id);
                         }}
                       >
-                        <Button 
-                          type="text" 
-                          danger 
+                        <Button
+                          type="text"
+                          danger
                           icon={<DeleteOutlined />}
                           size="small"
                           onClick={(e) => e.stopPropagation()}
@@ -1160,7 +1183,10 @@ const ProjectDetail: React.FC = () => {
           </Sider>
 
           {/* 右侧内容 - 表设计 */}
-          <Content style={{ padding: '24px', background: getThemedBg(isDarkMode, 'page'), overflowY: 'auto' }}>
+          <Content
+            className={gridClassName}
+            style={{ padding: '24px', background: getThemedBg(isDarkMode, 'page'), overflowY: 'auto' }}
+          >
             <div style={{ maxWidth: '100%', margin: '0 auto' }}>
               {selectedTable ? (
                 <Card>
@@ -1175,9 +1201,10 @@ const ProjectDetail: React.FC = () => {
                   
                   </div>
                   
-                  <Tabs 
-                    activeKey={activeTab} 
+                  <Tabs
+                    activeKey={activeTab}
                     onChange={setActiveTab}
+                    className={styles.tabBarGlow}
                     items={[
                       {
                         key: 'structure',
@@ -1280,27 +1307,27 @@ const ProjectDetail: React.FC = () => {
           </Content>
         </Layout>
         ) : projectView === 'routine' ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <RoutineTab project={project} />
           </div>
         ) : projectView === 'version' ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <VersionTab project={project} />
           </div>
         ) : projectView === 'sync' ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <SyncTab project={project} />
           </div>
         ) : projectView === 'aireview' ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <AiReviewTab project={project} tables={tables} />
           </div>
         ) : projectView === 'aisql' ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <AiSqlTab project={project} tables={tables} />
           </div>
         ) : (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className={gridClassName} style={{ flex: 1, overflowY: 'auto' }}>
             <SqlExportTab project={project} />
           </div>
         )}

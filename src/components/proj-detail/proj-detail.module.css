@@ -1,0 +1,131 @@
+/* =====================================================
+   项目详情页样式（方向 C：数据驾驶舱）
+   设计要点：
+   - 仪表盘参考线网格（24px）+ 四角大气辉光
+   - 深浅色双适配，不破坏现有功能
+   - 所有样式仅新增，不修改全局 token
+   ===================================================== */
+
+/* 顶层 Layout：四角大气辉光（克制版，3 团径向渐变） */
+.pageBg {
+  position: relative;
+  isolation: isolate;
+}
+
+.pageBg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 35% 45% at 8% 6%, rgba(22, 119, 255, 0.10), transparent 65%),
+    radial-gradient(ellipse 28% 40% at 95% 8%, rgba(115, 46, 209, 0.08), transparent 65%),
+    radial-gradient(ellipse 32% 45% at 95% 95%, rgba(19, 194, 194, 0.07), transparent 65%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 把所有直接子元素提到 ::before 之上 */
+.pageBg > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 深色模式：辉光提亮、可见度更高（用 :global 类挂在 .pageBg 自身上，避免再包一层 div） */
+.pageBg:global(.theme-dark)::before {
+  background:
+    radial-gradient(ellipse 35% 45% at 8% 6%, rgba(64, 150, 255, 0.20), transparent 65%),
+    radial-gradient(ellipse 28% 40% at 95% 8%, rgba(179, 127, 235, 0.16), transparent 65%),
+    radial-gradient(ellipse 32% 45% at 95% 95%, rgba(54, 207, 201, 0.14), transparent 65%);
+}
+
+/* 主工作区 + 各 Tab 视图：24px 仪表盘参考线网格 */
+.viewGrid {
+  background-image:
+    linear-gradient(rgba(22, 119, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 119, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: local;
+}
+
+.viewGrid:global(.theme-dark) {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+/* Header 右侧 KPI 摘要条 */
+.summaryBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summaryMetric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(22, 119, 255, 0.06);
+  border: 1px solid rgba(22, 119, 255, 0.16);
+  min-width: 80px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.summaryMetric:hover {
+  background: rgba(22, 119, 255, 0.10);
+  border-color: rgba(22, 119, 255, 0.28);
+}
+
+.summaryMetricValue {
+  font-family: 'SF Mono', 'Consolas', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ant-color-primary);
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryMetricLabel {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  margin-top: 3px;
+  letter-spacing: 0.5px;
+}
+
+/* 深色模式：玻璃白底 + 提亮主色 */
+.summaryMetric:global(.theme-dark) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.summaryMetric:global(.theme-dark):hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
+.summaryMetricValue:global(.theme-dark) {
+  color: #4096ff;
+}
+
+/* ================== Tab 发光下划线 ================== */
+
+/* Tabs 选中态 ink-bar：3px 高 + 主色三层发光阴影（克制版） */
+.tabBarGlow :global(.ant-tabs-ink-bar) {
+  height: 3px !important;
+  border-radius: 2px !important;
+  box-shadow:
+    0 0 8px rgba(22, 119, 255, 0.35),
+    0 0 14px rgba(22, 119, 255, 0.22),
+    0 4px 10px rgba(22, 119, 255, 0.25) !important;
+  transition: box-shadow 0.25s ease !important;
+}
+
+.tabBarGlow:global(.theme-dark) :global(.ant-tabs-ink-bar) {
+  box-shadow:
+    0 0 10px rgba(64, 150, 255, 0.55),
+    0 0 18px rgba(64, 150, 255, 0.32),
+    0 4px 12px rgba(64, 150, 255, 0.4) !important;
+}
