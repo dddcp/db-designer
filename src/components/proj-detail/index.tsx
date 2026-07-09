@@ -976,18 +976,30 @@ const ProjectDetail: React.FC = () => {
               tooltip={t('proj_back_home')}
               onClick={handleBack}
             />
-            <DatabaseOutlined style={{ fontSize: 24, color: token.colorPrimary }} />
-            <Title
-              level={3}
+            <div
               style={{
-                margin: 0,
-                height: 24,
-                lineHeight: '24px',
-                color: isDarkMode ? '#fff' : '#000'
+                width: 36,
+                height: 36,
+                borderRadius: 9,
+                background: 'linear-gradient(135deg, #1677ff 0%, #0958d9 60%, #722ed1 100%)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: 18,
+                boxShadow: isDarkMode
+                  ? '0 4px 16px rgba(22, 119, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+                  : '0 4px 12px rgba(22, 119, 255, 0.28)',
               }}
             >
-              {project.name}
-            </Title>
+              <DatabaseOutlined />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <Title level={3} style={{ margin: 0, fontSize: 22 }}>{project.name}</Title>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                {project.description || t('main_no_description')}
+              </Text>
+            </div>
           </div>
         </Header>
 
