@@ -483,11 +483,8 @@
   "setting_back_home": "返回主页",
   "setting_back": "返回",
 
-  "basic_theme": "主题设置",
-  "basic_dark_mode": "深色模式",
   "basic_dark_on": "开启",
   "basic_dark_off": "关闭",
-  "basic_theme_save_fail": "保存主题设置失败",
   "basic_app_info": "应用信息",
   "basic_app_name": "应用名称",
   "basic_version": "版本",
@@ -507,7 +504,6 @@
   "language": "语言",
   "language_zh": "简体中文",
   "language_en": "English",
-  "basic_theme_load_fail": "加载主题设置失败",
 
   "ai_config_title": "AI 配置",
   "ai_compat_tip": "兼容所有 OpenAI 格式的 API（通义千问、Deepseek、文心等均可使用）",

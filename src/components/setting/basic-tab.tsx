@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -14,7 +13,6 @@ import {
   Row,
   Select,
   Space,
-  Switch,
   Typography,
 } from 'antd';
 import {
@@ -26,40 +24,14 @@ const { Title, Text } = Typography;
 
 const BasicTab: React.FC = () => {
   const { t, i18n } = useTranslation();
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    loadTheme();
     getVersion().then(v => setAppVersion(v));
   }, []);
-
-  const loadTheme = async () => {
-    try {
-      const settings = await invoke<{ [key: string]: string }>('get_all_settings');
-      setIsDarkMode(settings['theme'] === 'dark');
-    } catch (error) {
-      console.error(t('basic_theme_load_fail'), error);
-    }
-  };
-
-  const handleSaveTheme = async (checked: boolean) => {
-    try {
-      await invoke('save_setting', {
-        key: 'theme',
-        value: checked ? 'dark' : 'light',
-      });
-      await invoke('apply_window_theme', { isDark: checked });
-      localStorage.setItem('theme', checked ? 'dark' : 'light');
-      window.location.reload();
-    } catch (error) {
-      console.error(t('basic_theme_save_fail'), error);
-      message.error(t('basic_theme_save_fail'));
-    }
-  };
 
   const handleCheckUpdate = async () => {
     setCheckingUpdate(true);
@@ -130,21 +102,8 @@ const BasicTab: React.FC = () => {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
-      <Title level={4}>{t('basic_theme')}</Title>
-      <div style={{ display: 'flex',gap: 16 }}>
-        <Text strong>{t('basic_dark_mode')}</Text>
-        <Switch
-          checked={isDarkMode}
-          onChange={(checked) => {
-            setIsDarkMode(checked);
-            handleSaveTheme(checked);
-          }}
-          checkedChildren={t('basic_dark_on')}
-          unCheckedChildren={t('basic_dark_off')}
-        />
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
+      <Title level={4}>{t('language')}</Title>
+      <div>
         <Text strong>{t('language')}</Text>
         <Select
           value={i18n.language}

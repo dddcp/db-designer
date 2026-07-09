@@ -482,11 +482,8 @@
   "setting_back_home": "Back to home",
   "setting_back": "Back",
 
-  "basic_theme": "Theme Settings",
-  "basic_dark_mode": "Dark Mode",
   "basic_dark_on": "On",
   "basic_dark_off": "Off",
-  "basic_theme_save_fail": "Failed to save theme settings",
   "basic_app_info": "App Info",
   "basic_app_name": "App Name",
   "basic_version": "Version",
@@ -506,7 +503,6 @@
   "language": "Language",
   "language_zh": "简体中文",
   "language_en": "English",
-  "basic_theme_load_fail": "Failed to load theme settings",
 
   "ai_config_title": "AI Configuration",
   "ai_compat_tip": "Compatible with all OpenAI-format APIs (Qwen, Deepseek, ERNIE Bot, etc.)",

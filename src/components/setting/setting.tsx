@@ -27,7 +27,7 @@ const Setting: React.FC = () => {
   const [activeTab, setActiveTab] = useState('basic');
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ height: '100vh' }}>
       <Header
         style={{
           background: token.colorBgContainer,
@@ -36,6 +36,7 @@ const Setting: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flex: '0 0 auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -48,7 +49,7 @@ const Setting: React.FC = () => {
         </div>
       </Header>
 
-      <Content style={{ padding: '24px', background: token.colorBgLayout }}>
+      <Content style={{ padding: '24px', background: token.colorBgLayout, overflow: 'auto' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <Card>
             <Tabs
