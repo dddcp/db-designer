@@ -1,0 +1,354 @@
+/* =====================================================
+   AI Review Tab 样式
+   设计要点：
+   - 与 AI SQL Tab 一致：独立卡片 + token 颜色 + 深浅色双适配
+   - 左侧历史列表：透明 sidebar + 卡片式 reviewItem
+   - 右侧详情面板：白底/深灰底大卡片 + 内容区分层
+   - summary 框、issue 卡片均有自己的背景/边框/阴影
+   ===================================================== */
+
+/* 容器 */
+.container {
+  padding: 24px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 顶部栏 */
+.headerBar {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 主体两栏 */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+/* 左侧历史列表 */
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebarList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* 评审记录作为独立卡片 */
+.reviewItem {
+  position: relative;
+  cursor: pointer;
+  padding: 10px 12px 10px 16px;
+  border-radius: 8px;
+  background-color: var(--ai-review-card-bg, #ffffff);
+  border: 1px solid var(--ai-review-card-border, rgba(0, 0, 0, 0.06));
+  box-shadow: var(--ai-review-card-shadow, 0 1px 2px rgba(0, 0, 0, 0.02));
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  margin-bottom: 8px;
+}
+
+.reviewItem:hover {
+  background-color: var(--ai-review-card-hover-bg, rgba(22, 119, 255, 0.04));
+  border-color: var(--ai-review-card-hover-border, rgba(22, 119, 255, 0.3));
+  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.08);
+}
+
+.reviewItemActive {
+  background-color: var(--ai-review-active-bg, #e6f4ff);
+  border-color: var(--ant-color-primary, #1677ff);
+  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.15);
+}
+
+.reviewItemActive:hover {
+  background-color: #bae0ff;
+}
+
+/* 选中态左侧指示条 */
+.reviewItemActive::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 2px;
+  background-color: var(--ant-color-primary, #1677ff);
+}
+
+.reviewTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ai-review-title-color, rgba(0, 0, 0, 0.88));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ai-review-meta-color, rgba(0, 0, 0, 0.65));
+}
+
+/* 右侧详情面板 */
+.detailPanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--ai-review-panel-bg, #ffffff);
+  border: 1px solid var(--ai-review-panel-border, rgba(0, 0, 0, 0.06));
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+/* 详情头部 */
+.detailHeader {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--ai-review-border, rgba(0, 0, 0, 0.06));
+}
+
+.detailHeaderTitle {
+  margin: 0 0 4px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailHeaderTime {
+  font-size: 12px;
+  color: var(--ai-review-meta-color, rgba(0, 0, 0, 0.65));
+}
+
+/* 详情正文（可滚动） */
+.detailBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+/* summary 框 */
+.summaryBox {
+  padding: 14px 16px;
+  background-color: var(--ai-review-summary-bg, rgba(22, 119, 255, 0.04));
+  border: 1px solid var(--ai-review-summary-border, rgba(22, 119, 255, 0.18));
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.summaryLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-primary, #1677ff);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.summaryText {
+  margin: 0 !important;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ai-review-text-color, rgba(0, 0, 0, 0.78));
+}
+
+/* issue 分组 */
+.issueGroup {
+  margin-top: 16px;
+}
+
+.issueGroupTitle {
+  margin: 0 0 10px !important;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ai-review-title-color, rgba(0, 0, 0, 0.88));
+}
+
+.issueCard {
+  padding: 12px 14px;
+  background-color: var(--ai-review-issue-bg, #ffffff);
+  border: 1px solid var(--ai-review-card-border, rgba(0, 0, 0, 0.06));
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.issueCard:hover {
+  border-color: rgba(22, 119, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.06);
+}
+
+.issueHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.issueTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ai-review-title-color, rgba(0, 0, 0, 0.88));
+}
+
+.issueDetail {
+  margin: 8px 0 0 !important;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ai-review-text-color, rgba(0, 0, 0, 0.65));
+}
+
+/* 调试用的原始响应面板 */
+.rawPanel {
+  margin: 0;
+  padding: 12px;
+  background-color: var(--ai-review-raw-bg, rgba(0, 0, 0, 0.04));
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ai-review-text-color, rgba(0, 0, 0, 0.78));
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* 详情面板内的空状态 */
+.emptyDetail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #722ed1, #1677ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  opacity: 0.85;
+}
+
+.emptyTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ai-review-title-color, rgba(0, 0, 0, 0.88));
+}
+
+.emptyDesc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ai-review-meta-color, rgba(0, 0, 0, 0.55));
+}
+
+/* 深色模式适配 */
+:global(.theme-dark) .reviewItem {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+:global(.theme-dark) .reviewItem:hover {
+  background-color: rgba(64, 150, 255, 0.08);
+  border-color: rgba(64, 150, 255, 0.45);
+  box-shadow: 0 2px 6px rgba(64, 150, 255, 0.18);
+}
+
+:global(.theme-dark) .reviewItemActive {
+  background-color: rgba(64, 150, 255, 0.22);
+  border-color: #4096ff;
+  box-shadow: 0 2px 6px rgba(64, 150, 255, 0.22);
+}
+
+:global(.theme-dark) .reviewItemActive:hover {
+  background-color: rgba(64, 150, 255, 0.32);
+}
+
+:global(.theme-dark) .detailPanel {
+  background-color: #161616;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+:global(.theme-dark) .summaryBox {
+  background-color: rgba(64, 150, 255, 0.08);
+  border-color: rgba(64, 150, 255, 0.25);
+}
+
+:global(.theme-dark) .summaryLabel {
+  color: #4096ff;
+}
+
+:global(.theme-dark) .issueCard {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global(.theme-dark) .issueCard:hover {
+  border-color: rgba(64, 150, 255, 0.45);
+  box-shadow: 0 2px 6px rgba(64, 150, 255, 0.18);
+}
+
+:global(.theme-dark) .rawPanel {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+:global(.theme-dark) .reviewTitle,
+:global(.theme-dark) .issueGroupTitle,
+:global(.theme-dark) .issueTitle,
+:global(.theme-dark) .emptyTitle {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+:global(.theme-dark) .reviewMeta,
+:global(.theme-dark) .detailHeaderTime,
+:global(.theme-dark) .emptyDesc {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+:global(.theme-dark) .summaryText,
+:global(.theme-dark) .issueDetail {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+:global(.theme-dark) .emptyIcon {
+  background: linear-gradient(135deg, #b37feb, #4096ff);
+  opacity: 1;
+}
