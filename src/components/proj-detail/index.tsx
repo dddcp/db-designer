@@ -54,6 +54,7 @@ import AiReviewTab from './ai-review-tab';
 import AiSqlTab from './ai-sql-tab';
 import type { GeneratedTable } from './ai-design-modal';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import styles from './proj-detail.module.css';
@@ -65,38 +66,50 @@ const { Option } = Select;
 
 import type { Project, TableDef, ColumnDef, BackendTableDef } from '../../types';
 
-// 拖拽手柄 Context：将 listeners 从行组件传递给手柄图标（必须在组件外部定义，避免每次渲染重新创建）
+// 拖拽手柄 Context：将拖拽激活引用与 listeners 从行组件传递给手柄按钮（必须在组件外部定义，避免每次渲染重新创建）
 const DragHandleContext = React.createContext<any>({});
 
 const DragHandle: React.FC = () => {
-  const { attributes, listeners } = React.useContext(DragHandleContext);
-  const { token } = theme.useToken();
+  const { setActivatorNodeRef, listeners } = React.useContext(DragHandleContext);
   return (
-    <span
-      {...attributes}
+    <Button
+      type="text"
+      size="small"
+      icon={<HolderOutlined />}
+      style={{ cursor: 'move' }}
+      ref={setActivatorNodeRef}
       {...listeners}
-      style={{ cursor: 'grab', display: 'inline-flex', alignItems: 'center', padding: '4px 8px' }}
-    >
-      <HolderOutlined style={{ fontSize: 16, color: token.colorTextSecondary }} />
-    </span>
+    />
   );
 };
 
 const DraggableRow: React.FC<any> = (props) => {
   const id = props['data-row-key'];
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id });
-  const { token } = theme.useToken();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
 
   const style = {
     ...props.style,
-    transform: CSS.Transform.toString(transform ? { ...transform, scaleY: 1 } : null),
+    transform: CSS.Translate.toString(transform),
     transition,
-    ...(isDragging ? { opacity: 0.4, background: token.colorPrimaryBg } : {}),
+    ...(isDragging ? { position: 'relative', zIndex: 9999 } : {}),
   } as React.CSSProperties;
 
+  const contextValue = React.useMemo(
+    () => ({ setActivatorNodeRef, listeners }),
+    [setActivatorNodeRef, listeners],
+  );
+
   return (
-    <DragHandleContext.Provider value={{ attributes, listeners }}>
-      <tr ref={setNodeRef} style={style} {...props} />
+    <DragHandleContext.Provider value={contextValue}>
+      <tr {...props} ref={setNodeRef} style={style} {...attributes} />
     </DragHandleContext.Provider>
   );
 };
@@ -1241,6 +1254,7 @@ const ProjectDetail: React.FC = () => {
                             </div>
                             <DndContext
                               sensors={sensors}
+                              modifiers={[restrictToVerticalAxis]}
                               onDragEnd={handleDragEnd}
                             >
                               <SortableContext
