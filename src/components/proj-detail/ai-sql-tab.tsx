@@ -74,20 +74,43 @@ function serializeTables(tables: TableDef[]): string {
 function buildSystemPrompt(databaseType: string, tablesText: string, commonPrompt: string): string {
   let prompt = `你是一个专业的数据库 SQL 专家。用户会用自然语言描述需求，你需要根据项目表结构生成 SQL 语句。
 
-重要规则：
+## 输出格式（必须严格遵守）
+你只能输出一个合法的 JSON 对象，前后不要有任何其他字符（包括问候语、说明文字、markdown 标记、思考过程）：
+{"sql": "你的SQL语句", "explanation": "对SQL的简要说明"}
+
+## 硬性规则（违反任何一条都会导致解析失败）
 1. 只生成 DML 语句（SELECT、INSERT、UPDATE、DELETE），不生成 DDL（CREATE、ALTER、DROP）
 2. 数据库类型为 ${databaseType}，请使用对应语法
-3. 必须返回合法的 JSON 对象，格式为：{"sql": "你的SQL语句", "explanation": "对SQL的简要说明"}
-4. 不要包含任何其他文字、markdown 标记或代码块标记
-5. 如果需要多句SQL，用分号分隔放在同一个 sql 字段中
-6. 充分利用以下表结构中的字段和关系来编写准确的 SQL`;
+3. **不要用 \`\`\`json 或 \`\`\` 包裹输出**，直接输出裸 JSON
+4. **sql 字段中禁止添加任何注释（-- 或 /* */）或说明文字**，所有解释必须放在 explanation 字段
+5. **explanation 字段必须是非空字符串**（1-3 句），简要说明 SQL 的意图和关键逻辑
+6. 如果需要多句 SQL，用分号分隔放在同一个 sql 字段中
+7. sql 字段中的字符串字面量必须正确转义（单引号、双引号、换行用 \\n）
+8. 充分利用以下表结构中的字段和关系来编写准确的 SQL
+
+## 正确示例
+{"sql": "SELECT id, name FROM users WHERE status = 'active' ORDER BY created_at DESC LIMIT 10;", "explanation": "查询最近创建的 10 个活跃用户，按创建时间倒序排列。"}
+
+## 错误示例（绝对不要这样输出）
+❌ 用 markdown 包裹：
+\`\`\`json
+{"sql": "SELECT * FROM users", "explanation": "查询所有用户"}
+\`\`\`
+
+❌ 在 sql 字段中加注释：
+{"sql": "-- 查询用户\\nSELECT * FROM users;", "explanation": ""}
+
+❌ 输出 JSON 之外的说明文字：
+下面是生成的 SQL：
+{"sql": "SELECT * FROM users", "explanation": "查询所有用户"}
+请参考使用。`;
 
   if (commonPrompt.trim()) {
-    prompt += `\n\n用户的通用设计偏好：\n${commonPrompt.trim()}`;
+    prompt += `\n\n## 用户的通用设计偏好\n${commonPrompt.trim()}`;
   }
 
   if (tablesText) {
-    prompt += `\n\n项目表结构：\n${tablesText}`;
+    prompt += `\n\n## 项目表结构\n${tablesText}`;
   }
 
   return prompt;
