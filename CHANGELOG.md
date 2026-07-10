@@ -4,6 +4,14 @@
 
 ---
 
+## [0.6.0] - 2026-07-10
+
+### 优化
+
+- 表结构编辑页字段拖拽排序改用 Ant Design 官方 dnd-kit 方案，提升拖拽手感：拖动时使用 `CSS.Translate` 平移替代原先的 `CSS.Transform`（含 `scaleY` hack），避免行被拉伸变形；被拖动的行改为 `position: relative` + `zIndex: 9999` 浮于上层跟随光标，替代原先 `opacity: 0.4` 导致的发虚下沉观感；拖拽手柄改用 `Button` + `setActivatorNodeRef`，并为 `DndContext` 添加 `restrictToVerticalAxis` 修饰符将拖动限制在垂直方向
+
+---
+
 ## [0.5.8] - 2026-07-10
 
 ### 新增
