@@ -445,7 +445,7 @@ const SyncTableDiff: React.FC<SyncTableDiffProps> = ({
     <>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Space size="large">
-          <Text>{t('sync_total_tables', { count: diffSummary.total })}：</Text>
+          <Text>{t('sync_total_tables', { count: diffSummary.total })}</Text>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <Text>{t('sync_same')} {diffSummary.same}</Text>
