@@ -37,15 +37,15 @@ body {
 }
 
 /* 暗色模式下的滚动条 */
-.ant-layout.ant-layout-dark ::-webkit-scrollbar-track {
+.theme-dark ::-webkit-scrollbar-track {
   background: #303030;
 }
 
-.ant-layout.ant-layout-dark ::-webkit-scrollbar-thumb {
+.theme-dark ::-webkit-scrollbar-thumb {
   background: #595959;
 }
 
-.ant-layout.ant-layout-dark ::-webkit-scrollbar-thumb:hover {
+.theme-dark ::-webkit-scrollbar-thumb:hover {
   background: #434343;
 }
 

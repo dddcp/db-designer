@@ -104,6 +104,7 @@ const Setting: React.FC = () => {
       </Header>
 
       <Content
+        className={isDarkMode ? 'theme-dark' : ''}
         style={{
           padding: '20px 24px',
           background: getThemedBg(isDarkMode, 'page'),

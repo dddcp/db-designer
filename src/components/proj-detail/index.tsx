@@ -890,17 +890,19 @@ const ProjectDetail: React.FC = () => {
       title: t('col_action'),
       key: 'action',
       render: (_text: string, record: ColumnDef) => (
-        <Space size="small">
-          <Tooltip title={t('col_delete_tooltip')}>
-            <Button
-              type="text"
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={() => handleDeleteColumn(record.id)}
-            />
-          </Tooltip>
-        </Space>
+        <span className={styles.rowAction}>
+          <Space size="small">
+            <Tooltip title={t('col_delete_tooltip')}>
+              <Button
+                type="text"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                onClick={() => handleDeleteColumn(record.id)}
+              />
+            </Tooltip>
+          </Space>
+        </span>
       ),
     },
   ];
@@ -1131,6 +1133,7 @@ const ProjectDetail: React.FC = () => {
                 })}
                 renderItem={(table) => (
                   <List.Item
+                    className={styles.tableListItem}
                     style={{
                       cursor: 'pointer',
                       background: selectedTable?.id === table.id ? token.colorPrimaryBg : 'transparent',
