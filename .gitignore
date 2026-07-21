@@ -26,3 +26,7 @@ src-tauri/target/*
 .minimax/*
 .trae/*
 .understand-anything/*
+
+# CodeGraph 本地索引与 MCP 配置
+.codegraph/
+.mcp.json
