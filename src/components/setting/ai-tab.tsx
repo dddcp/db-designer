@@ -11,6 +11,7 @@ import {
   message,
   Select,
   Space,
+  Switch,
   theme,
 } from 'antd';
 import {
@@ -51,6 +52,7 @@ const AiTab: React.FC = () => {
         ai_api_key: settings['ai_api_key'] || '',
         ai_model: settings['ai_model'] || '',
         ai_design_common_prompt: settings['ai_design_common_prompt'] || '',
+        ai_enable_thinking: settings['ai_enable_thinking'] !== 'false',
       });
     } catch (error) {
       console.error(t('ai_config_load_fail'), error);
@@ -130,6 +132,7 @@ const AiTab: React.FC = () => {
       await invoke('save_local_setting', { key: 'ai_api_key', value: values.ai_api_key });
       await invoke('save_local_setting', { key: 'ai_model', value: values.ai_model });
       await invoke('save_local_setting', { key: 'ai_design_common_prompt', value: values.ai_design_common_prompt || '' });
+      await invoke('save_local_setting', { key: 'ai_enable_thinking', value: String(values.ai_enable_thinking ?? true) });
       message.success(t('ai_save_success'));
     } catch (error) {
       console.error(t('ai_save_fail'), error);
@@ -241,6 +244,15 @@ const AiTab: React.FC = () => {
                 (option?.value as string).toLowerCase().includes(input.toLowerCase())
               }
             />
+          </Form.Item>
+
+          <Form.Item
+            name="ai_enable_thinking"
+            label={t('ai_enable_thinking_label')}
+            help={t('ai_enable_thinking_desc')}
+            valuePropName="checked"
+          >
+            <Switch />
           </Form.Item>
         </Card>
 

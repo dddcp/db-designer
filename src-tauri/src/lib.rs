@@ -92,6 +92,7 @@ pub fn run() {
             ai_sql::save_ai_sql_conversation,
             ai_sql::delete_ai_sql_conversation,
             ai::ai_chat,
+            ai::ai_chat_stream,
             ai::ai_fetch_models,
             ai::ai_test_connection,
             window::apply_window_theme

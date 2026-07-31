@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 
 /// AI 接口超时（秒）。
@@ -12,6 +13,16 @@ const REQUEST_TIMEOUT_SECS: u64 = 120;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+}
+
+/// 流式聊天推送给前端的事件块。
+/// 序列化为 `{"type":"delta"|"done"}`（delta 带 content）。
+/// 错误统一以命令 `Result::Err` 返回（与 `ai_chat` 一致），不另设 error chunk。
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum StreamChunk {
+    Delta { content: String },
+    Done,
 }
 
 /// 把 baseUrl 推导为 chat completions 端点 URL
@@ -76,13 +87,15 @@ fn apply_auth(
     }
 }
 
-/// AI 聊天接口：POST 推导出的 chat URL，返回助手 content 字符串
+/// AI 聊天接口：POST 推导出的 chat URL，返回助手 content 字符串。
+/// enable_thinking 为 Some(false) 时附加关闭思考字段（适配 qwen3 等），其余保持模型默认。
 #[tauri::command]
 pub async fn ai_chat(
     base_url: String,
     api_key: String,
     model: String,
     messages: Vec<ChatMessage>,
+    enable_thinking: Option<bool>,
 ) -> Result<String, String> {
     let url = derive_chat_url(&base_url);
 
@@ -91,11 +104,14 @@ pub async fn ai_chat(
         .build()
         .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
 
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "model": model,
         "messages": messages,
         "temperature": 0.7,
     });
+    if enable_thinking == Some(false) {
+        payload["enable_thinking"] = serde_json::Value::Bool(false);
+    }
 
     let req = apply_auth(reqwest::Method::POST, client.post(&url), &api_key).json(&payload);
 
@@ -174,6 +190,100 @@ pub async fn ai_fetch_models(base_url: String, api_key: String) -> Result<Vec<St
 #[tauri::command]
 pub async fn ai_test_connection(base_url: String, api_key: String) -> Result<Vec<String>, String> {
     ai_fetch_models(base_url, api_key).await
+}
+
+/// AI 流式聊天接口：POST 推导出的 chat URL，把文本增量经 Channel 逐块推送给前端，
+/// 直到生成结束。仅限制建连阶段超时，传输阶段不限时——只要片段持续到达就继续，
+/// 避免重推理任务被固定整体超时或中间网关"长时间无响应"切断。
+#[tauri::command]
+pub async fn ai_chat_stream(
+    base_url: String,
+    api_key: String,
+    model: String,
+    messages: Vec<ChatMessage>,
+    enable_thinking: Option<bool>,
+    on_event: tauri::ipc::Channel<StreamChunk>,
+) -> Result<(), String> {
+    let url = derive_chat_url(&base_url);
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
+
+    let mut payload = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7,
+        "stream": true,
+    });
+    if enable_thinking == Some(false) {
+        payload["enable_thinking"] = serde_json::Value::Bool(false);
+    }
+
+    let req = apply_auth(reqwest::Method::POST, client.post(&url), &api_key).json(&payload);
+
+    let response = req.send().await.map_err(classify_reqwest_error)?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.map_err(classify_reqwest_error)?;
+        return Err(status_message(status, &body));
+    }
+
+    // 逐块读取 SSE 流，按行解析 data: 增量
+    let mut buf = String::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(classify_reqwest_error)?;
+        let text = std::str::from_utf8(chunk.as_ref())
+            .map_err(|e| format!("流响应解码失败: {}", e))?;
+        buf.push_str(text);
+
+        // SSE 以换行分隔事件；逐行处理已完整的行，保留不完整末行在 buf
+        while let Some(idx) = buf.find('\n') {
+            let line: String = buf[..idx].trim_end_matches('\r').trim().to_string();
+            buf.drain(..=idx);
+
+            if line.is_empty() || line.starts_with(':') {
+                // 空行或注释心跳，跳过
+                continue;
+            }
+            let Some(data) = line.strip_prefix("data:") else {
+                // event: / id: / retry: 等非 data 行忽略
+                continue;
+            };
+            let data = data.trim();
+            if data == "[DONE]" {
+                let _ = on_event.send(StreamChunk::Done);
+                return Ok(());
+            }
+            // 解析 JSON，提取 choices[0].delta.content；解析失败则跳过该块继续（容错）
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                if let Some(content) = json
+                    .get("choices")
+                    .and_then(|c| c.get(0))
+                    .and_then(|c| c.get("delta"))
+                    .and_then(|d| d.get("content"))
+                    .and_then(|v| v.as_str())
+                {
+                    if !content.is_empty()
+                        && on_event
+                            .send(StreamChunk::Delta {
+                                content: content.to_string(),
+                            })
+                            .is_err()
+                    {
+                        // 前端已关闭通道（如关闭 Modal），视为取消
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    // 流自然结束（未收到 [DONE]）
+    let _ = on_event.send(StreamChunk::Done);
+    Ok(())
 }
 
 #[cfg(test)]
