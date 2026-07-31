@@ -4,6 +4,26 @@
 
 ---
 
+## [0.6.1] - 2026-07-31
+
+### 新增
+
+- AI 流式输出能力（OpenSpec `2026-07-31-add-ai-streaming`）：后端新增流式 Tauri 命令 `ai_chat_stream`，以 `stream: true` 发起请求并解析 SSE 增量片段，通过 Tauri v2 `Channel` 向前端逐块推送文本，避免重推理任务（如 AI 评审）因长时间无响应被后端超时或中间网关切断；`ai.rs` 同步扩展 `ai_chat` 请求体构造逻辑
+- AI 评审改用流式获取结果：在生成过程中实时累积展示 AI 输出与思考状态，解决 qwen3 等默认开启思考链（thinking）的模型在重任务下「转很久后必然失败」的问题（实测 6 张表即失败、50+ 张表必失败）
+- AI 思考链开关：新增本地配置键 `ai_enable_thinking`，AI 设置页提供开关，控制是否在请求体附加 `enable_thinking` 字段；`ai_chat` 与 `ai_chat_stream` 均支持，默认保持现状（开启思考）
+- AI SQL 改用流式输出（OpenSpec `2026-07-31-stream-ai-sql`）：`callAiSqlApi` 由同步 `ai_chat` 改用 `ai_chat_stream` + Tauri `Channel` 逐块累积 AI 原始输出；assistant 气泡顶部新增可折叠的「AI 原文输出」区域，流式期间逐字填充原文、完成后自动折叠并在下方高亮提取出的 SQL；`AiSqlMessage` 新增 `rawText` 字段持久化原文，历史对话可展开回看；流式增量仅局部更新当前气泡，避免消息列表高频重渲染，切换对话 / 卸载时取消进行中的流式
+
+### 优化
+
+- 暗色模式下的滚动条样式优化
+- 表结构编辑页行操作添加淡入效果
+
+### 修复
+
+- 修复 AI SQL 解析的 bug
+
+---
+
 ## [0.6.0] - 2026-07-10
 
 ### 优化
