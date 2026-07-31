@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Channel } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import {
   Drawer,
@@ -15,6 +16,9 @@ import {
 } from 'antd';
 import { RobotOutlined } from '@ant-design/icons';
 import { callAiApi } from './ai-design-modal';
+import type { StreamChunk } from './ai-sql-tab';
+import AiStreamingText from './ai-streaming-text';
+import type { AiStreamingStatus } from './ai-streaming-text';
 import type { TableDef, IndexDef } from '../../types';
 
 const { TextArea } = Input;
@@ -154,9 +158,39 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [recommendations, setRecommendations] = useState<RecommendedIndex[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingStatus, setStreamingStatus] = useState<AiStreamingStatus>('streaming');
+  // 进行中的流式 Channel（用于关闭 / 卸载时注销回调触发后端取消）
+  const channelRef = useRef<Channel<StreamChunk> | null>(null);
+  // 当前流式是否已被取消（取消后丢弃本次未完成结果）
+  const cancelledRef = useRef(false);
+
+  /** 注销进行中流式的 Channel 回调：前端回调被注销后后端 on_event.send 失败即停止读取 */
+  const cancelStream = useCallback(() => {
+    cancelledRef.current = true;
+    const ch = channelRef.current;
+    if (ch) {
+      try {
+        (ch as unknown as { cleanupCallback?: () => void }).cleanupCallback?.();
+      } catch {
+        // 忽略：取消是尽力而为，无更官方 API
+      }
+      channelRef.current = null;
+    }
+  }, []);
+
+  // 组件卸载时取消进行中的流式
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [cancelStream]);
 
   const handleRecommend = async () => {
     setLoading(true);
+    cancelledRef.current = false;
+    setStreamingText('');
+    setStreamingStatus('streaming');
     try {
       const systemPrompt = buildSystemPrompt(
         selectedTable,
@@ -167,7 +201,25 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
         rwRatio,
         painPoint,
       );
-      const jsonStr = await callAiApi(systemPrompt, '请根据以上信息推荐索引');
+      const jsonStr = await callAiApi(
+        systemPrompt,
+        '请根据以上信息推荐索引',
+        (acc) => {
+          if (cancelledRef.current) return;
+          setStreamingText(acc);
+        },
+        (channel) => {
+          channelRef.current = channel;
+        },
+      );
+
+      // 流式中途取消：丢弃本次未完成结果，不解析、不回填
+      if (cancelledRef.current) {
+        return;
+      }
+
+      // 流式结束：自动折叠展示区，再解析填充
+      setStreamingStatus('done');
       const parsed = JSON.parse(jsonStr);
 
       if (!Array.isArray(parsed)) {
@@ -186,8 +238,12 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
       message.success(t('ai_recommend_success', { count: recs.length }));
     } catch (error: any) {
       console.error('AI推荐索引失败:', error);
-      message.error(t('ai_recommend_fail') + ': ' + (error.message || error));
+      if (!cancelledRef.current) {
+        setStreamingStatus('error');
+        message.error(t('ai_recommend_fail') + ': ' + (error.message || error));
+      }
     } finally {
+      channelRef.current = null;
       setLoading(false);
     }
   };
@@ -217,12 +273,16 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
   };
 
   const handleClose = () => {
+    // 关闭弹窗时自动取消进行中的流式生成
+    cancelStream();
     setSql('');
     setRowCount('');
     setRwRatio('');
     setPainPoint('');
     setRecommendations([]);
     setSelectedKeys([]);
+    setStreamingText('');
+    setStreamingStatus('streaming');
     onCancel();
   };
 
@@ -304,6 +364,14 @@ const AiRecommendIndexModal: React.FC<AiRecommendIndexModalProps> = ({
         >
           {loading ? t('ai_recommend_analyzing') : t('ai_recommend_btn')}
         </Button>
+
+        {loading && (
+          <AiStreamingText
+            text={streamingText}
+            status={streamingStatus}
+            onCancel={cancelStream}
+          />
+        )}
 
         {recommendations.length > 0 && (
           <Collapse

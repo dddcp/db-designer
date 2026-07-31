@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 import type { DatabaseTypeOption, TableDef, IndexDef } from '../../types';
+import type { StreamChunk } from './ai-sql-tab';
+import AiStreamingText from './ai-streaming-text';
+import type { AiStreamingStatus } from './ai-streaming-text';
 import {
   Drawer,
   Input,
@@ -13,7 +16,6 @@ import {
   Space,
   Tag,
   message,
-  Spin,
   Typography,
   Popconfirm,
   Select,
@@ -49,9 +51,18 @@ export interface GeneratedTable {
 }
 
 /**
- * 封装 AI API 调用：读取 settings → 构建请求 → 发送 fetch → 提取 content → 剥离 thinking 标签 → 剥离 markdown 代码块 → 返回纯 JSON 字符串
+ * 封装 AI API 调用：读取 settings → 经 ai_chat_stream 流式累积原文 → 剥离 thinking 标签 → 剥离 markdown 代码块 → 返回纯 JSON 字符串
+ *
+ * 与 callAiSqlApi 同构：经 Channel 逐块累积原文，结束后跑既有清洗逻辑，返回清洗后 JSON 串（下游解析不变）。
+ * onDelta 在每个增量到达时回调当前累积全文（用于驱动流式展示）；onChannel 在 Channel 创建后回调，供调用方在关闭 / 卸载时注销以触发后端取消。
+ * 两个回调均可选，不传时等价于"流式但不展示、不暴露取消"，保证调用方平滑升级。
  */
-export async function callAiApi(systemPrompt: string, userPrompt: string): Promise<string> {
+export async function callAiApi(
+  systemPrompt: string,
+  userPrompt: string,
+  onDelta?: (acc: string) => void,
+  onChannel?: (channel: Channel<StreamChunk>) => void,
+): Promise<string> {
   const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
   const baseUrl = allSettings['ai_base_url'];
   const apiKey = allSettings['ai_api_key'];
@@ -61,7 +72,18 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
   }
 
-  const content = await invoke<string>('ai_chat', {
+  // 经 Channel 逐块累积原文
+  const channel = new Channel<StreamChunk>();
+  onChannel?.(channel);
+  let acc = '';
+  channel.onmessage = (msg) => {
+    if (msg.type === 'delta') {
+      acc += msg.content;
+      onDelta?.(acc);
+    }
+  };
+
+  await invoke('ai_chat_stream', {
     baseUrl,
     apiKey,
     model,
@@ -69,9 +91,10 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
+    onEvent: channel,
   });
 
-  let jsonStr = content.trim();
+  let jsonStr = acc.trim();
   // 先剥离 <think>/<thinking> 标签：思考链里常含 ```代码块```，必须先整体移除，
   // 否则下面的代码块剥离会命中思考链内的代码块、把真正的 JSON 丢弃
   jsonStr = jsonStr.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
@@ -203,6 +226,34 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
   const [databaseType, setDatabaseType] = useState<string>('mysql');
   const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
   const [tableContexts, setTableContexts] = useState<TableContext[]>([]);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingStatus, setStreamingStatus] = useState<AiStreamingStatus>('streaming');
+  // 进行中的流式 Channel（用于关闭 / 卸载时注销回调触发后端取消）
+  const channelRef = useRef<Channel<StreamChunk> | null>(null);
+  // 当前流式是否已被取消（取消后丢弃本次未完成结果）
+  const cancelledRef = useRef(false);
+
+  /** 注销进行中流式的 Channel 回调：前端回调被注销后后端 on_event.send 失败即停止读取 */
+  const cancelStream = useCallback(() => {
+    cancelledRef.current = true;
+    const ch = channelRef.current;
+    if (ch) {
+      // cleanupCallback 为 Channel 的私有方法，注销前端回调 id；可能随 Tauri 版本变化，做存在性判断与 try/catch
+      try {
+        (ch as unknown as { cleanupCallback?: () => void }).cleanupCallback?.();
+      } catch {
+        // 忽略：取消是尽力而为，无更官方 API
+      }
+      channelRef.current = null;
+    }
+  }, []);
+
+  // 组件卸载时取消进行中的流式
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [cancelStream]);
 
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
@@ -266,13 +317,34 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
     }
 
     setLoading(true);
+    cancelledRef.current = false;
+    setStreamingText('');
+    setStreamingStatus('streaming');
     try {
       const typeNames = dataTypes.map(dt => dt.value);
       const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
       const commonPrompt = allSettings['ai_design_common_prompt'] || '';
       const existingContext = buildExistingContext(tableContexts);
       const systemPrompt = buildSystemPrompt(databaseType, typeNames, existingContext, commonPrompt);
-      const jsonStr = await callAiApi(systemPrompt, prompt);
+      const jsonStr = await callAiApi(
+        systemPrompt,
+        prompt,
+        (acc) => {
+          if (cancelledRef.current) return;
+          setStreamingText(acc);
+        },
+        (channel) => {
+          channelRef.current = channel;
+        },
+      );
+
+      // 流式中途取消：丢弃本次未完成结果，不解析、不回填
+      if (cancelledRef.current) {
+        return;
+      }
+
+      // 流式结束：自动折叠展示区，再解析填充
+      setStreamingStatus('done');
       const parsed = JSON.parse(jsonStr);
 
       if (!Array.isArray(parsed)) {
@@ -304,8 +376,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
       message.success(t('ai_design_success', { count: normalizedTables.length }));
     } catch (error: any) {
       console.error('AI生成失败:', error);
-      message.error(t('ai_design_fail') + ': ' + (error.message || error));
+      if (!cancelledRef.current) {
+        setStreamingStatus('error');
+        message.error(t('ai_design_fail') + ': ' + (error.message || error));
+      }
     } finally {
+      channelRef.current = null;
       setLoading(false);
     }
   };
@@ -345,8 +421,12 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
   };
 
   const handleClose = () => {
+    // 关闭弹窗时自动取消进行中的流式生成
+    cancelStream();
     setPrompt('');
     setGeneratedTables([]);
+    setStreamingText('');
+    setStreamingStatus('streaming');
     onCancel();
   };
 
@@ -475,9 +555,11 @@ const AiDesignModal: React.FC<AiDesignModalProps> = ({ open, onCancel, onTablesG
         </Button>
 
         {loading && (
-          <div style={{ textAlign: 'center', padding: 20 }}>
-            <Spin tip={t('ai_design_tip')} />
-          </div>
+          <AiStreamingText
+            text={streamingText}
+            status={streamingStatus}
+            onCancel={cancelStream}
+          />
         )}
 
         {generatedTables.length > 0 && (

@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Channel } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { getAllDataTypes } from '../../data-types';
 import type { DataTypeOption } from '../../data-types';
 import type { TableDef } from '../../types';
 import { callAiApi } from './ai-design-modal';
 import type { GeneratedColumn, GeneratedTable } from './ai-design-modal';
+import type { StreamChunk } from './ai-sql-tab';
+import AiStreamingText from './ai-streaming-text';
+import type { AiStreamingStatus } from './ai-streaming-text';
 import {
   Drawer,
   Input,
@@ -14,7 +18,6 @@ import {
   Space,
   Tag,
   message,
-  Spin,
   Typography,
   Select,
   Switch
@@ -84,6 +87,33 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
   const [loading, setLoading] = useState(false);
   const [generatedTable, setGeneratedTable] = useState<GeneratedTable | null>(null);
   const [dataTypes, setDataTypes] = useState<DataTypeOption[]>([]);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingStatus, setStreamingStatus] = useState<AiStreamingStatus>('streaming');
+  // 进行中的流式 Channel（用于关闭 / 卸载时注销回调触发后端取消）
+  const channelRef = useRef<Channel<StreamChunk> | null>(null);
+  // 当前流式是否已被取消（取消后丢弃本次未完成结果）
+  const cancelledRef = useRef(false);
+
+  /** 注销进行中流式的 Channel 回调：前端回调被注销后后端 on_event.send 失败即停止读取 */
+  const cancelStream = useCallback(() => {
+    cancelledRef.current = true;
+    const ch = channelRef.current;
+    if (ch) {
+      try {
+        (ch as unknown as { cleanupCallback?: () => void }).cleanupCallback?.();
+      } catch {
+        // 忽略：取消是尽力而为，无更官方 API
+      }
+      channelRef.current = null;
+    }
+  }, []);
+
+  // 组件卸载时取消进行中的流式
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [cancelStream]);
 
   useEffect(() => {
     getAllDataTypes().then(setDataTypes);
@@ -96,10 +126,31 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
     }
 
     setLoading(true);
+    cancelledRef.current = false;
+    setStreamingText('');
+    setStreamingStatus('streaming');
     try {
       const typeNames = dataTypes.map(t => t.value);
       const systemPrompt = buildModifySystemPrompt(selectedTable, typeNames);
-      const jsonStr = await callAiApi(systemPrompt, prompt);
+      const jsonStr = await callAiApi(
+        systemPrompt,
+        prompt,
+        (acc) => {
+          if (cancelledRef.current) return;
+          setStreamingText(acc);
+        },
+        (channel) => {
+          channelRef.current = channel;
+        },
+      );
+
+      // 流式中途取消：丢弃本次未完成结果，不解析、不回填
+      if (cancelledRef.current) {
+        return;
+      }
+
+      // 流式结束：自动折叠展示区，再解析填充
+      setStreamingStatus('done');
       const parsed = JSON.parse(jsonStr);
 
       // 兼容对象和数组（取第一个）
@@ -130,8 +181,12 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       message.success(t('ai_modify_success'));
     } catch (error: any) {
       console.error('AI生成失败:', error);
-      message.error(t('ai_modify_fail') + ': ' + (error.message || error));
+      if (!cancelledRef.current) {
+        setStreamingStatus('error');
+        message.error(t('ai_modify_fail') + ': ' + (error.message || error));
+      }
     } finally {
+      channelRef.current = null;
       setLoading(false);
     }
   };
@@ -166,8 +221,12 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
   };
 
   const handleClose = () => {
+    // 关闭弹窗时自动取消进行中的流式生成
+    cancelStream();
     setPrompt('');
     setGeneratedTable(null);
+    setStreamingText('');
+    setStreamingStatus('streaming');
     onCancel();
   };
 
@@ -304,9 +363,11 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
         </Button>
 
         {loading && (
-          <div style={{ textAlign: 'center', padding: 20 }}>
-            <Spin tip={t('ai_modify_tip')} />
-          </div>
+          <AiStreamingText
+            text={streamingText}
+            status={streamingStatus}
+            onCancel={cancelStream}
+          />
         )}
 
         {generatedTable && (

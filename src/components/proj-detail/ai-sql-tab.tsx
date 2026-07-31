@@ -118,7 +118,7 @@ function buildSystemPrompt(databaseType: string, tablesText: string, commonPromp
 }
 
 /** 后端 ai_chat_stream 推送的事件块（与 src-tauri/src/ai.rs::StreamChunk 对应） */
-type StreamChunk =
+export type StreamChunk =
   | { type: 'delta'; content: string }
   | { type: 'done' };
 
