@@ -561,8 +561,6 @@
   "ai_provider_label": "Provider",
   "ai_get_api_key": "Get API Key",
   "ai_test_connection": "Test Connection",
-  "ai_enable_thinking_label": "Enable model thinking",
-  "ai_enable_thinking_desc": "When off, some models (e.g. qwen3) skip the reasoning chain: faster but shallower. Try disabling if review hangs or times out",
   "ai_test_success": "Connection successful",
   "ai_test_success_with_count": "Connected, {{count}} models fetched",
   "ai_test_fail": "Test connection failed",

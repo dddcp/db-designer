@@ -562,8 +562,6 @@
   "ai_provider_label": "供应商",
   "ai_get_api_key": "获取 API Key",
   "ai_test_connection": "测试连接",
-  "ai_enable_thinking_label": "启用模型思考",
-  "ai_enable_thinking_desc": "关闭后部分模型（如 qwen3）不再进行思考链推理，响应更快但深度下降；评审卡顿或超时可尝试关闭",
   "ai_test_success": "连接成功",
   "ai_test_success_with_count": "连接成功，共获取到 {{count}} 个模型",
   "ai_test_fail": "测试连接失败",

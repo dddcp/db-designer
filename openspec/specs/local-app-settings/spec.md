@@ -1,10 +1,10 @@
 ## MODIFIED Requirements
 
 ### Requirement: AI 与 Git 本地配置保存到 JSON 文件
-系统 SHALL 将 AI 配置和 Git 配置保存到本地 `settings.json` 文件，而不是 SQLite 的 `t_setting` 表；相关命令 MUST 通过设置服务与本地设置存储实现访问该文件，而不是在命令层直接读写文件。Git 配置字段 MUST 支持远程配置模式、平台、服务地址、仓库路径、自定义远程地址、认证方式、用户名与访问令牌等本地字段，并继续兼容历史保存的 `git_platform`、`git_token` 与 `git_repository`。AI 配置字段 MUST 支持 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model`、`ai_design_common_prompt` 与 `ai_enable_thinking` 等本地字段，其中 `ai_provider` 用于记录用户在设置页选择的供应商 id；`ai_enable_thinking` 缺省时按开启思考处理。
+系统 SHALL 将 AI 配置和 Git 配置保存到本地 `settings.json` 文件，而不是 SQLite 的 `t_setting` 表；相关命令 MUST 通过设置服务与本地设置存储实现访问该文件，而不是在命令层直接读写文件。Git 配置字段 MUST 支持远程配置模式、平台、服务地址、仓库路径、自定义远程地址、认证方式、用户名与访问令牌等本地字段，并继续兼容历史保存的 `git_platform`、`git_token` 与 `git_repository`。AI 配置字段 MUST 支持 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model` 与 `ai_design_common_prompt` 等本地字段，其中 `ai_provider` 用于记录用户在设置页选择的供应商 id；模型思考始终按模型默认（开启）处理，不再提供关闭开关。
 
 #### Scenario: 保存 AI 配置
-- **WHEN** 用户在设置页保存 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model`、`ai_design_common_prompt` 或 `ai_enable_thinking`
+- **WHEN** 用户在设置页保存 `ai_provider`、`ai_base_url`、`ai_api_key`、`ai_model` 或 `ai_design_common_prompt`
 - **THEN** 系统 SHALL 将这些值写入本地 `settings.json` 文件
 
 #### Scenario: 保存扩展后的 Git 配置

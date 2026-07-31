@@ -177,7 +177,6 @@ async function callAiSqlApi(
   const baseUrl = allSettings['ai_base_url'];
   const apiKey = allSettings['ai_api_key'];
   const model = allSettings['ai_model'];
-  const enableThinking = allSettings['ai_enable_thinking'] !== 'false';
 
   if (!baseUrl || !apiKey || !model) {
     throw new Error('请先在设置页面配置AI参数（API地址、API Key、模型名称）');
@@ -203,7 +202,6 @@ async function callAiSqlApi(
     baseUrl,
     apiKey,
     model,
-    enableThinking,
     messages: apiMessages,
     onEvent: channel,
   });

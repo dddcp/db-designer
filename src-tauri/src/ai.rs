@@ -88,14 +88,13 @@ fn apply_auth(
 }
 
 /// AI 聊天接口：POST 推导出的 chat URL，返回助手 content 字符串。
-/// enable_thinking 为 Some(false) 时附加关闭思考字段（适配 qwen3 等），其余保持模型默认。
+/// 始终保持模型默认（思考开启），不再附加关闭思考字段。
 #[tauri::command]
 pub async fn ai_chat(
     base_url: String,
     api_key: String,
     model: String,
     messages: Vec<ChatMessage>,
-    enable_thinking: Option<bool>,
 ) -> Result<String, String> {
     let url = derive_chat_url(&base_url);
 
@@ -104,14 +103,11 @@ pub async fn ai_chat(
         .build()
         .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
 
-    let mut payload = serde_json::json!({
+    let payload = serde_json::json!({
         "model": model,
         "messages": messages,
         "temperature": 0.7,
     });
-    if enable_thinking == Some(false) {
-        payload["enable_thinking"] = serde_json::Value::Bool(false);
-    }
 
     let req = apply_auth(reqwest::Method::POST, client.post(&url), &api_key).json(&payload);
 
@@ -201,7 +197,6 @@ pub async fn ai_chat_stream(
     api_key: String,
     model: String,
     messages: Vec<ChatMessage>,
-    enable_thinking: Option<bool>,
     on_event: tauri::ipc::Channel<StreamChunk>,
 ) -> Result<(), String> {
     let url = derive_chat_url(&base_url);
@@ -211,15 +206,12 @@ pub async fn ai_chat_stream(
         .build()
         .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
 
-    let mut payload = serde_json::json!({
+    let payload = serde_json::json!({
         "model": model,
         "messages": messages,
         "temperature": 0.7,
         "stream": true,
     });
-    if enable_thinking == Some(false) {
-        payload["enable_thinking"] = serde_json::Value::Bool(false);
-    }
 
     let req = apply_auth(reqwest::Method::POST, client.post(&url), &api_key).json(&payload);
 
