@@ -1307,7 +1307,7 @@ const ProjectDetail: React.FC = () => {
                             {t('tab_index')}
                           </span>
                         ),
-                        children: <IndexTab selectedTable={selectedTable} tables={tables} />
+                        children: <IndexTab selectedTable={selectedTable} tables={tables} isActive={activeTab === 'index'} />
                       },
                       {
                         key: 'initData',

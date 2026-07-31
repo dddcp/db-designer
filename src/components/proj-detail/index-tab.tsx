@@ -33,6 +33,8 @@ import type { IndexDef, TableDef } from '../../types';
 interface IndexTabProps {
   selectedTable: TableDef | null;
   tables: TableDef[];
+  /** 当前 tab 是否激活：每次切到本 tab 都强制重新拉取索引，确保展示最新 DB 数据 */
+  isActive?: boolean;
 }
 
 interface BackendIndexDef {
@@ -44,7 +46,7 @@ interface BackendIndexDef {
   fields: Array<{ column_id: string; sort_order: number }>;
 }
 
-const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
+const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables, isActive }) => {
   const { t } = useTranslation();
   const [indexes, setIndexes] = useState<IndexDef[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -59,6 +61,14 @@ const IndexTab: React.FC<IndexTabProps> = ({ selectedTable, tables }) => {
       setIndexes([]);
     }
   }, [selectedTable?.id]);
+
+  // 每次切到「索引」tab 时强制重新拉取，确保展示的是最新 DB 数据
+  // （表结构改动后，索引字段引用需要与最新列重新对齐）
+  useEffect(() => {
+    if (isActive && selectedTable) {
+      loadIndexes();
+    }
+  }, [isActive]);
 
   const loadIndexes = async () => {
     if (!selectedTable) return;
