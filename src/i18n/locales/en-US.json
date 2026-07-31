@@ -412,6 +412,7 @@
   "ai_modify_fail": "AI generation failed",
   "ai_modify_applied": "AI modification applied. Please review and click \"Save Structure\" to persist",
   "ai_modify_col_count": "{{count}} columns",
+  "ai_modify_damage_warning": "Warning: AI table modifications may cause irreversible damage to existing indexes and metadata. Review the result carefully before applying.",
 
   "ai_recommend_title": "AI Recommend Indexes - {{displayName}}({{name}})",
   "ai_recommend_create": "Create Selected Indexes ({{count}})",

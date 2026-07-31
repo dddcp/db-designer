@@ -20,7 +20,8 @@ import {
   message,
   Typography,
   Select,
-  Switch
+  Switch,
+  Alert
 } from 'antd';
 import {
   DeleteOutlined,
@@ -341,6 +342,12 @@ const AiModifyTableModal: React.FC<AiModifyTableModalProps> = ({ open, onCancel,
       }
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Alert
+          type="warning"
+          showIcon
+          banner
+          message={t('ai_modify_damage_warning')}
+        />
         <div>
           <Text strong>{t('ai_modify_requirement')}</Text>
           <TextArea

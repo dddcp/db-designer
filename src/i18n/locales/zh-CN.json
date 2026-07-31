@@ -413,6 +413,7 @@
   "ai_modify_fail": "AI生成失败",
   "ai_modify_applied": "AI修改方案已应用，请检查后点击\"保存表结构\"持久化",
   "ai_modify_col_count": "{{count}} 个字段",
+  "ai_modify_damage_warning": "注意：AI 修改表结构可能会对已有的索引和元数据造成不可逆的损坏，请仔细核对生成结果后再应用。",
 
   "ai_recommend_title": "AI 推荐索引 - {{displayName}}({{name}})",
   "ai_recommend_create": "创建选中索引 ({{count}})",
