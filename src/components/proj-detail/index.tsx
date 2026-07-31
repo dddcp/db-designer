@@ -698,20 +698,38 @@ const ProjectDetail: React.FC = () => {
   const handleAiTableModified = (aiTable: GeneratedTable) => {
     if (!selectedTable) return;
 
-    const updatedColumns = aiTable.columns.map((col, idx) => ({
-      id: Date.now().toString() + idx,
-      name: col.name,
-      displayName: col.displayName,
-      type: col.type,
-      length: col.length,
-      nullable: col.nullable,
-      primaryKey: col.primaryKey,
-      autoIncrement: col.autoIncrement,
-      defaultValue: col.defaultValue,
-      defaultNull: col.defaultNull ?? false,
-      comment: col.comment,
-      order: idx + 1,
-    }));
+    // 同名列沿用旧 id，仅给新增列生成新 id。
+    // 必须与后端 table_store::save_table_structure 的「按列名匹配沿用旧 id」策略保持一致：
+    // 否则前端列 id 会与 DB 列 id 脱节，索引加载时（index-tab.tsx loadIndexes）t_index_field.column_id
+    // → 列名 映射失败，索引字段会回退显示成 column_id 数字串。
+    const oldIdByName = new Map(selectedTable.columns.map(c => [c.name, c.id]));
+    const usedOldIds = new Set<string>();
+
+    const updatedColumns = aiTable.columns.map((col, idx) => {
+      // 同名列且该旧 id 尚未被复用 → 沿用旧 id；否则（新增列 / 同名重复）生成新 id
+      const oldId = oldIdByName.get(col.name);
+      let id: string;
+      if (oldId && !usedOldIds.has(oldId)) {
+        usedOldIds.add(oldId);
+        id = oldId;
+      } else {
+        id = Date.now().toString() + idx;
+      }
+      return {
+        id,
+        name: col.name,
+        displayName: col.displayName,
+        type: col.type,
+        length: col.length,
+        nullable: col.nullable,
+        primaryKey: col.primaryKey,
+        autoIncrement: col.autoIncrement,
+        defaultValue: col.defaultValue,
+        defaultNull: col.defaultNull ?? false,
+        comment: col.comment,
+        order: idx + 1,
+      };
+    });
 
     const updatedTable: TableDef = {
       ...selectedTable,
