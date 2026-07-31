@@ -247,6 +247,8 @@ export interface AiSqlMessage {
   content: string;
   sql?: string;
   explanation?: string;
+  /** AI 流式生成的原始输出文本（含 JSON 壳），随消息持久化以便历史回看 */
+  rawText?: string;
 }
 
 // AI SQL 对话记录（后端 snake_case）

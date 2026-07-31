@@ -49,7 +49,7 @@ export interface GeneratedTable {
 }
 
 /**
- * 封装 AI API 调用：读取 settings → 构建请求 → 发送 fetch → 提取 content → 剥离 markdown 代码块 → 返回纯 JSON 字符串
+ * 封装 AI API 调用：读取 settings → 构建请求 → 发送 fetch → 提取 content → 剥离 thinking 标签 → 剥离 markdown 代码块 → 返回纯 JSON 字符串
  */
 export async function callAiApi(systemPrompt: string, userPrompt: string): Promise<string> {
   const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
@@ -74,13 +74,14 @@ export async function callAiApi(systemPrompt: string, userPrompt: string): Promi
   });
 
   let jsonStr = content.trim();
-  // 剥离 markdown 代码块
+  // 先剥离 <think>/<thinking> 标签：思考链里常含 ```代码块```，必须先整体移除，
+  // 否则下面的代码块剥离会命中思考链内的代码块、把真正的 JSON 丢弃
+  jsonStr = jsonStr.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
+  // 再剥离 markdown 代码块
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (codeBlockMatch) {
     jsonStr = codeBlockMatch[1].trim();
   }
-  // 剥离 <think>/<thinking> 标签（如 模型的思考过程）
-  jsonStr = jsonStr.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
   // 如果仍不是 JSON 开头，尝试在文本中查找 JSON 数组或对象
   if (!jsonStr.startsWith('[') && !jsonStr.startsWith('{')) {
     const arrayStart = jsonStr.indexOf('[');

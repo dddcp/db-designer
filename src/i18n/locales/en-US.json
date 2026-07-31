@@ -466,6 +466,7 @@
   "ai_sql_copy": "Copy",
   "ai_sql_copy_success": "SQL copied to clipboard",
   "ai_sql_explanation": "Explanation",
+  "ai_sql_raw_output": "AI Raw Output",
   "ai_sql_fail": "AI generation failed",
   "ai_sql_config_required": "Please configure AI settings (API URL, API Key, Model) in Settings first",
   "ai_sql_save_fail": "Failed to save conversation",

@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import hljs from 'highlight.js/lib/core';
 import sql from 'highlight.js/lib/languages/sql';
 import { format as formatSql, SqlLanguage } from 'sql-formatter';
 import 'highlight.js/styles/atom-one-dark.css';
 import {
   Button,
+  Collapse,
   Empty,
   message,
   Popconfirm,
@@ -116,8 +117,62 @@ function buildSystemPrompt(databaseType: string, tablesText: string, commonPromp
   return prompt;
 }
 
-/** 独立的 AI API 调用函数，支持多轮 messages */
-async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; explanation: string }> {
+/** 后端 ai_chat_stream 推送的事件块（与 src-tauri/src/ai.rs::StreamChunk 对应） */
+type StreamChunk =
+  | { type: 'delta'; content: string }
+  | { type: 'done' };
+
+/** 对 AI 原始输出做容错解析：剥离 markdown 代码块与 thinking 标签后尝试解析 JSON，
+ *  解析失败时降级为将整段文本作为 explanation、sql 留空。 */
+function parseSqlResult(text: string): { sql: string; explanation: string } {
+  let cleaned = (text || '').trim();
+  // 先剥离 thinking 标签：思考链里常含 ```代码块```，必须先整体移除，
+  // 否则下面的代码块剥离会命中思考链内的代码块、把真正的 JSON 丢弃
+  cleaned = cleaned.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
+  // 再剥离 markdown 代码块（AI 用 ```json 包裹 JSON 的情况）
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  // 尝试解析 JSON
+  try {
+    const parsed = JSON.parse(cleaned);
+    return {
+      sql: parsed.sql || '',
+      explanation: parsed.explanation || '',
+    };
+  } catch {
+    // 解析失败，尝试在文本中查找 JSON 对象
+    const objStart = cleaned.indexOf('{');
+    const objEnd = cleaned.lastIndexOf('}');
+    if (objStart !== -1 && objEnd > objStart) {
+      try {
+        const parsed = JSON.parse(cleaned.slice(objStart, objEnd + 1));
+        return {
+          sql: parsed.sql || '',
+          explanation: parsed.explanation || '',
+        };
+      } catch {
+        // 最终降级
+      }
+    }
+    // 降级：整个文本作为 explanation
+    return { sql: '', explanation: cleaned };
+  }
+}
+
+/**
+ * 独立的流式 AI 调用函数，支持多轮 messages。
+ * 经 ai_chat_stream 逐块累积 AI 原始输出文本，生成结束后对累积原文执行容错解析。
+ * onDelta 在每个增量到达时回调当前累积全文（用于驱动流式气泡）；
+ * onChannel 在 Channel 创建后回调，供调用方在切换 / 卸载时注销以触发后端取消。
+ */
+async function callAiSqlApi(
+  messages: AiSqlMessage[],
+  onDelta: (acc: string) => void,
+  onChannel?: (channel: Channel<StreamChunk>) => void,
+): Promise<{ rawText: string; sql: string; explanation: string }> {
   const allSettings = await invoke<{ [key: string]: string }>('get_local_settings');
   const baseUrl = allSettings['ai_base_url'];
   const apiKey = allSettings['ai_api_key'];
@@ -133,48 +188,29 @@ async function callAiSqlApi(messages: AiSqlMessage[]): Promise<{ sql: string; ex
     content: m.content,
   }));
 
-  const content = await invoke<string>('ai_chat', {
+  // 经 Channel 逐块累积原文（保留 JSON 壳，不做字段提取）
+  const channel = new Channel<StreamChunk>();
+  onChannel?.(channel);
+  let acc = '';
+  channel.onmessage = (msg) => {
+    if (msg.type === 'delta') {
+      acc += msg.content;
+      onDelta(acc);
+    }
+  };
+
+  await invoke('ai_chat_stream', {
     baseUrl,
     apiKey,
     model,
     enableThinking,
     messages: apiMessages,
+    onEvent: channel,
   });
 
-  let text = content.trim();
-  // 剥离 markdown 代码块
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (codeBlockMatch) {
-    text = codeBlockMatch[1].trim();
-  }
-  // 剥离 thinking 标签
-  text = text.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim();
-
-  // 尝试解析 JSON
-  try {
-    const parsed = JSON.parse(text);
-    return {
-      sql: parsed.sql || '',
-      explanation: parsed.explanation || '',
-    };
-  } catch {
-    // 解析失败，尝试在文本中查找 JSON 对象
-    const objStart = text.indexOf('{');
-    const objEnd = text.lastIndexOf('}');
-    if (objStart !== -1 && objEnd > objStart) {
-      try {
-        const parsed = JSON.parse(text.slice(objStart, objEnd + 1));
-        return {
-          sql: parsed.sql || '',
-          explanation: parsed.explanation || '',
-        };
-      } catch {
-        // 最终降级
-      }
-    }
-    // 降级：整个文本作为 explanation
-    return { sql: '', explanation: text };
-  }
+  // 流式结束后对累积原文执行既有容错解析
+  const { sql, explanation } = parseSqlResult(acc);
+  return { rawText: acc, sql, explanation };
 }
 
 /** 把项目数据库类型映射为 sql-formatter 支持的语言 */
@@ -238,15 +274,33 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
   const [convLoading, setConvLoading] = useState(false);
   const [dbTypes, setDbTypes] = useState<DatabaseTypeOption[]>([]);
   const [newConvDbType, setNewConvDbType] = useState('mysql');
+  const [streamingRaw, setStreamingRaw] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // 进行中的流式 Channel（用于切换 / 卸载时注销回调触发后端取消）
+  const channelRef = useRef<Channel<StreamChunk> | null>(null);
+  // 当前流式是否已被取消（取消后丢弃占位消息、不落库）
+  const cancelledRef = useRef(false);
+
+  /** 注销进行中流式的 Channel 回调：前端回调被注销后后端 on_event.send 失败即停止读取 */
+  const cancelStream = useCallback(() => {
+    cancelledRef.current = true;
+    const ch = channelRef.current;
+    if (ch) {
+      // cleanupCallback 为 Channel 的私有方法，注销前端回调 id
+      (ch as unknown as { cleanupCallback: () => void }).cleanupCallback();
+      channelRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
   useEffect(() => {
+    // 切换项目时取消进行中的流式并重置选中和消息
+    cancelStream();
+    setStreamingRaw('');
     loadConversations();
-    // 切换项目时重置选中和消息
     setSelectedConv(null);
     setLocalMessages([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,6 +308,9 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
 
   // 选择对话时加载消息
   useEffect(() => {
+    // 切换对话时取消进行中的流式，丢弃未完成的占位消息
+    cancelStream();
+    setStreamingRaw('');
     if (selectedConv) {
       try {
         const parsed: AiSqlMessage[] = JSON.parse(selectedConv.messages);
@@ -264,12 +321,20 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
     } else {
       setLocalMessages([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConv?.id]);
 
-  // 消息变化时自动滚动到底部
+  // 组件卸载时取消进行中的流式
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [cancelStream]);
+
+  // 消息变化 / 流式增量时自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [localMessages, loading]);
+  }, [localMessages, loading, streamingRaw]);
 
   // 缓存美化+高亮结果（避免每次渲染重新计算）
   const highlightedSqlMap = useMemo(() => {
@@ -321,14 +386,25 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
   };
 
   const handleSend = async () => {
-    if (!inputText.trim()) return;
+    const text = inputText.trim();
+    if (!text) return;
     if (!selectedConv) return;
 
-    const userMessage: AiSqlMessage = { role: 'user', content: inputText.trim() };
+    const userMessage: AiSqlMessage = { role: 'user', content: text };
     const newMessages = [...localMessages, userMessage];
-    setLocalMessages(newMessages);
+    // 先 push 一条占位 assistant 消息，流式期间由 streamingRaw 驱动其原文区域
+    const placeholder: AiSqlMessage = {
+      role: 'assistant',
+      content: '',
+      sql: undefined,
+      explanation: undefined,
+      rawText: '',
+    };
+    setLocalMessages([...newMessages, placeholder]);
     setInputText('');
     setLoading(true);
+    cancelledRef.current = false;
+    setStreamingRaw('');
 
     try {
       // 读取通用提示词
@@ -343,20 +419,36 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
         ...newMessages,
       ];
 
-      const result = await callAiSqlApi(apiMessages);
+      const result = await callAiSqlApi(
+        apiMessages,
+        (acc) => {
+          // 流式增量仅累积到 streamingRaw 局部 state，驱动当前气泡
+          if (cancelledRef.current) return;
+          setStreamingRaw(acc);
+        },
+        (channel) => {
+          channelRef.current = channel;
+        },
+      );
+
+      // 流式中途取消（切换对话 / 卸载）：占位消息由对应 effect 清理，直接返回不落库
+      if (cancelledRef.current) {
+        return;
+      }
 
       const assistantMessage: AiSqlMessage = {
         role: 'assistant',
         content: result.explanation || result.sql,
         sql: result.sql,
         explanation: result.explanation,
+        rawText: result.rawText,
       };
 
       const updatedMessages = [...newMessages, assistantMessage];
       setLocalMessages(updatedMessages);
 
       // 保存到后端
-      const title = localMessages.length === 0 ? inputText.trim().slice(0, 20) : selectedConv.title;
+      const title = localMessages.length === 0 ? text.slice(0, 20) : selectedConv.title;
       const messagesJson = JSON.stringify(updatedMessages);
 
       const saved = await invoke<BackendAiSqlConversation>('save_ai_sql_conversation', {
@@ -373,9 +465,15 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
         prev.map((c) => (c.id === updatedConv.id ? updatedConv : c))
       );
     } catch (e: any) {
+      // 失败时回退占位消息（取消场景由上面 cancelledRef 分支处理）
+      if (!cancelledRef.current) {
+        setLocalMessages(newMessages);
+      }
       message.error(t('ai_sql_fail') + ': ' + (e.message || e));
     } finally {
+      channelRef.current = null;
       setLoading(false);
+      setStreamingRaw('');
     }
   };
 
@@ -419,14 +517,14 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
     }
   };
 
-  const handleCopy = async (text: string) => {
+  const handleCopy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       message.success(t('ai_sql_copy_success'));
     } catch {
       message.error(t('copy_fail'));
     }
-  };
+  }, [t]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -566,8 +664,10 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
                     </div>
                   </div>
                 ) : (
-                  localMessages.map((msg, idx) =>
-                    msg.role === 'user' ? (
+                  localMessages.map((msg, idx) => {
+                    // 流式期间最后一条 assistant 占位消息即为当前生成中的气泡
+                    const isStreaming = loading && idx === localMessages.length - 1;
+                    return msg.role === 'user' ? (
                       <UserBubble key={idx} content={msg.content} />
                     ) : (
                       <AssistantBubble
@@ -577,21 +677,11 @@ const AiSqlTab: React.FC<AiSqlTabProps> = ({ project, tables }) => {
                         dbType={selectedConv?.databaseType || 'mysql'}
                         onCopy={handleCopy}
                         t={t}
+                        streamingRaw={isStreaming ? streamingRaw : undefined}
+                        isStreaming={isStreaming}
                       />
-                    )
-                  )
-                )}
-                {loading && (
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <div className={`${styles.avatar} ${styles.avatarAi}`}>
-                      <RobotOutlined />
-                    </div>
-                    <div className={styles.typing}>
-                      <span className={styles.typingDot} />
-                      <span className={styles.typingDot} />
-                      <span className={styles.typingDot} />
-                    </div>
-                  </div>
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -642,18 +732,49 @@ const UserBubble: React.FC<{ content: string }> = ({ content }) => (
   </div>
 );
 
-/** AI 消息气泡（含 SQL 代码块 + 说明） */
-const AssistantBubble: React.FC<{
+/** AI 消息气泡（顶部可折叠原文区域 + SQL 代码块 + 说明） */
+const AssistantBubble = React.memo(({
+  msg,
+  highlightedSql,
+  dbType,
+  onCopy,
+  t,
+  streamingRaw,
+  isStreaming,
+}: {
   msg: AiSqlMessage;
   highlightedSql?: string;
   dbType: string;
   onCopy: (text: string) => void;
   t: (key: string) => string;
-}> = ({ msg, highlightedSql, dbType, onCopy, t }) => {
-  const hasSql = msg.sql !== undefined && msg.sql !== '';
-  const hasExplanation = !!msg.explanation;
+  streamingRaw?: string;
+  isStreaming?: boolean;
+}) => {
+  const active = !!isStreaming;
+  // 原文：流式中渲染 streamingRaw，否则渲染持久化的 msg.rawText
+  const rawText = active ? streamingRaw || '' : msg.rawText || '';
+  const showRaw = rawText.length > 0;
+
+  // sql / explanation 仅在非流式时展示（流式中 SQL 区域用生成中占位）
+  const hasSql = !active && msg.sql !== undefined && msg.sql !== '';
+  const hasExplanation = !active && !!msg.explanation;
   // 降级情况：没有 SQL 也没有 explanation，把 content 当 SQL 展示
-  const fallbackContent = !hasSql && !hasExplanation && msg.content ? msg.content : '';
+  const fallbackContent = !active && !hasSql && !hasExplanation && msg.content ? msg.content : '';
+
+  // 折叠默认态：流式中展开、完成后折叠、历史折叠
+  const [rawOpen, setRawOpen] = useState(active);
+  const rawRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    // 流式结束后自动折叠
+    if (!active) setRawOpen(false);
+  }, [active]);
+
+  // 流式中原文增长时跟随滚到底部，实时看最新输出
+  useEffect(() => {
+    if (active && rawRef.current) {
+      rawRef.current.scrollTop = rawRef.current.scrollHeight;
+    }
+  }, [active, rawText]);
 
   // 复制到剪贴板的内容：优先用美化格式后的纯文本（多行 + 缩进 + 关键字大写）
   // fallback 情况也走格式化，保证用户复制的和看到的一致
@@ -676,6 +797,50 @@ const AssistantBubble: React.FC<{
       </div>
       <div className={`${styles.bubbleWrapper}`}>
         <div className={styles.aiBubble}>
+          {/* 可折叠「AI 原文输出」区域：保留 JSON 等原始结构，不做字段提取 */}
+          {showRaw && (
+            <Collapse
+              ghost
+              size="small"
+              className={styles.rawCollapse}
+              activeKey={rawOpen ? 'raw' : ''}
+              onChange={(key) => {
+                const open = Array.isArray(key) ? key.includes('raw') : key === 'raw';
+                setRawOpen(open);
+                // 手动展开时回到顶部，方便从头阅读
+                if (open && rawRef.current) {
+                  requestAnimationFrame(() => {
+                    if (rawRef.current) rawRef.current.scrollTop = 0;
+                  });
+                }
+              }}
+              items={[
+                {
+                  key: 'raw',
+                  label: t('ai_sql_raw_output'),
+                  children: (
+                    <pre ref={rawRef} className={styles.rawPre}>
+                      {rawText}
+                    </pre>
+                  ),
+                },
+              ]}
+            />
+          )}
+          {/* 流式中：SQL 区域显示生成中占位 */}
+          {active && (
+            <div className={styles.sqlBlock}>
+              <div className={styles.sqlBlockHeader}>
+                <span>SQL</span>
+              </div>
+              <div className={styles.sqlGenerating}>
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+                <span className={styles.generatingText}>{t('ai_sql_generating')}</span>
+              </div>
+            </div>
+          )}
           {hasSql && (
             <div className={styles.sqlBlock}>
               <div className={styles.sqlBlockHeader}>
@@ -731,6 +896,6 @@ const AssistantBubble: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 export default AiSqlTab;
