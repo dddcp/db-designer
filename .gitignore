@@ -30,3 +30,4 @@ src-tauri/target/*
 # CodeGraph 本地索引与 MCP 配置
 .codegraph/
 .mcp.json
+.zcode/
