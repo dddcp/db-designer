@@ -31,3 +31,4 @@ jobs:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
           model: zhipuai-coding-plan/glm-5.2
+          prompt: "始终用简体中文回复"
