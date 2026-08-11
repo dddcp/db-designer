@@ -33,6 +33,10 @@ oracle = "0.5"
 native-tls = "0.2"
 postgres-native-tls = "0.5"
 regex = "1"
+# 仅启用 https feature：Token/HTTPS 同步走内嵌 git2（libgit2 HTTPS 用系统 Schannel，
+# 无需系统 git、无需 OpenSSL）。SSH 模式另走系统 git CLI（见 git.rs），故不启用
+# ssh feature，避免拉入 libssh2/OpenSSL 的构建复杂度。
+git2 = { version = "0.21", features = ["https"] }
 tauri-plugin-http = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 futures-util = "0.3"

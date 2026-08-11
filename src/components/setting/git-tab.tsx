@@ -336,7 +336,7 @@ const GitTab: React.FC = () => {
 
               if (authType === 'ssh') {
                 return (
-                  <Form.Item>
+                  <Form.Item label={t('git_auth_type')}>
                     <Text type="secondary">{t('git_ssh_mode_tip')}</Text>
                   </Form.Item>
                 );

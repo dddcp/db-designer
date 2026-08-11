@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::process::Command;
 
 use crate::db::get_data_dir;
 use crate::setting::load_local_settings;
@@ -33,12 +34,6 @@ struct GitConfig {
     auth_type: GitAuthType,
     username: Option<String>,
     token: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-struct ResolvedGitRemote {
-    canonical_remote: String,
-    push_remote: String,
 }
 
 impl GitPlatform {
@@ -109,53 +104,6 @@ fn build_ssh_remote(base_url: &str, repository: &str) -> Result<String, String> 
     }
 
     Ok(format!("git@{}:{}.git", host, repository))
-}
-
-fn inject_http_credentials(remote: &str, username: &str, password: &str) -> Result<String, String> {
-    if let Some(without_scheme) = remote.strip_prefix("https://") {
-        return Ok(format!("https://{}:{}@{}", username, password, without_scheme));
-    }
-
-    if let Some(without_scheme) = remote.strip_prefix("http://") {
-        return Ok(format!("http://{}:{}@{}", username, password, without_scheme));
-    }
-
-    Err("仅支持为 HTTP/HTTPS 地址注入访问凭证".to_string())
-}
-
-fn build_push_remote(config: &GitConfig, canonical_remote: &str) -> Result<String, String> {
-    if config.auth_type == GitAuthType::Ssh {
-        return Ok(canonical_remote.to_string());
-    }
-
-    if !is_http_remote(canonical_remote) {
-        return Err("Token 认证仅支持 HTTP/HTTPS 远程地址".to_string());
-    }
-
-    let token = config
-        .token
-        .as_deref()
-        .ok_or_else(|| "请先在设置中配置 Git Token".to_string())?;
-
-    match config.platform.as_ref() {
-        Some(GitPlatform::Github) => inject_http_credentials(canonical_remote, token, ""),
-        Some(GitPlatform::Gitlab) => inject_http_credentials(canonical_remote, "oauth2", token),
-        Some(GitPlatform::Gitee) | Some(GitPlatform::Gitea) => {
-            let username = config
-                .username
-                .as_deref()
-                .or_else(|| config.repository.as_deref().and_then(|repo| repo.split('/').next()))
-                .ok_or_else(|| "当前 Git 平台需要配置用户名".to_string())?;
-            inject_http_credentials(canonical_remote, username, token)
-        }
-        None => {
-            let username = config
-                .username
-                .as_deref()
-                .ok_or_else(|| "自定义 HTTPS 远程使用 Token 认证时必须填写用户名".to_string())?;
-            inject_http_credentials(canonical_remote, username, token)
-        }
-    }
 }
 
 fn load_git_config() -> Result<GitConfig, String> {
@@ -278,8 +226,11 @@ fn validate_git_config(config: &GitConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_git_remote(config: &GitConfig) -> Result<ResolvedGitRemote, String> {
-    let canonical_remote = match config.remote_mode {
+// 解析纯远程地址（不含凭证）。
+// - Token：git2 运行时凭证回调注入，URL 保持纯净；
+// - SSH：直接交给系统 git CLI，由其 ~/.ssh 配置与密钥完成认证。
+fn resolve_git_remote(config: &GitConfig) -> Result<String, String> {
+    match config.remote_mode {
         GitRemoteMode::Preset => {
             let platform = config
                 .platform
@@ -298,25 +249,20 @@ fn resolve_git_remote(config: &GitConfig) -> Result<ResolvedGitRemote, String> {
                 .ok_or_else(|| "请先配置 Git 服务地址".to_string())?;
 
             match config.auth_type {
-                GitAuthType::Token => build_https_remote(&base_url, &repository),
-                GitAuthType::Ssh => build_ssh_remote(&base_url, &repository)?,
+                GitAuthType::Token => Ok(build_https_remote(&base_url, &repository)),
+                GitAuthType::Ssh => build_ssh_remote(&base_url, &repository),
             }
         }
-        GitRemoteMode::Custom => config
+        GitRemoteMode::Custom => Ok(config
             .remote_url
             .as_deref()
             .ok_or_else(|| "请先配置自定义远程地址".to_string())?
             .trim()
-            .to_string(),
-    };
-
-    let push_remote = build_push_remote(config, &canonical_remote)?;
-
-    Ok(ResolvedGitRemote {
-        canonical_remote,
-        push_remote,
-    })
+            .to_string()),
+    }
 }
+
+// ==================== SSH：系统 git CLI（简单，复用用户 ~/.ssh）====================
 
 fn git_env() -> [(&'static str, &'static str); 3] {
     [
@@ -326,8 +272,8 @@ fn git_env() -> [(&'static str, &'static str); 3] {
     ]
 }
 
-fn ensure_origin_remote(data_dir: &std::path::Path, remote_url: &str) -> Result<(), String> {
-    let current_origin_output = std::process::Command::new("git")
+fn ensure_origin_remote_cli(data_dir: &std::path::Path, remote_url: &str) -> Result<(), String> {
+    let current_origin_output = Command::new("git")
         .current_dir(data_dir)
         .envs(git_env().iter().copied())
         .args(["remote", "get-url", "origin"])
@@ -343,7 +289,7 @@ fn ensure_origin_remote(data_dir: &std::path::Path, remote_url: &str) -> Result<
             return Ok(());
         }
 
-        let set_url_output = std::process::Command::new("git")
+        let set_url_output = Command::new("git")
             .current_dir(data_dir)
             .envs(git_env().iter().copied())
             .args(["remote", "set-url", "origin", remote_url])
@@ -358,7 +304,7 @@ fn ensure_origin_remote(data_dir: &std::path::Path, remote_url: &str) -> Result<
         return Ok(());
     }
 
-    let add_origin_output = std::process::Command::new("git")
+    let add_origin_output = Command::new("git")
         .current_dir(data_dir)
         .envs(git_env().iter().copied())
         .args(["remote", "add", "origin", remote_url])
@@ -373,78 +319,13 @@ fn ensure_origin_remote(data_dir: &std::path::Path, remote_url: &str) -> Result<
     Ok(())
 }
 
-// 获取Git分支信息
-#[tauri::command]
-pub fn get_git_info() -> Result<HashMap<String, String>, String> {
-    let data_dir = get_data_dir();
-    let mut info = HashMap::new();
-
-    // 获取当前分支
-    let output = std::process::Command::new("git")
-        .current_dir(&data_dir)
-        .args(["branch", "--show-current"])
-        .output()
-        .map_err(|e| format!("Failed to execute git command: {}", e))?;
-
-    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    info.insert("branch".to_string(), branch);
-
-    // 获取最新提交信息
-    let commit_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
-        .args(["log", "-1", "--pretty=format:%h %s"])
-        .output()
-        .map_err(|e| format!("Failed to execute git command: {}", e))?;
-
-    let commit = String::from_utf8_lossy(&commit_output.stdout).trim().to_string();
-    info.insert("latest_commit".to_string(), commit);
-
-    Ok(info)
-}
-
-// 初始化Git仓库
-#[tauri::command]
-pub fn init_git_repository() -> Result<String, String> {
-    let data_dir = get_data_dir();
-
-    // 确保 data 目录存在
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|e| format!("无法创建 data 目录: {}", e))?;
-
-    // 1. git init
-    let init_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
-        .envs(git_env().iter().copied())
-        .args(["init"])
-        .output()
-        .map_err(|e| format!("执行 git init 失败: {}", e))?;
-
-    if !init_output.status.success() {
-        let stderr = String::from_utf8_lossy(&init_output.stderr);
-        return Err(format!("git init 失败: {}", stderr));
-    }
-
-    // 2. 解析 Git 配置并更新 origin
-    let config = load_git_config()?;
-    let remote = resolve_git_remote(&config)?;
-    ensure_origin_remote(&data_dir, &remote.canonical_remote)?;
-
-    Ok("git_init_success".to_string())
-}
-
-// Git同步操作
-#[tauri::command]
-pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
-    let data_dir = get_data_dir();
+// SSH 同步：系统 git add/commit/force-push，认证由系统 git SSH 处理
+fn sync_git_ssh(data_dir: &std::path::Path, remote_url: &str, msg: &str) -> Result<String, String> {
     let git_env = git_env();
+    ensure_origin_remote_cli(data_dir, remote_url)?;
 
-    let config = load_git_config()?;
-    let remote = resolve_git_remote(&config)?;
-    ensure_origin_remote(&data_dir, &remote.canonical_remote)?;
-
-    // 1. git add db_designer.db
-    let add_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
+    let add_output = Command::new("git")
+        .current_dir(data_dir)
         .envs(git_env.iter().copied())
         .args(["add", "db_designer.db"])
         .output()
@@ -455,17 +336,10 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
         return Err(format!("git add 失败: {}", stderr));
     }
 
-    // 2. git commit
-    let msg = if commit_message.trim().is_empty() {
-        "Auto sync: database changes".to_string()
-    } else {
-        commit_message
-    };
-
-    let commit_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
+    let commit_output = Command::new("git")
+        .current_dir(data_dir)
         .envs(git_env.iter().copied())
-        .args(["commit", "-m", &msg])
+        .args(["commit", "-m", msg])
         .output()
         .map_err(|e| format!("执行 git commit 失败: {}", e))?;
 
@@ -478,11 +352,10 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
         return Err(format!("git commit 失败: {}", stderr));
     }
 
-    // 3. git push (force push)
-    let push_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
+    let push_output = Command::new("git")
+        .current_dir(data_dir)
         .envs(git_env.iter().copied())
-        .args(["push", "-f", "-u", &remote.push_remote, "HEAD"])
+        .args(["push", "-f", "-u", "origin", "HEAD"])
         .output()
         .map_err(|e| format!("执行 git push 失败: {}", e))?;
 
@@ -494,19 +367,13 @@ pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
     Ok("git_sync_success".to_string())
 }
 
-// 拉取远程数据
-#[tauri::command]
-pub fn pull_git_repository() -> Result<String, String> {
-    let data_dir = get_data_dir();
+// SSH 拉取：系统 git fetch + reset --hard origin/HEAD
+fn pull_git_ssh(data_dir: &std::path::Path, remote_url: &str) -> Result<String, String> {
     let git_env = git_env();
+    ensure_origin_remote_cli(data_dir, remote_url)?;
 
-    let config = load_git_config()?;
-    let remote = resolve_git_remote(&config)?;
-    ensure_origin_remote(&data_dir, &remote.canonical_remote)?;
-
-    // 1. git fetch origin
-    let fetch_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
+    let fetch_output = Command::new("git")
+        .current_dir(data_dir)
         .envs(git_env.iter().copied())
         .args(["fetch", "origin"])
         .output()
@@ -517,9 +384,8 @@ pub fn pull_git_repository() -> Result<String, String> {
         return Err(format!("git fetch 失败: {}", stderr));
     }
 
-    // 2. git reset --hard origin/HEAD
-    let reset_output = std::process::Command::new("git")
-        .current_dir(&data_dir)
+    let reset_output = Command::new("git")
+        .current_dir(data_dir)
         .envs(git_env.iter().copied())
         .args(["reset", "--hard", "origin/HEAD"])
         .output()
@@ -531,4 +397,282 @@ pub fn pull_git_repository() -> Result<String, String> {
     }
 
     Ok("git_pull_success".to_string())
+}
+
+// ==================== Token：git2（无需系统 git；凭证回调注入）====================
+
+// 凭证回调载体：仅 Token 分支，按平台分派返回 userpass。
+#[derive(Clone)]
+struct GitCredentials {
+    platform: Option<GitPlatform>,
+    username: Option<String>,
+    token: Option<String>,
+}
+
+impl GitCredentials {
+    fn from_config(config: &GitConfig) -> Self {
+        Self {
+            platform: config.platform.clone(),
+            username: config.username.clone(),
+            token: config.token.clone(),
+        }
+    }
+
+    // 构造 RemoteCallbacks：挂载凭证回调闭包，闭包以 owned 数据 move 进去，故为 'static。
+    fn build_callbacks(&self) -> git2::RemoteCallbacks<'static> {
+        let creds = self.clone();
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(move |_url, _username_from_url, _cred_type| creds.resolve());
+        callbacks
+    }
+
+    fn resolve(&self) -> Result<git2::Cred, git2::Error> {
+        let token = self
+            .token
+            .as_deref()
+            .ok_or_else(|| git2::Error::from_str("缺少 Git Token"))?;
+        match self.platform.as_ref() {
+            Some(GitPlatform::Github) => git2::Cred::userpass_plaintext(token, ""),
+            Some(GitPlatform::Gitlab) => git2::Cred::userpass_plaintext("oauth2", token),
+            Some(GitPlatform::Gitee) | Some(GitPlatform::Gitea) => {
+                let user = self
+                    .username
+                    .as_deref()
+                    .ok_or_else(|| git2::Error::from_str("缺少 Git 用户名"))?;
+                git2::Cred::userpass_plaintext(user, token)
+            }
+            None => {
+                let user = self
+                    .username
+                    .as_deref()
+                    .ok_or_else(|| git2::Error::from_str("缺少 Git 用户名"))?;
+                git2::Cred::userpass_plaintext(user, token)
+            }
+        }
+    }
+}
+
+// 默认提交签名（不依赖系统 git 配置）
+fn default_signature() -> Result<git2::Signature<'static>, String> {
+    git2::Signature::now("DB Designer", "db-designer@local")
+        .map_err(|e| format!("创建提交签名失败: {}", e))
+}
+
+// 基于 git2 维护 origin 远程：存在则 set-url，否则新增。URL 为纯地址（不含凭证）。
+fn ensure_origin_remote(repo: &git2::Repository, remote_url: &str) -> Result<(), String> {
+    let has_origin = repo
+        .remotes()
+        .map_err(|e| format!("读取 remote 列表失败: {}", e))?
+        .iter()
+        .any(|name| matches!(name, Ok(Some("origin"))));
+
+    if has_origin {
+        repo.remote_set_url("origin", remote_url)
+            .map_err(|e| format!("更新 origin 失败: {}", e))?;
+    } else {
+        repo.remote("origin", remote_url)
+            .map_err(|e| format!("添加 origin 失败: {}", e))?;
+    }
+
+    Ok(())
+}
+
+// 取当前分支简短名（detached 或无提交时返回 None）
+fn current_branch_name(repo: &git2::Repository) -> Option<String> {
+    repo.head()
+        .ok()
+        .filter(|head| head.is_branch())
+        .and_then(|head| head.shorthand().ok().map(|s| s.to_string()))
+}
+
+// Token 同步：git2 add/commit/force-push，凭证回调注入
+fn sync_git_token(
+    config: &GitConfig,
+    remote_url: &str,
+    msg: &str,
+) -> Result<String, String> {
+    let data_dir = get_data_dir();
+    let repo = git2::Repository::open(&data_dir)
+        .map_err(|e| format!("打开仓库失败: {}", e))?;
+    ensure_origin_remote(&repo, remote_url)?;
+
+    let mut index = repo
+        .index()
+        .map_err(|e| format!("读取暂存区失败: {}", e))?;
+    index
+        .add_path(std::path::Path::new("db_designer.db"))
+        .map_err(|e| format!("git add 失败: {}", e))?;
+    index
+        .write()
+        .map_err(|e| format!("写入暂存区失败: {}", e))?;
+
+    let tree_oid = index
+        .write_tree()
+        .map_err(|e| format!("write_tree 失败: {}", e))?;
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| format!("查找 tree 失败: {}", e))?;
+
+    let head = repo.head().ok();
+    let parent = head.as_ref().and_then(|h| h.peel_to_commit().ok());
+
+    let nothing_to_commit = match &parent {
+        Some(p) => p
+            .tree()
+            .map(|parent_tree| parent_tree.id() == tree.id())
+            .unwrap_or(false),
+        None => false,
+    };
+    if nothing_to_commit {
+        return Ok("git_nothing_to_commit".to_string());
+    }
+
+    let parents: Vec<&git2::Commit> = parent.iter().collect();
+    let signature = default_signature()?;
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        msg,
+        &tree,
+        &parents,
+    )
+    .map_err(|e| format!("git commit 失败: {}", e))?;
+
+    let branch = current_branch_name(&repo).unwrap_or_else(|| "main".to_string());
+    let refspec = format!("+HEAD:refs/heads/{}", branch);
+
+    let mut remote = repo
+        .find_remote("origin")
+        .map_err(|e| format!("查找 origin 失败: {}", e))?;
+    let callbacks = GitCredentials::from_config(config).build_callbacks();
+    let mut push_options = git2::PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+    remote
+        .push(&[refspec.as_str()], Some(&mut push_options))
+        .map_err(|e| format!("git push 失败: {}", e))?;
+
+    Ok("git_sync_success".to_string())
+}
+
+// Token 拉取：git2 fetch + reset --hard（凭证回调注入）
+fn pull_git_token(config: &GitConfig, remote_url: &str) -> Result<String, String> {
+    let data_dir = get_data_dir();
+    let repo = git2::Repository::open(&data_dir)
+        .map_err(|e| format!("打开仓库失败: {}", e))?;
+    ensure_origin_remote(&repo, remote_url)?;
+
+    let callbacks = GitCredentials::from_config(config).build_callbacks();
+    let mut fetch_options = git2::FetchOptions::new();
+    fetch_options.remote_callbacks(callbacks);
+
+    let mut remote = repo
+        .find_remote("origin")
+        .map_err(|e| format!("查找 origin 失败: {}", e))?;
+    remote
+        .fetch(
+            &["refs/heads/*:refs/remotes/origin/*"],
+            Some(&mut fetch_options),
+            None,
+        )
+        .map_err(|e| format!("git fetch 失败: {}", e))?;
+
+    let target = repo
+        .revparse_single("origin/HEAD")
+        .or_else(|_| repo.revparse_single("FETCH_HEAD"))
+        .map_err(|e| format!("解析远程引用失败: {}", e))?;
+    repo.reset(&target, git2::ResetType::Hard, None)
+        .map_err(|e| format!("git reset 失败: {}", e))?;
+
+    Ok("git_pull_success".to_string())
+}
+
+// ==================== Tauri 命令 ====================
+
+// 获取Git分支信息（git2，本地操作，两种认证模式通用）
+#[tauri::command]
+pub fn get_git_info() -> Result<HashMap<String, String>, String> {
+    let data_dir = get_data_dir();
+    let mut info = HashMap::new();
+
+    let repo = match git2::Repository::open(&data_dir) {
+        Ok(repo) => repo,
+        Err(_) => {
+            info.insert("branch".to_string(), String::new());
+            info.insert("latest_commit".to_string(), String::new());
+            return Ok(info);
+        }
+    };
+
+    let head = repo.head().ok();
+
+    let branch = head
+        .as_ref()
+        .filter(|h| h.is_branch())
+        .and_then(|h| h.shorthand().ok().map(|s| s.to_string()))
+        .unwrap_or_default();
+    info.insert("branch".to_string(), branch);
+
+    let latest_commit = head
+        .and_then(|h| h.peel_to_commit().ok())
+        .map(|c| {
+            let id = c.id().to_string();
+            let short = &id[..7.min(id.len())];
+            let summary = c.summary().ok().flatten().unwrap_or("").to_string();
+            format!("{} {}", short, summary)
+        })
+        .unwrap_or_default();
+    info.insert("latest_commit".to_string(), latest_commit);
+
+    Ok(info)
+}
+
+// 初始化Git仓库（git2 init + 设置 origin，无需认证，两种模式通用）
+#[tauri::command]
+pub fn init_git_repository() -> Result<String, String> {
+    let data_dir = get_data_dir();
+
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("无法创建 data 目录: {}", e))?;
+
+    let repo = git2::Repository::init(&data_dir)
+        .map_err(|e| format!("git init 失败: {}", e))?;
+
+    let config = load_git_config()?;
+    let remote = resolve_git_remote(&config)?;
+    ensure_origin_remote(&repo, &remote)?;
+
+    Ok("git_init_success".to_string())
+}
+
+// Git同步操作：Token 走 git2，SSH 走系统 git CLI
+#[tauri::command]
+pub fn sync_git_repository(commit_message: String) -> Result<String, String> {
+    let data_dir = get_data_dir();
+    let config = load_git_config()?;
+    let remote = resolve_git_remote(&config)?;
+
+    let msg = if commit_message.trim().is_empty() {
+        "Auto sync: database changes"
+    } else {
+        &commit_message
+    };
+
+    match config.auth_type {
+        GitAuthType::Ssh => sync_git_ssh(&data_dir, &remote, msg),
+        GitAuthType::Token => sync_git_token(&config, &remote, msg),
+    }
+}
+
+// 拉取远程数据：Token 走 git2，SSH 走系统 git CLI
+#[tauri::command]
+pub fn pull_git_repository() -> Result<String, String> {
+    let data_dir = get_data_dir();
+    let config = load_git_config()?;
+    let remote = resolve_git_remote(&config)?;
+
+    match config.auth_type {
+        GitAuthType::Ssh => pull_git_ssh(&data_dir, &remote),
+        GitAuthType::Token => pull_git_token(&config, &remote),
+    }
 }
