@@ -367,7 +367,7 @@ fn sync_git_ssh(data_dir: &std::path::Path, remote_url: &str, msg: &str) -> Resu
     Ok("git_sync_success".to_string())
 }
 
-// SSH 拉取：系统 git fetch + reset --hard origin/HEAD
+// SSH 拉取：系统 git fetch + checkout 只恢复 db_designer.db
 fn pull_git_ssh(data_dir: &std::path::Path, remote_url: &str) -> Result<String, String> {
     let git_env = git_env();
     ensure_origin_remote_cli(data_dir, remote_url)?;
@@ -384,16 +384,17 @@ fn pull_git_ssh(data_dir: &std::path::Path, remote_url: &str) -> Result<String, 
         return Err(format!("git fetch 失败: {}", stderr));
     }
 
-    let reset_output = Command::new("git")
+    // 安全：只恢复数据库文件，绝不能整树硬重置（数据目录同时存放本机配置 settings.json 等）
+    let checkout_output = Command::new("git")
         .current_dir(data_dir)
         .envs(git_env.iter().copied())
-        .args(["reset", "--hard", "origin/HEAD"])
+        .args(["checkout", "origin/HEAD", "--", "db_designer.db"])
         .output()
-        .map_err(|e| format!("执行 git reset 失败: {}", e))?;
+        .map_err(|e| format!("执行 git checkout 失败: {}", e))?;
 
-    if !reset_output.status.success() {
-        let stderr = String::from_utf8_lossy(&reset_output.stderr);
-        return Err(format!("git reset 失败: {}", stderr));
+    if !checkout_output.status.success() {
+        let stderr = String::from_utf8_lossy(&checkout_output.stderr);
+        return Err(format!("git checkout 失败: {}", stderr));
     }
 
     Ok("git_pull_success".to_string())
@@ -555,7 +556,7 @@ fn sync_git_token(
     Ok("git_sync_success".to_string())
 }
 
-// Token 拉取：git2 fetch + reset --hard（凭证回调注入）
+// Token 拉取：git2 fetch + 只恢复 db_designer.db（凭证回调注入）
 fn pull_git_token(config: &GitConfig, remote_url: &str) -> Result<String, String> {
     let data_dir = get_data_dir();
     let repo = git2::Repository::open(&data_dir)
@@ -581,8 +582,26 @@ fn pull_git_token(config: &GitConfig, remote_url: &str) -> Result<String, String
         .revparse_single("origin/HEAD")
         .or_else(|_| repo.revparse_single("FETCH_HEAD"))
         .map_err(|e| format!("解析远程引用失败: {}", e))?;
-    repo.reset(&target, git2::ResetType::Hard, None)
-        .map_err(|e| format!("git reset 失败: {}", e))?;
+
+    // 安全：数据目录既是 git 工作区，又存放本机配置（settings.json 等），
+    // 绝不能整树硬重置——远端提交树中的任何文件都会覆盖本机同名未跟踪文件。
+    // 这里只恢复数据库文件本身。
+    let commit = target
+        .peel_to_commit()
+        .map_err(|e| format!("解析远程提交失败: {}", e))?;
+    let tree = commit
+        .tree()
+        .map_err(|e| format!("解析远程提交树失败: {}", e))?;
+    if tree
+        .get_path(std::path::Path::new("db_designer.db"))
+        .is_err()
+    {
+        return Err("远程提交中不包含 db_designer.db，无法拉取".to_string());
+    }
+    let mut checkout_opts = git2::build::CheckoutBuilder::new();
+    checkout_opts.force().path("db_designer.db");
+    repo.checkout_tree(tree.as_object(), Some(&mut checkout_opts))
+        .map_err(|e| format!("git checkout 失败: {}", e))?;
 
     Ok("git_pull_success".to_string())
 }

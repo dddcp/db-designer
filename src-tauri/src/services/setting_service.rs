@@ -38,26 +38,11 @@ impl SettingsService {
     }
 
     pub fn get_local_settings(&self) -> Result<HashMap<String, String>, String> {
-        let mut settings = self.local_store.load_settings()?;
-        let mut migrated = false;
-
-        for key in LOCAL_SETTING_KEYS {
-            if settings.contains_key(key) {
-                continue;
-            }
-
-            if let Some(value) = self.setting_store.get_setting(key)? {
-                settings.insert(key.to_string(), value);
-                self.setting_store.delete_setting(key)?;
-                migrated = true;
-            }
-        }
-
-        if migrated {
-            self.local_store.save_settings(&settings)?;
-        }
-
-        Ok(settings)
+        // 安全：t_setting 表位于 db_designer.db 内，而该库会被 Git 同步在拉取时整体替换。
+        // 旧版"从 t_setting 自动迁移缺失键"的逻辑会把远端可控数据静默提升为本机受信配置
+        // （如种植 ai_base_url 窃取 API Key、重定向 Git 远端外发凭据库），
+        // 且无法区分真实旧版数据库与被投毒的同步库，因此迁移已移除。
+        self.local_store.load_settings()
     }
 
     pub fn save_local_setting(&self, key: String, value: String) -> Result<String, String> {

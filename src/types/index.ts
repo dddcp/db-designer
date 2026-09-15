@@ -84,6 +84,8 @@ export interface DatabaseConnection {
   username: string;
   password: string;
   database: string;
+  /** 是否启用 SSL 加密传输（仅 MySQL / PostgreSQL 支持，默认关闭） */
+  ssl: boolean;
   created_at?: string;
   updated_at?: string;
 }

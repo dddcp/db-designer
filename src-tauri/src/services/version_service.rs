@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::dialect::{get_dialect, normalize_routine_body};
+use crate::dialect::{comment_safe, get_dialect, normalize_routine_body, type_str_safe};
 use crate::models::{ColumnDef, IndexDef, RoutineDef, Snapshot, SnapshotTable, TableDef, Version};
 use crate::services::routine_service::RoutineService;
 use crate::services::setting_service::SettingsService;
@@ -69,10 +69,11 @@ impl VersionService {
                 if r.db_type.is_none() {
                     sql.push_str(&format!(
                         "-- {} : {} (未指定数据库类型)\n",
-                        type_label, r.name
+                        type_label,
+                        comment_safe(&r.name)
                     ));
                 } else {
-                    sql.push_str(&format!("-- {} : {}\n", type_label, r.name));
+                    sql.push_str(&format!("-- {} : {}\n", type_label, comment_safe(&r.name)));
                 }
                 sql.push_str(normalize_routine_body(r.body.trim(), &database_type).trim());
                 sql.push_str("\n\n");
@@ -109,7 +110,7 @@ impl VersionService {
 
         for new_table in &new_snap.tables {
             if !old_map.contains_key(&new_table.name) {
-                sql.push_str(&format!("-- 新增表: {}\n", new_table.name));
+                sql.push_str(&format!("-- 新增表: {}\n", comment_safe(&new_table.name)));
                 sql.push_str(&self.build_create_table_body(
                     new_table,
                     dialect.as_ref(),
@@ -122,7 +123,7 @@ impl VersionService {
 
         for old_table in &old_snap.tables {
             if !new_map.contains_key(&old_table.name) {
-                sql.push_str(&format!("-- 删除表: {}\n", old_table.name));
+                sql.push_str(&format!("-- 删除表: {}\n", comment_safe(&old_table.name)));
                 sql.push_str(&dialect.drop_table_sql(&old_table.name));
                 sql.push('\n');
             }
@@ -208,10 +209,10 @@ impl VersionService {
                 }
 
                 if !changes.is_empty() {
-                    sql.push_str(&format!("-- 修改表: {}\n", new_table.name));
+                    sql.push_str(&format!("-- 修改表: {}\n", comment_safe(&new_table.name)));
                     sql.push_str(&format!(
                         "ALTER TABLE {}\n{};\n\n",
-                        new_table.name,
+                        dialect.quote_ident(&new_table.name),
                         changes.join(",\n")
                     ));
                 }
@@ -290,7 +291,7 @@ impl VersionService {
                 }
 
                 if !idx_changes.is_empty() {
-                    sql.push_str(&format!("-- 索引变更: {}\n", new_table.name));
+                    sql.push_str(&format!("-- 索引变更: {}\n", comment_safe(&new_table.name)));
                     for change in &idx_changes {
                         sql.push_str(change);
                     }
@@ -305,7 +306,7 @@ impl VersionService {
 
                 if !added_data.is_empty() && !new_table.columns.is_empty() {
                     let col_names: Vec<&str> = new_table.columns.iter().map(|c| c.name.as_str()).collect();
-                    sql.push_str(&format!("-- {} 新增元数据\n", new_table.name));
+                    sql.push_str(&format!("-- {} 新增元数据\n", comment_safe(&new_table.name)));
                     for data_json in added_data {
                         if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                             let values: Vec<String> = col_names
@@ -327,7 +328,7 @@ impl VersionService {
                 if !removed_data.is_empty() && !old_table.columns.is_empty() {
                     sql.push_str(&format!(
                         "-- {} 删除的元数据（请根据实际情况调整 WHERE 条件）\n",
-                        new_table.name
+                        comment_safe(&new_table.name)
                     ));
                     let pk_cols: Vec<&str> = old_table
                         .columns
@@ -342,10 +343,12 @@ impl VersionService {
                                     .iter()
                                     .map(|pk| match data.get(*pk) {
                                         Some(serde_json::Value::String(s)) => {
-                                            format!("{} = {}", pk, dialect.string_literal(s))
+                                            format!("{} = {}", dialect.quote_ident(pk), dialect.string_literal(s))
                                         }
-                                        Some(serde_json::Value::Number(n)) => format!("{} = {}", pk, n),
-                                        _ => format!("{} = NULL", pk),
+                                        Some(serde_json::Value::Number(n)) => {
+                                            format!("{} = {}", dialect.quote_ident(pk), n)
+                                        }
+                                        _ => format!("{} = NULL", dialect.quote_ident(pk)),
                                     })
                                     .collect();
                                 sql.push_str(&dialect.delete_sql(&new_table.name, &conditions));
@@ -599,7 +602,13 @@ impl VersionService {
     ) -> String {
         let mapped_type = dialect.map_data_type(&col.data_type);
         let prefix = if with_indent { "  " } else { "" };
-        let mut def = format!("{}{} {}", prefix, col.name, mapped_type.to_uppercase());
+        // 列名/类型可能来自远程同步、Git 拉取或 AI，必须安全渲染（防二阶注入）
+        let mut def = format!(
+            "{}{} {}",
+            prefix,
+            dialect.quote_ident(&col.name),
+            type_str_safe(&mapped_type)
+        );
         self.append_type_suffix(
             &mut def,
             &col.data_type,
@@ -624,7 +633,10 @@ impl VersionService {
         if dialect.supports_inline_comment() {
             let comment_text = self.get_column_comment_text(col);
             if !comment_text.is_empty() {
-                def.push_str(&format!(" COMMENT '{}'", comment_text.replace('\'', "''")));
+                def.push_str(&format!(
+                    " COMMENT '{}'",
+                    dialect.escape_string_literal(&comment_text)
+                ));
             }
         }
         def
@@ -698,7 +710,7 @@ impl VersionService {
 
         if !table.init_data.is_empty() && !table.columns.is_empty() {
             let col_names: Vec<&str> = table.columns.iter().map(|c| c.name.as_str()).collect();
-            sql.push_str(&format!("-- {} 元数据\n", table.name));
+            sql.push_str(&format!("-- {} 元数据\n", comment_safe(&table.name)));
             for data_json in &table.init_data {
                 if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_json) {
                     let values: Vec<String> = col_names
@@ -728,7 +740,7 @@ impl VersionService {
         scale_types: &HashSet<String>,
     ) -> String {
         let mut sql = String::new();
-        sql.push_str(&format!("-- {}\n", table.name));
+        sql.push_str(&format!("-- {}\n", comment_safe(&table.name)));
         sql.push_str(&self.build_create_table_body(table, dialect, length_types, scale_types));
         sql
     }

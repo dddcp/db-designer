@@ -34,9 +34,23 @@ pub fn init_db() -> SqlResult<Connection> {
         std::fs::create_dir_all(parent).map_err(|e| {
             rusqlite::Error::ToSqlConversionFailure(Box::new(e))
         })?;
+        // 安全：数据目录存放含明文凭据的数据库，拒绝同机其他用户的访问。
+        // 尽力而为，异常文件系统（如 FAT）不支持权限时不能阻断启动。
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
     }
 
-    Connection::open(&db_path)
+    let conn = Connection::open(&db_path)?;
+    // 数据库文件同样仅限属主读写（Unix）
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&db_path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(conn)
 }
 
 /// 初始化数据库表结构（应用启动时调用一次）

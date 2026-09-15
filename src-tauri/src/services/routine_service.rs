@@ -47,6 +47,7 @@ impl RoutineService {
             &connection.username,
             &connection.password,
             &connection.database,
+            connection.ssl,
         )
     }
 

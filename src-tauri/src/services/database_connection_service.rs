@@ -1,5 +1,5 @@
 use crate::models::{CreateDatabaseConnectionRequest, DatabaseConnection, UpdateDatabaseConnectionRequest};
-use crate::storage::sqlite::database_connection_store::SqliteDatabaseConnectionStore;
+use crate::storage::sqlite::database_connection_store::JsonDatabaseConnectionStore;
 use crate::storage::DatabaseConnectionStore;
 
 pub struct DatabaseConnectionService {
@@ -9,7 +9,7 @@ pub struct DatabaseConnectionService {
 impl DatabaseConnectionService {
     pub fn new() -> Self {
         Self {
-            store: Box::new(SqliteDatabaseConnectionStore::new()),
+            store: Box::new(JsonDatabaseConnectionStore::new()),
         }
     }
 

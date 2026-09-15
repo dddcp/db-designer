@@ -14,6 +14,7 @@ import {
   Row,
   Select,
   Space,
+  Switch,
   Tag,
   theme,
   Tooltip,
@@ -75,6 +76,7 @@ const DatabaseTab: React.FC = () => {
       username: connection.username,
       password: connection.password,
       database: connection.database,
+      ssl: connection.ssl ?? false,
     });
     setIsDbModalVisible(true);
   };
@@ -93,6 +95,7 @@ const DatabaseTab: React.FC = () => {
             username: values.username,
             password: values.password,
             database: values.database,
+            ssl: !!values.ssl,
           },
         });
         message.success(t('db_conn_update_success'));
@@ -106,6 +109,7 @@ const DatabaseTab: React.FC = () => {
             username: values.username,
             password: values.password,
             database: values.database,
+            ssl: !!values.ssl,
           },
         });
         message.success(t('db_conn_create_success'));
@@ -274,6 +278,14 @@ const DatabaseTab: React.FC = () => {
           </Row>
           <Form.Item name="database" label={t('db_conn_database')} rules={[{ required: true, message: t('db_conn_database_required') }]}>
             <Input placeholder={t('db_conn_database_placeholder')} />
+          </Form.Item>
+          <Form.Item
+            name="ssl"
+            label={t('db_conn_ssl')}
+            valuePropName="checked"
+            tooltip={t('db_conn_ssl_tip')}
+          >
+            <Switch />
           </Form.Item>
           <Form.Item>
             <Space>

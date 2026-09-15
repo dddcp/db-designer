@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::params;
 
 use crate::db::init_db;
-use crate::dialect::{get_connector, get_dialect};
+use crate::dialect::{comment_safe, get_connector, get_dialect, type_str_safe};
 use crate::models::{ColumnDiff, IndexDiff, RemoteColumn, RemoteIndex, RemoteTable, TableDiff, TableDef};
 use crate::services::database_connection_service::DatabaseConnectionService;
 use crate::services::setting_service::SettingsService;
@@ -41,6 +41,7 @@ impl SyncService {
             &connection.username,
             &connection.password,
             &connection.database,
+            connection.ssl,
         )?;
 
         Ok("sync_connect_success".to_string())
@@ -59,6 +60,7 @@ impl SyncService {
             &connection.username,
             &connection.password,
             &connection.database,
+            connection.ssl,
         )
     }
 
@@ -342,12 +344,17 @@ impl SyncService {
                         .ok_or_else(|| format!("未找到本地表: {}", diff.table_name))?;
                     let cols = self.table_service.get_table_columns(table.id.clone())?;
 
-                    sql.push_str(&format!("-- CREATE TABLE: {}\n", diff.table_name));
+                    sql.push_str(&format!("-- CREATE TABLE: {}\n", comment_safe(&diff.table_name)));
                     sql.push_str(&dialect.create_table_prefix(&diff.table_name));
                     let mut col_defs = Vec::new();
                     for col in &cols {
                         let mapped_type = dialect.map_data_type(&col.data_type);
-                        let mut def = format!("  {} {}", col.name, mapped_type.to_uppercase());
+                        // 列名/类型可能来自远程同步、Git 拉取或 AI，必须安全渲染（防二阶注入）
+                        let mut def = format!(
+                            "  {} {}",
+                            dialect.quote_ident(&col.name),
+                            type_str_safe(&mapped_type)
+                        );
                         Self::append_type_suffix(
                             &mut def,
                             &col.data_type,
@@ -372,7 +379,7 @@ impl SyncService {
                         if dialect.supports_inline_comment() {
                             if let Some(comment) = &col.comment {
                                 if !comment.is_empty() {
-                                    def.push_str(&format!(" COMMENT '{}'", comment.replace('\'', "''")));
+                                    def.push_str(&format!(" COMMENT '{}'", dialect.escape_string_literal(comment)));
                                 }
                             }
                         }
@@ -408,8 +415,11 @@ impl SyncService {
                     }
                 }
                 "only_remote" => {
-                    sql.push_str(&format!("-- DROP TABLE: {}\n", diff.table_name));
-                    sql.push_str(&format!("DROP TABLE IF EXISTS {};\n\n", diff.table_name));
+                    sql.push_str(&format!("-- DROP TABLE: {}\n", comment_safe(&diff.table_name)));
+                    sql.push_str(&format!(
+                        "DROP TABLE IF EXISTS {};\n\n",
+                        dialect.quote_ident(&diff.table_name)
+                    ));
                 }
                 "different" => {
                     let table = table_by_name
@@ -427,10 +437,11 @@ impl SyncService {
                                 let col = column_by_name.get(&col_diff.column_name).ok_or_else(|| {
                                     format!("未找到本地列: {}.{}", diff.table_name, col_diff.column_name)
                                 })?;
+                                // 列名/类型可能来自远程同步、Git 拉取或 AI，必须安全渲染（防二阶注入）
                                 let mut def = format!(
                                     "{} {}",
-                                    col_diff.column_name,
-                                    dialect.map_data_type(&col.data_type).to_uppercase()
+                                    dialect.quote_ident(&col_diff.column_name),
+                                    type_str_safe(&dialect.map_data_type(&col.data_type))
                                 );
                                 Self::append_type_suffix(
                                     &mut def,
@@ -456,7 +467,10 @@ impl SyncService {
                                 if dialect.supports_inline_comment() {
                                     if let Some(comment) = &col.comment {
                                         if !comment.is_empty() {
-                                            def.push_str(&format!(" COMMENT '{}'", comment.replace('\'', "''")));
+                                            def.push_str(&format!(
+                                                " COMMENT '{}'",
+                                                dialect.escape_string_literal(comment)
+                                            ));
                                         }
                                     }
                                 }
@@ -474,14 +488,17 @@ impl SyncService {
                                 }
                             }
                             "only_remote" => {
-                                changes.push(format!("  -- DROP COLUMN {} (远程多余列)", col_diff.column_name));
+                                changes.push(format!(
+                                    "  -- DROP COLUMN {} (远程多余列)",
+                                    comment_safe(&col_diff.column_name)
+                                ));
                             }
                             "different" => {
                                 let col = column_by_name.get(&col_diff.column_name).ok_or_else(|| {
                                     format!("未找到本地列: {}.{}", diff.table_name, col_diff.column_name)
                                 })?;
                                 let mapped_type = dialect.map_data_type(&col.data_type);
-                                let mut type_str = mapped_type.to_uppercase();
+                                let mut type_str = type_str_safe(&mapped_type);
                                 Self::append_type_suffix(
                                     &mut type_str,
                                     &col.data_type,
@@ -494,47 +511,48 @@ impl SyncService {
                                 if dialect.uses_alter_column_syntax() {
                                     changes.push(format!(
                                         "  ALTER COLUMN {} TYPE {}",
-                                        col_diff.column_name, type_str
+                                        dialect.quote_ident(&col_diff.column_name),
+                                        type_str
                                     ));
                                     if !col.nullable {
                                         changes.push(format!(
                                             "  ALTER COLUMN {} SET NOT NULL",
-                                            col_diff.column_name
+                                            dialect.quote_ident(&col_diff.column_name)
                                         ));
                                     } else {
                                         changes.push(format!(
                                             "  ALTER COLUMN {} DROP NOT NULL",
-                                            col_diff.column_name
+                                            dialect.quote_ident(&col_diff.column_name)
                                         ));
                                     }
                                     if col.default_null && dialect.should_output_default_null() {
                                         changes.push(format!(
                                             "  ALTER COLUMN {} SET DEFAULT NULL",
-                                            col_diff.column_name
+                                            dialect.quote_ident(&col_diff.column_name)
                                         ));
                                     } else if col.default_null {
                                         // PostgreSQL 等方言中 DEFAULT NULL 等价于无 DEFAULT，改为 DROP DEFAULT
                                         changes.push(format!(
                                             "  ALTER COLUMN {} DROP DEFAULT",
-                                            col_diff.column_name
+                                            dialect.quote_ident(&col_diff.column_name)
                                         ));
                                     } else if let Some(default_value) = &col.default_value {
                                         if !default_value.is_empty() {
                                             changes.push(format!(
                                                 "  ALTER COLUMN {} SET{}",
-                                                col_diff.column_name,
+                                                dialect.quote_ident(&col_diff.column_name),
                                                 dialect.default_value_clause(default_value)
                                             ));
                                         } else {
                                             changes.push(format!(
                                                 "  ALTER COLUMN {} DROP DEFAULT",
-                                                col_diff.column_name
+                                                dialect.quote_ident(&col_diff.column_name)
                                             ));
                                         }
                                     } else {
                                         changes.push(format!(
                                             "  ALTER COLUMN {} DROP DEFAULT",
-                                            col_diff.column_name
+                                            dialect.quote_ident(&col_diff.column_name)
                                         ));
                                     }
                                     if let Some(comment) = &col.comment {
@@ -580,7 +598,7 @@ impl SyncService {
                                             if !comment.is_empty() {
                                                 full_def.push_str(&format!(
                                                     " COMMENT '{}'",
-                                                    comment.replace('\'', "''")
+                                                    dialect.escape_string_literal(comment)
                                                 ));
                                             }
                                         }
@@ -666,11 +684,11 @@ impl SyncService {
                     }
 
                     if !changes.is_empty() || !extra_sql.is_empty() {
-                        sql.push_str(&format!("-- 修改表: {}\n", diff.table_name));
+                        sql.push_str(&format!("-- 修改表: {}\n", comment_safe(&diff.table_name)));
                         if !changes.is_empty() {
                             sql.push_str(&format!(
                                 "ALTER TABLE {}\n{};\n",
-                                diff.table_name,
+                                dialect.quote_ident(&diff.table_name),
                                 changes.join(",\n")
                             ));
                         }

@@ -596,6 +596,8 @@
   "db_conn_password_placeholder": "Enter password",
   "db_conn_database": "Database",
   "db_conn_database_placeholder": "Enter database name",
+  "db_conn_ssl": "Use SSL",
+  "db_conn_ssl_tip": "MySQL/PostgreSQL only, off by default; forces encrypted transport (accepts self-signed certs). Connection fails if the server has TLS disabled",
   "db_conn_test": "Test Connection",
   "db_conn_test_success": "Connection test successful",
   "db_conn_test_fail": "Connection test failed",

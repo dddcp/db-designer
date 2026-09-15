@@ -597,6 +597,8 @@
   "db_conn_password_placeholder": "请输入密码",
   "db_conn_database": "数据库名",
   "db_conn_database_placeholder": "请输入数据库名",
+  "db_conn_ssl": "使用SSL加密",
+  "db_conn_ssl_tip": "仅 MySQL/PostgreSQL 支持且默认关闭；勾选后强制加密传输（兼容自签名证书），服务端未启用 TLS 时将连接失败",
   "db_conn_test": "测试连接",
   "db_conn_test_success": "连接测试成功",
   "db_conn_test_fail": "连接测试失败",

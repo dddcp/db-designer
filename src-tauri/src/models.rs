@@ -100,6 +100,9 @@ pub struct DatabaseConnection {
     pub username: String,
     pub password: String,
     pub database: String,
+    /// 是否启用 SSL 加密传输（默认关闭；仅 MySQL / PostgreSQL 支持）
+    #[serde(default)]
+    pub ssl: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -115,6 +118,8 @@ pub struct CreateDatabaseConnectionRequest {
     pub username: String,
     pub password: String,
     pub database: String,
+    #[serde(default)]
+    pub ssl: bool,
 }
 
 // 更新数据库连接配置的请求结构
@@ -129,6 +134,8 @@ pub struct UpdateDatabaseConnectionRequest {
     pub username: String,
     pub password: String,
     pub database: String,
+    #[serde(default)]
+    pub ssl: bool,
 }
 
 // 元数据结构

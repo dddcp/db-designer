@@ -44,6 +44,93 @@ fn normalize_default_function(v: &str) -> String {
     }
 }
 
+/// 标识符是否属于无需引用的安全字符集（字母/下划线开头，后续为字母/数字/下划线/$）。
+/// 注入载荷必然包含引号、分号、空白或注释符等字符，均落在该字符集之外。
+fn is_safe_ident(ident: &str) -> bool {
+    let mut chars = ident.chars();
+    match chars.next() {
+        Some(first) => {
+            !first.is_ascii_digit()
+                && (first.is_ascii_alphabetic() || first == '_')
+                && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '$'))
+        }
+        None => false,
+    }
+}
+
+/// 注释行安全渲染：去掉名字中的换行符，防止名字截断 `--` 注释并把尾部变成可执行 SQL。
+pub fn comment_safe(name: &str) -> String {
+    name.replace(['\n', '\r'], " ")
+}
+
+/// 类型安全渲染：类型不是可引用的标识符（合法类型含空格和括号），
+/// 因此限定安全字符集——存储的 data_type 若来自远程同步 / Git 拉取 / AI，
+/// 不得重构生成的 DDL；超出安全字符集时回退为 VARCHAR。
+pub fn type_str_safe(mapped_type: &str) -> String {
+    if mapped_type
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ' ' | '(' | ')' | ',' | '.'))
+    {
+        mapped_type.to_uppercase()
+    } else {
+        "VARCHAR".to_string()
+    }
+}
+
+/// 默认值是否为白名单内的安全函数表达式（可安全不加引号输出）。
+/// 仅整串精确匹配；不接受任意前缀——前缀匹配会放行 "nextval('s'), <任意SQL>" 之类的注入。
+/// 允许尾部 ::类型 转换（类型名限定安全字符集，如 current_timestamp::text）。
+fn is_safe_default_function(v: &str) -> bool {
+    let trimmed = v.trim();
+    let base = match trimmed.find("::") {
+        Some(pos) => {
+            let cast = &trimmed[pos + 2..];
+            let cast_ok = !cast.is_empty()
+                && cast
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ' ' | '(' | ')' | ','));
+            if !cast_ok {
+                return false;
+            }
+            &trimmed[..pos]
+        }
+        None => trimmed,
+    };
+    let lower = base.to_lowercase();
+    let bare = [
+        "current_timestamp",
+        "current_date",
+        "current_time",
+        "now()",
+        "uuid_generate_v4()",
+        "gen_random_uuid()",
+    ];
+    if bare.contains(&lower.as_str()) {
+        return true;
+    }
+    // nextval/currval 仅允许单一简单序列名参数；参数内不得出现引号/分号/注释等任意 SQL 文本
+    for prefix in ["nextval(", "currval("] {
+        if let Some(inner) = lower.strip_prefix(prefix).and_then(|r| r.strip_suffix(')')) {
+            let arg = inner.trim();
+            let unquoted = arg.trim_matches('\'');
+            let quoted_len = if arg.starts_with('\'') && arg.ends_with('\'') && arg.len() >= 2 {
+                2
+            } else {
+                0
+            };
+            if unquoted.len() + quoted_len == arg.len()
+                && !unquoted.is_empty()
+                && unquoted
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$'))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 // ─── Trait 1: SQL generation dialect ────────────────────────────────────────
 
 pub trait DatabaseDialect {
@@ -67,33 +154,58 @@ pub trait DatabaseDialect {
     }
 
     // === Default implementations (currently same across databases) ===
+
+    /// 标识符安全引用：设计元数据（表/列/索引/函数名）可能来自远程同步、Git 拉取或 AI 生成，
+    /// 绝不能原样拼进 SQL（二阶 SQL 注入）。安全字符集内的名字保持原样（与历史导出兼容），
+    /// 其余按 ANSI 规则加双引号并转义内嵌引号（MySQL 覆盖为反引号）。
+    fn quote_ident(&self, ident: &str) -> String {
+        if is_safe_ident(ident) {
+            ident.to_string()
+        } else {
+            format!("\"{}\"", ident.replace('"', "\"\""))
+        }
+    }
+
+    /// 字符串字面量内容转义。标准 SQL（PostgreSQL / Oracle）只需单引号加倍；
+    /// MySQL 默认 sql_mode 下反斜杠也是转义字符，由 MysqlDialect 覆盖。
+    fn escape_string_literal(&self, value: &str) -> String {
+        value.replace('\'', "''")
+    }
+
     fn create_table_prefix(&self, table: &str) -> String {
-        format!("CREATE TABLE {} (\n", table)
+        format!("CREATE TABLE {} (\n", self.quote_ident(table))
     }
     fn drop_table_sql(&self, table: &str) -> String {
-        format!("DROP TABLE IF EXISTS {};\n", table)
+        format!("DROP TABLE IF EXISTS {};\n", self.quote_ident(table))
     }
     fn primary_key_clause(&self, columns: &[&str]) -> String {
-        format!("  PRIMARY KEY ({})", columns.join(", "))
+        let cols: Vec<String> = columns.iter().map(|c| self.quote_ident(c)).collect();
+        format!("  PRIMARY KEY ({})", cols.join(", "))
     }
     fn add_column_clause(&self, col_def: &str) -> String {
         format!("  ADD COLUMN {}", col_def)
     }
     fn drop_column_clause(&self, col: &str) -> String {
-        format!("  DROP COLUMN {}", col)
+        format!("  DROP COLUMN {}", self.quote_ident(col))
     }
     fn default_value_clause(&self, value: &str) -> String {
         let v = value.trim();
         if v.eq_ignore_ascii_case("NULL") {
             " DEFAULT NULL".to_string()
         } else if v.starts_with('\'') && v.ends_with('\'') && v.len() >= 2 {
-            // 已经是 SQL 字面量如 '1' —— 直接使用
-            format!(" DEFAULT {}", v)
+            // 已是 SQL 字面量形式 —— 剥掉外层引号后重新转义，
+            // 防止首尾引号之间夹带任意 SQL（如 '1'; DROP TABLE x; --'）
+            let inner = &v[1..v.len() - 1];
+            format!(" DEFAULT '{}'", self.escape_string_literal(inner))
         } else if is_sql_function(v) {
-            // SQL 函数/表达式（如 current_timestamp）—— 规范化后不加引号
-            format!(" DEFAULT {}", normalize_default_function(v))
+            // 仅白名单内的完整函数表达式不加引号；其余一律按字面量转义
+            if is_safe_default_function(v) {
+                format!(" DEFAULT {}", normalize_default_function(v))
+            } else {
+                format!(" DEFAULT '{}'", self.escape_string_literal(v))
+            }
         } else {
-            format!(" DEFAULT '{}'", v.replace('\'', "''"))
+            format!(" DEFAULT '{}'", self.escape_string_literal(v))
         }
     }
     fn not_null_clause(&self) -> &str {
@@ -107,31 +219,33 @@ pub trait DatabaseDialect {
         idx_type: &str,
     ) -> String {
         let unique_str = if idx_type == "unique" { "UNIQUE " } else { "" };
+        let cols: Vec<String> = columns.iter().map(|c| self.quote_ident(c)).collect();
         format!(
             "CREATE {}INDEX {} ON {} ({});\n",
             unique_str,
-            idx_name,
-            table,
-            columns.join(", ")
+            self.quote_ident(idx_name),
+            self.quote_ident(table),
+            cols.join(", ")
         )
     }
     fn insert_sql(&self, table: &str, columns: &[&str], values: &[String]) -> String {
+        let cols: Vec<String> = columns.iter().map(|c| self.quote_ident(c)).collect();
         format!(
             "INSERT INTO {} ({}) VALUES ({});\n",
-            table,
-            columns.join(", "),
+            self.quote_ident(table),
+            cols.join(", "),
             values.join(", ")
         )
     }
     fn delete_sql(&self, table: &str, conditions: &[String]) -> String {
         format!(
             "DELETE FROM {} WHERE {};\n",
-            table,
+            self.quote_ident(table),
             conditions.join(" AND ")
         )
     }
     fn string_literal(&self, value: &str) -> String {
-        format!("'{}'", value.replace('\'', "''"))
+        format!("'{}'", self.escape_string_literal(value))
     }
     fn null_literal(&self) -> &str {
         "NULL"
@@ -164,6 +278,7 @@ pub trait DatabaseConnector {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<(), String>;
     fn get_remote_tables(
         &self,
@@ -172,6 +287,7 @@ pub trait DatabaseConnector {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteTable>, String>;
     fn get_remote_routines(
         &self,
@@ -180,6 +296,7 @@ pub trait DatabaseConnector {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteRoutine>, String>;
 }
 
@@ -202,28 +319,47 @@ impl DatabaseDialect for MysqlDialect {
         true
     }
 
+    // MySQL 默认 sql_mode 下反斜杠是字面量内转义字符，值尾的 `\` 会转义掉拼接的收尾引号，
+    // 因此必须先加倍反斜杠再加倍单引号
+    fn escape_string_literal(&self, value: &str) -> String {
+        value.replace('\\', "\\\\").replace('\'', "''")
+    }
+
+    // MySQL 使用反引号引用非常规标识符
+    fn quote_ident(&self, ident: &str) -> String {
+        if is_safe_ident(ident) {
+            ident.to_string()
+        } else {
+            format!("`{}`", ident.replace('`', "``"))
+        }
+    }
+
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
         format!(
             "ALTER TABLE {} COMMENT = '{}';\n",
-            table,
-            comment.replace('\'', "''")
+            self.quote_ident(table),
+            self.escape_string_literal(comment)
         )
     }
     fn column_comment_sql(&self, _table: &str, _col: &str, _comment: &str) -> String {
         String::new() // MySQL uses inline COMMENT in column definition
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
-        format!("  MODIFY COLUMN {} {}", col, full_type)
+        format!("  MODIFY COLUMN {} {}", self.quote_ident(col), full_type)
     }
     fn drop_index_sql(&self, idx_name: &str, table: &str) -> String {
-        format!("DROP INDEX {} ON {};\n", idx_name, table)
+        format!(
+            "DROP INDEX {} ON {};\n",
+            self.quote_ident(idx_name),
+            self.quote_ident(table)
+        )
     }
     fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
         match routine_type {
-            "function" => format!("DROP FUNCTION IF EXISTS {};\n", name),
-            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", name),
-            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", name),
-            _ => format!("DROP {} IF EXISTS {};\n", routine_type, name),
+            "function" => format!("DROP FUNCTION IF EXISTS {};\n", self.quote_ident(name)),
+            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", self.quote_ident(name)),
+            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", self.quote_ident(name)),
+            _ => format!("DROP {} IF EXISTS {};\n", routine_type, self.quote_ident(name)),
         }
     }
     fn bool_literal(&self, value: bool) -> &str {
@@ -243,13 +379,21 @@ impl DatabaseConnector for MysqlDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<(), String> {
-        let opts = mysql::OptsBuilder::new()
+        let mut opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
+        if ssl {
+            // 用户勾选“使用SSL”：强制 TLS 加密传输（跳过证书校验以兼容自签名证书）。
+            // 服务端未启用 TLS 时明确报错，不再静默明文传输凭据。
+            opts = opts.ssl_opts(Some(
+                mysql::SslOpts::default().with_danger_accept_invalid_certs(true),
+            ));
+        }
         let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let _conn = pool
             .get_conn()
@@ -264,13 +408,20 @@ impl DatabaseConnector for MysqlDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteTable>, String> {
-        let opts = mysql::OptsBuilder::new()
+        let mut opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
+        if ssl {
+            // 用户勾选“使用SSL”：强制 TLS 加密传输（跳过证书校验以兼容自签名证书）。
+            opts = opts.ssl_opts(Some(
+                mysql::SslOpts::default().with_danger_accept_invalid_certs(true),
+            ));
+        }
         let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let mut conn = pool
             .get_conn()
@@ -278,17 +429,18 @@ impl DatabaseConnector for MysqlDialect {
 
         use mysql::prelude::*;
 
-        let tables: Vec<(String, Option<String>)> = conn.query(
-            format!("SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{}' AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME", db)
+        let tables: Vec<(String, Option<String>)> = conn.exec(
+            "SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME",
+            (db,),
         ).map_err(|e| format!("query_tables_failed: {}", e))?;
 
         let mut result = Vec::new();
         for (table_name, table_comment) in &tables {
-            let columns: Vec<(String, String, Option<i64>, String, String, String, Option<String>, Option<String>)> = conn.query(
-                format!(
-                    "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_KEY, EXTRA, COLUMN_DEFAULT, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' ORDER BY ORDINAL_POSITION",
-                    db, table_name
-                )
+            // TABLE_NAME 来自服务端可控元数据（information_schema.TABLES），可能合法地
+            // 包含引号/分号/#，绝不能拼进 SQL 文本（二阶注入），必须绑定参数
+            let columns: Vec<(String, String, Option<i64>, String, String, String, Option<String>, Option<String>)> = conn.exec(
+                "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_KEY, EXTRA, COLUMN_DEFAULT, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
+                (db, table_name.as_str()),
             ).map_err(|e| format!("query_columns_failed: {}", e))?;
 
             let remote_cols: Vec<RemoteColumn> = columns
@@ -332,11 +484,9 @@ impl DatabaseConnector for MysqlDialect {
                 )
                 .collect();
 
-            let idx_rows: Vec<(String, i32, String, i64, String)> = conn.query(
-                format!(
-                    "SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX, INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' AND INDEX_NAME != 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
-                    db, table_name
-                )
+            let idx_rows: Vec<(String, i32, String, i64, String)> = conn.exec(
+                "SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX, INDEX_TYPE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME != 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+                (db, table_name.as_str()),
             ).map_err(|e| format!("query_indexes_failed: {}", e))?;
 
             let mut idx_map: HashMap<String, (bool, String, Vec<String>)> = HashMap::new();
@@ -387,13 +537,20 @@ impl DatabaseConnector for MysqlDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteRoutine>, String> {
-        let opts = mysql::OptsBuilder::new()
+        let mut opts = mysql::OptsBuilder::new()
             .ip_or_hostname(Some(host))
             .tcp_port(port as u16)
             .user(Some(user))
             .pass(Some(pass))
             .db_name(Some(db));
+        if ssl {
+            // 用户勾选“使用SSL”：强制 TLS 加密传输（跳过证书校验以兼容自签名证书）。
+            opts = opts.ssl_opts(Some(
+                mysql::SslOpts::default().with_danger_accept_invalid_certs(true),
+            ));
+        }
         let pool = mysql::Pool::new(opts).map_err(|e| format!("mysql_connection_failed: {}", e))?;
         let mut conn = pool
             .get_conn()
@@ -404,11 +561,9 @@ impl DatabaseConnector for MysqlDialect {
         let mut routines = Vec::new();
 
         // 获取函数和存储过程
-        let routine_rows: Vec<(String, String)> = conn.query(
-            format!(
-                "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '{}' ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
-                db
-            )
+        let routine_rows: Vec<(String, String)> = conn.exec(
+            "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = ? ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
+            (db,),
         ).map_err(|e| format!("query_routines_failed: {}", e))?;
 
         for (name, routine_type) in &routine_rows {
@@ -417,10 +572,13 @@ impl DatabaseConnector for MysqlDialect {
             } else {
                 "procedure"
             };
+            // ROUTINE_NAME 是服务端可控元数据，可能合法地包含反引号（创建时以双反引号存储），
+            // 必须加倍转义，否则会跳出标识符引号注入 SQL（二阶注入）
+            let safe_name = name.replace('`', "``");
             let show_sql = if rtype == "function" {
-                format!("SHOW CREATE FUNCTION `{}`", name)
+                format!("SHOW CREATE FUNCTION `{}`", safe_name)
             } else {
-                format!("SHOW CREATE PROCEDURE `{}`", name)
+                format!("SHOW CREATE PROCEDURE `{}`", safe_name)
             };
             // SHOW CREATE FUNCTION 返回的列: Function, sql_mode, Create Function, ...
             // SHOW CREATE PROCEDURE 返回的列: Procedure, sql_mode, Create Procedure, ...
@@ -439,16 +597,18 @@ impl DatabaseConnector for MysqlDialect {
         }
 
         // 获取触发器
-        let trigger_rows: Vec<(String,)> = conn.query(
-            format!(
-                "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '{}' ORDER BY TRIGGER_NAME",
-                db
-            )
+        let trigger_rows: Vec<(String,)> = conn.exec(
+            "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = ? ORDER BY TRIGGER_NAME",
+            (db,),
         ).map_err(|e| format!("query_triggers_failed: {}", e))?;
 
         for (name,) in &trigger_rows {
             let body: Option<String> = conn
-                .query_first(format!("SHOW CREATE TRIGGER `{}`", name))
+                .query_first(format!(
+                    // 同上：触发器名中的反引号必须加倍
+                    "SHOW CREATE TRIGGER `{}`",
+                    name.replace('`', "``")
+                ))
                 .map_err(|e| format!("get_trigger_{}_definition_failed: {}", name, e))?
                 .map(|row: (String, String, String, String, String, String, String)| row.2);
 
@@ -491,30 +651,30 @@ impl DatabaseDialect for PostgresDialect {
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
         format!(
             "COMMENT ON TABLE {} IS '{}';\n",
-            table,
+            self.quote_ident(table),
             comment.replace('\'', "''")
         )
     }
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String {
         format!(
             "COMMENT ON COLUMN {}.{} IS '{}';\n",
-            table,
-            col,
+            self.quote_ident(table),
+            self.quote_ident(col),
             comment.replace('\'', "''")
         )
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
-        format!("  ALTER COLUMN {} TYPE {}", col, full_type)
+        format!("  ALTER COLUMN {} TYPE {}", self.quote_ident(col), full_type)
     }
     fn drop_index_sql(&self, idx_name: &str, _table: &str) -> String {
-        format!("DROP INDEX {};\n", idx_name)
+        format!("DROP INDEX {};\n", self.quote_ident(idx_name))
     }
     fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
         match routine_type {
-            "function" => format!("DROP FUNCTION IF EXISTS {};\n", name),
-            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", name),
-            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", name),
-            _ => format!("DROP {} IF EXISTS {};\n", routine_type, name),
+            "function" => format!("DROP FUNCTION IF EXISTS {};\n", self.quote_ident(name)),
+            "procedure" => format!("DROP PROCEDURE IF EXISTS {};\n", self.quote_ident(name)),
+            "trigger" => format!("DROP TRIGGER IF EXISTS {};\n", self.quote_ident(name)),
+            _ => format!("DROP {} IF EXISTS {};\n", routine_type, self.quote_ident(name)),
         }
     }
     fn bool_literal(&self, value: bool) -> &str {
@@ -599,18 +759,26 @@ impl DatabaseConnector for PostgresDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<(), String> {
+        // TLS：接受自签名证书以兼容常见自建库；用户勾选“使用SSL”时强制加密，
+        // 服务端拒绝 SSL 时直接报错，防止静默降级为明文传输凭据
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Config::new()
+        let mut config = postgres::Config::new();
+        config
             .host(host)
             .port(port as u16)
             .user(user)
             .password(pass)
-            .dbname(db)
+            .dbname(db);
+        if ssl {
+            config.ssl_mode(postgres::config::SslMode::Require);
+        }
+        let mut client = config
             .connect(connector)
             .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
         client
@@ -626,18 +794,25 @@ impl DatabaseConnector for PostgresDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteTable>, String> {
+        // 同 test_connection：勾选“使用SSL”时强制加密，防止静默降级为明文
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Config::new()
+        let mut config = postgres::Config::new();
+        config
             .host(host)
             .port(port as u16)
             .user(user)
             .password(pass)
-            .dbname(db)
+            .dbname(db);
+        if ssl {
+            config.ssl_mode(postgres::config::SslMode::Require);
+        }
+        let mut client = config
             .connect(connector)
             .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
 
@@ -734,18 +909,25 @@ impl DatabaseConnector for PostgresDialect {
         user: &str,
         pass: &str,
         db: &str,
+        ssl: bool,
     ) -> Result<Vec<RemoteRoutine>, String> {
+        // 同 test_connection：勾选“使用SSL”时强制加密，防止静默降级为明文
         let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|e| format!("tls_error: {}", e))?;
         let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
-        let mut client = postgres::Config::new()
+        let mut config = postgres::Config::new();
+        config
             .host(host)
             .port(port as u16)
             .user(user)
             .password(pass)
-            .dbname(db)
+            .dbname(db);
+        if ssl {
+            config.ssl_mode(postgres::config::SslMode::Require);
+        }
+        let mut client = config
             .connect(connector)
             .map_err(|e| format!("postgresql_connection_failed: {}", e))?;
 
@@ -826,30 +1008,30 @@ impl DatabaseDialect for OracleDialect {
     fn table_comment_sql(&self, table: &str, comment: &str) -> String {
         format!(
             "COMMENT ON TABLE {} IS '{}';\n",
-            table,
+            self.quote_ident(table),
             comment.replace('\'', "''")
         )
     }
     fn column_comment_sql(&self, table: &str, col: &str, comment: &str) -> String {
         format!(
             "COMMENT ON COLUMN {}.{} IS '{}';\n",
-            table,
-            col,
+            self.quote_ident(table),
+            self.quote_ident(col),
             comment.replace('\'', "''")
         )
     }
     fn modify_column_clause(&self, col: &str, full_type: &str) -> String {
-        format!("  MODIFY {} {}", col, full_type)
+        format!("  MODIFY {} {}", self.quote_ident(col), full_type)
     }
     fn drop_index_sql(&self, idx_name: &str, _table: &str) -> String {
-        format!("DROP INDEX {};\n", idx_name)
+        format!("DROP INDEX {};\n", self.quote_ident(idx_name))
     }
     fn drop_routine_sql(&self, name: &str, routine_type: &str) -> String {
         match routine_type {
-            "function" => format!("DROP FUNCTION {};\n", name),
-            "procedure" => format!("DROP PROCEDURE {};\n", name),
-            "trigger" => format!("DROP TRIGGER {};\n", name),
-            _ => format!("DROP {} {};\n", routine_type.to_uppercase(), name),
+            "function" => format!("DROP FUNCTION {};\n", self.quote_ident(name)),
+            "procedure" => format!("DROP PROCEDURE {};\n", self.quote_ident(name)),
+            "trigger" => format!("DROP TRIGGER {};\n", self.quote_ident(name)),
+            _ => format!("DROP {} {};\n", routine_type.to_uppercase(), self.quote_ident(name)),
         }
     }
     fn bool_literal(&self, value: bool) -> &str {
@@ -906,7 +1088,7 @@ impl DatabaseDialect for OracleDialect {
     }
 
     fn drop_table_sql(&self, table: &str) -> String {
-        format!("DROP TABLE {};\n", table)
+        format!("DROP TABLE {};\n", self.quote_ident(table))
     }
 
     fn add_column_clause(&self, col_def: &str) -> String {
@@ -914,7 +1096,7 @@ impl DatabaseDialect for OracleDialect {
     }
 
     fn drop_column_clause(&self, col: &str) -> String {
-        format!("  DROP COLUMN {}", col)
+        format!("  DROP COLUMN {}", self.quote_ident(col))
     }
 }
 
@@ -926,6 +1108,7 @@ impl DatabaseConnector for OracleDialect {
         user: &str,
         pass: &str,
         db: &str,
+        _ssl: bool,
     ) -> Result<(), String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
@@ -942,6 +1125,7 @@ impl DatabaseConnector for OracleDialect {
         user: &str,
         pass: &str,
         db: &str,
+        _ssl: bool,
     ) -> Result<Vec<RemoteTable>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
@@ -1149,6 +1333,7 @@ impl DatabaseConnector for OracleDialect {
         user: &str,
         pass: &str,
         db: &str,
+        _ssl: bool,
     ) -> Result<Vec<RemoteRoutine>, String> {
         let conn_str = format!("//{}:{}/{}", host, port, db);
         let conn = oracle::Connection::connect(user, pass, conn_str)
