@@ -17,6 +17,8 @@
 - SQL 生成全面防二阶注入：表 / 列 / 索引 / 例程名等标识符统一安全渲染（常规名保持原样与历史导出兼容，含引号、分号、空白等危险字符时按方言加引号转义），注释位置剥离换行防注释截断，类型限定安全字符集，列默认值改白名单精确匹配（支持 `now()`、`nextval('seq')`、`current_timestamp::text` 等常见形式，其余按字面量转义），MySQL 字符串字面量补齐反斜杠转义；覆盖 SQL 导出、升级脚本、同步脚本全部生成链路
 - MySQL 结构内省查询参数化：`information_schema` 后续查询的表名改为 `?` 绑定（与 PostgreSQL / Oracle 对齐），修复服务端可控表名可注入堆叠语句的二阶 SQL 注入；`SHOW CREATE` 例程 / 触发器名反引号加倍转义
 - Unix 侧存储权限加固：数据目录与数据库文件设为 `0700`/`0600`，`settings.json` 同样仅限属主读写（仅 Unix 生效，Windows 无影响）
+- 升级 `openssl 0.10.75 → 0.10.81`（同步 `openssl-sys 0.9.111 → 0.9.117`），修复 CVE-2026-41678（高危）：rust-openssl `aes::unwrap_key()` 缓冲区大小检查逻辑写反，传入较小输出缓冲区时可越界写入导致内存损坏；openssl 由 `git2` 的 `vendored-openssl` 特性与 `native-tls` 引入，影响 macOS / Linux 构建链路，升级后 `cargo check` 验证通过
+- 升级 `react-router 7.9.4 → 7.18.3`（`react-router-dom ^7.9.4 → ^7.13.2`），修复 CVE-2026-33245（高危）：React Router RSC（React Server Components）redirect 处理的客户端 XSS，影响 7.7.0~7.13.1；本应用为 Tauri 桌面端纯客户端路由，未使用 RSC API，实际风险很小，升级彻底移除漏洞代码路径，`tsc --noEmit` 验证通过
 
 ### 新增
 
