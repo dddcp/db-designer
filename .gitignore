@@ -31,3 +31,7 @@ src-tauri/target/*
 .codegraph/
 .mcp.json
 .zcode/
+# 本地 Claude 配置（不提交）
+CLAUDE.local.md
+# 本地 agent 环境知识（不提交）
+AGENTS.local.md
