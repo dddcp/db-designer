@@ -13,6 +13,7 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   { id: 'openai', i18nKey: 'ai_provider_openai', defaultBaseUrl: 'https://api.openai.com/v1', requiresKey: true, docsUrl: 'https://platform.openai.com/' },
   { id: 'qwen', i18nKey: 'ai_provider_qwen', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', requiresKey: true, docsUrl: 'https://help.aliyun.com/zh/model-studio/developer-reference/use-qwen-by-calling-api' },
   { id: 'qwen-coding', i18nKey: 'ai_provider_qwen_coding', defaultBaseUrl: 'https://coding.dashscope.aliyuncs.com/v1', requiresKey: true, docsUrl: 'https://help.aliyun.com/zh/model-studio/coding-plan' },
+  { id: 'qianwen-token-plan', i18nKey: 'ai_provider_qianwen_token_plan', defaultBaseUrl: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1', requiresKey: true, docsUrl: 'https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-quickstart' },
   { id: 'deepseek', i18nKey: 'ai_provider_deepseek', defaultBaseUrl: 'https://api.deepseek.com/v1', requiresKey: true, docsUrl: 'https://platform.deepseek.com/' },
   { id: 'kimi', i18nKey: 'ai_provider_kimi', defaultBaseUrl: 'https://api.moonshot.cn/v1', requiresKey: true, docsUrl: 'https://platform.moonshot.cn/' },
   { id: 'kimi-coding', i18nKey: 'ai_provider_kimi_coding', defaultBaseUrl: 'https://api.kimi.com/coding/v1', requiresKey: true, docsUrl: 'https://www.kimi.com/code/docs/' },

@@ -557,6 +557,7 @@
   "ai_provider_openai": "OpenAI",
   "ai_provider_qwen": "Qwen",
   "ai_provider_qwen_coding": "Qwen Coding Plan",
+  "ai_provider_qianwen_token_plan": "Qianwen Token Plan",
   "ai_provider_deepseek": "DeepSeek",
   "ai_provider_kimi": "Moonshot Kimi",
   "ai_provider_kimi_coding": "Kimi For Coding",

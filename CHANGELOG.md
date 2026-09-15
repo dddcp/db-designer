@@ -4,6 +4,14 @@
 
 ---
 
+## [未发布]
+
+### 新增
+
+- AI 设置页新增千问 Token Plan 供应商预设（阿里千问 AI 平台编程套餐，与百炼 Qwen 编程套餐为不同平台），自动填入 OpenAI 兼容端点 `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，附带开通文档链接；套餐 Key 以 `sk-sp-` 开头，与平台按量 Key 不通用
+
+---
+
 ## [0.6.4] - 2026-09-15
 
 ### 新增

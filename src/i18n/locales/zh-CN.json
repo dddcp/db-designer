@@ -558,6 +558,7 @@
   "ai_provider_openai": "OpenAI",
   "ai_provider_qwen": "通义千问",
   "ai_provider_qwen_coding": "Qwen 编程套餐",
+  "ai_provider_qianwen_token_plan": "千问 Token Plan",
   "ai_provider_deepseek": "DeepSeek",
   "ai_provider_kimi": "月之暗面 Kimi",
   "ai_provider_kimi_coding": "Kimi For Coding",
