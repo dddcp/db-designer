@@ -4,6 +4,19 @@
 
 ---
 
+## [0.6.4] - 2026-09-15
+
+### 新增
+
+- AI 设置页新增各厂商编程套餐（Coding Plan）供应商预设：Qwen 编程套餐（百炼）、Kimi For Coding、智谱 GLM Coding、智谱 GLM Coding 国际版（Z.ai）、MiniMax 编程套餐，选中后自动填入各套餐专用 base URL 并附带开通文档链接；编程套餐的 API Key 与按量计费 Key 不互通，需使用对应专用端点
+
+### 优化
+
+- OpenCode Go 预设 base URL 规范化为官方格式 `https://opencode.ai/zen/go/v1`（后端自动追加 `/chat/completions`，同时支持「获取模型」拉取模型列表），文档链接改为 Go 计划专属页
+- AI 配置页提示文案修正为「兼容 OpenAI Chat Completions 协议的 API」：应用实际仅支持 Chat Completions 协议，不支持 OpenAI Responses API（`/v1/responses`），原「兼容所有 OpenAI 格式」表述不准确
+
+---
+
 ## [0.6.3] - 2026-08-11
 
 ### 重构
