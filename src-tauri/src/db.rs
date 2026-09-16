@@ -2,16 +2,48 @@ use rusqlite::{Connection, Result as SqlResult};
 use std::env;
 use std::path::PathBuf;
 
-/// 获取应用安装目录下的 data 文件夹路径
+/// 获取应用数据目录
+/// 默认使用系统用户数据目录（Windows: %APPDATA%\db-designer），
+/// 保证普通用户无需管理员权限即可读写（安装目录 Program Files 普通用户不可写）。
 pub fn get_data_dir() -> PathBuf {
-    let exe_path = std::env::current_exe().expect("无法获取可执行文件路径");
-    let install_dir = exe_path.parent().expect("无法获取安装目录");
-    install_dir.join("data")
+    let data_dir = dirs::data_dir()
+        .expect("无法获取用户数据目录")
+        .join("db-designer");
+
+    // 一次性迁移：旧版本数据存放在安装目录 data 下，若新目录不存在且旧目录存在则整体复制
+    if !data_dir.exists() {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(install_dir) = exe_path.parent() {
+                let old_dir = install_dir.join("data");
+                if old_dir.is_dir() {
+                    // 尽力而为：旧目录可能无权限（Program Files），失败不阻断启动
+                    let _ = copy_dir_recursive(&old_dir, &data_dir);
+                }
+            }
+        }
+    }
+
+    data_dir
+}
+
+/// 递归复制目录（用于旧数据目录迁移）
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let dest_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            std::fs::copy(entry.path(), dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 /// 获取数据库文件路径
 /// 优先使用环境变量 DB_DESIGNER_DATA_PATH
-/// 默认使用应用安装目录下的 data/db_designer.db
+/// 默认使用用户数据目录下的 db_designer.db（见 get_data_dir）
 pub fn get_database_path() -> String {
     if let Ok(custom_path) = env::var("DB_DESIGNER_DATA_PATH") {
         let custom_path = PathBuf::from(custom_path);

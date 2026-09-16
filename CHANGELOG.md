@@ -4,6 +4,14 @@
 
 ---
 
+## [0.6.6] - 2026-09-16
+
+### 修复
+
+- 修复普通用户（非管理员）运行时报权限错误、无法写 SQLite / 初始化 Git / 保存设置的问题：数据目录由「应用安装目录下的 `data`」改为系统用户数据目录（Windows 为 `%APPDATA%\db-designer`，macOS 为 `~/Library/Application Support/db-designer`，Linux 为 `~/.local/share/db-designer`），不再要求对 `Program Files` 的写权限；首次启动时若旧安装目录下存在历史数据会自动整体迁移至新目录（尽力而为，失败不阻断启动）；`DB_DESIGNER_DATA_PATH` 环境变量覆盖方式保持不变。注意：迁移后旧安装目录下的 `data` 文件夹不会被自动删除，其中可能存有数据库连接密码等敏感信息，建议卸载旧版后手动清理
+
+---
+
 ## [0.6.5] - 2026-09-15
 
 ### 安全
