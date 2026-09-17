@@ -25,9 +25,10 @@ import type { TableDef } from '../../types';
 
 interface DatabaseCodeTabProps {
   selectedTable: TableDef | null;
+  isActive?: boolean;
 }
 
-const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
+const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable, isActive }) => {
   const { t } = useTranslation();
   const [sqlCode, setSqlCode] = useState('');
   const [databaseType, setDatabaseType] = useState('mysql');
@@ -37,13 +38,25 @@ const DatabaseCodeTab: React.FC<DatabaseCodeTabProps> = ({ selectedTable }) => {
     invoke<DatabaseTypeOption[]>('get_supported_database_types').then(setDbTypes);
   }, []);
 
+  // 只依赖表 id 而非整个 selectedTable 对象：编辑字段时每击键都会生成新的
+  // selectedTable 引用，若依赖整个对象，本 Tab 挂载期间每击键都会触发一次
+  // export_table_sql IPC；而 SQL 本就由后端按已保存的结构生成，与未保存的编辑无关。
   useEffect(() => {
     if (selectedTable) {
       generateSQL();
     } else {
       setSqlCode('');
     }
-  }, [selectedTable, databaseType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTable?.id, databaseType]);
+
+  // 每次切到「SQL」tab 时强制重新生成，确保展示的是保存后的最新结构
+  useEffect(() => {
+    if (isActive && selectedTable) {
+      generateSQL();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   const generateSQL = async () => {
     if (!selectedTable) return;

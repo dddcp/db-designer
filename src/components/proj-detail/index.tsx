@@ -33,7 +33,7 @@ import {
   Tooltip,
   Typography
 } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../store/theme-context';
@@ -114,6 +114,90 @@ const DraggableRow: React.FC<any> = (props) => {
   );
 };
 
+interface TableListItemProps {
+  table: TableDef;
+  isSelected: boolean;
+  colorPrimaryBg: string;
+  colorPrimaryBorder: string;
+  confirmTitle: string;
+  okText: string;
+  cancelText: string;
+  onSelect: (table: TableDef) => void;
+  onEdit: (table: TableDef) => void;
+  onDelete: (tableId: string) => void;
+}
+
+/**
+ * 侧栏表列表项（memo）。编辑字段时每击键 tables 数组都会得到新引用，
+ * 但未修改的表对象引用保持不变，memo 后这些项可跳过重渲染，
+ * 避免大项目（数百张表）下每次击键都重渲整个列表。
+ */
+const TableListItem: React.FC<TableListItemProps> = React.memo(({
+  table,
+  isSelected,
+  colorPrimaryBg,
+  colorPrimaryBorder,
+  confirmTitle,
+  okText,
+  cancelText,
+  onSelect,
+  onEdit,
+  onDelete,
+}) => (
+  <List.Item
+    className={styles.tableListItem}
+    style={{
+      cursor: 'pointer',
+      background: isSelected ? colorPrimaryBg : 'transparent',
+      padding: '8px 12px',
+      borderRadius: 6,
+      border: isSelected ? `1px solid ${colorPrimaryBorder}` : '1px solid transparent'
+    }}
+    onClick={() => onSelect(table)}
+    actions={[
+      <Button
+        type="text"
+        icon={<EditOutlined />}
+        size="small"
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit(table);
+        }}
+      />,
+      <Popconfirm
+        title={confirmTitle}
+        okText={okText}
+        cancelText={cancelText}
+        onConfirm={(e) => {
+          e?.stopPropagation();
+          onDelete(table.id);
+        }}
+      >
+        <Button
+          type="text"
+          danger
+          icon={<DeleteOutlined />}
+          size="small"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </Popconfirm>
+    ]}
+  >
+    <List.Item.Meta
+      title={
+        <div style={{ minWidth: 0 }}>
+          <Text strong ellipsis={{ tooltip: table.name }} style={{ display: 'block' }}>{table.name}</Text>
+          {table.displayName && (
+            <Text type="secondary" ellipsis={{ tooltip: table.displayName }} style={{ display: 'block', fontSize: 12 }}>
+              {table.displayName}
+            </Text>
+          )}
+        </div>
+      }
+    />
+  </List.Item>
+));
+
 /**
  * 项目详情页面组件 - 表设计功能
  */
@@ -149,6 +233,15 @@ const ProjectDetail: React.FC = () => {
   // Header KPI 派生：表数 / 字段数（零后端调用）
   const totalFields = tables.reduce((sum, t) => sum + t.columns.length, 0);
 
+  // 侧边栏按表名/中文名过滤；useMemo 保持引用稳定，配合 memo 化的 TableListItem
+  const filteredTables = useMemo(() => {
+    if (!tableSearchKeyword) return tables;
+    const kw = tableSearchKeyword.toLowerCase();
+    return tables.filter(table =>
+      table.name.toLowerCase().includes(kw) || table.displayName.toLowerCase().includes(kw)
+    );
+  }, [tables, tableSearchKeyword]);
+
   // 加载项目详情
   useEffect(() => {
     if (id) {
@@ -164,9 +257,9 @@ const ProjectDetail: React.FC = () => {
   }, [projectView]);
 
   /**
-   * 显示通知
+   * 显示通知（useCallback 保持引用稳定，供 memo 化子组件的回调依赖使用）
    */
-  const showNotification = (type: 'success' | 'error' | 'warning' | 'info', msg: string, description?: string) => {
+  const showNotification = useCallback((type: 'success' | 'error' | 'warning' | 'info', msg: string, description?: string) => {
     const fullMessage = description ? `${msg}\n${description}` : msg;
 
     switch (type) {
@@ -183,7 +276,7 @@ const ProjectDetail: React.FC = () => {
         message.info(fullMessage);
         break;
     }
-  };
+  }, []);
 
   /**
    * 从后端加载表列表（静默，不影响 loading 状态）
@@ -268,33 +361,31 @@ const ProjectDetail: React.FC = () => {
   };
 
   /**
-   * 编辑表
+   * 编辑表（useCallback 保持引用稳定，避免击穿 TableListItem 的 memo）
    */
-  const handleEditTable = (table: TableDef) => {
+  const handleEditTable = useCallback((table: TableDef) => {
     setEditingTable(table);
     tableForm.setFieldsValue({
       name: table.name,
       displayName: table.displayName
     });
     setIsTableModalVisible(true);
-  };
+  }, [tableForm]);
 
   /**
-   * 删除表
+   * 删除表（useCallback + 函数式 setState，保持引用稳定）
    */
-  const handleDeleteTable = async (tableId: string) => {
+  const handleDeleteTable = useCallback(async (tableId: string) => {
     try {
       await invoke('delete_table', { tableId });
-      setTables(tables.filter(table => table.id !== tableId));
-      if (selectedTable?.id === tableId) {
-        setSelectedTable(null);
-      }
+      setTables(prev => prev.filter(table => table.id !== tableId));
+      setSelectedTable(prev => (prev?.id === tableId ? null : prev));
       showNotification('success', t('table_delete_success'));
     } catch (error) {
       console.error('Failed to delete table:', error);
       showNotification('error', `${t('table_delete_fail')}: ${error}`);
     }
-  };
+  }, [t, showNotification]);
 
   /**
    * 保存表
@@ -499,6 +590,16 @@ const ProjectDetail: React.FC = () => {
       },
     })
   );
+
+  // 通过 ref 向 useMemo 缓存的列定义提供最新 handler：
+  // 若直接把 handleSaveColumn/handleDeleteColumn 放入 useMemo 依赖，它们每次渲染都是新闭包，
+  // 缓存会被击穿；用 ref 后列定义引用稳定，AntD Table 不再因 columns 变化而整表重渲。
+  const handleSaveColumnRef = useRef(handleSaveColumn);
+  const handleDeleteColumnRef = useRef(handleDeleteColumn);
+  useEffect(() => {
+    handleSaveColumnRef.current = handleSaveColumn;
+    handleDeleteColumnRef.current = handleDeleteColumn;
+  });
 
   /**
    * 保存表结构
@@ -742,8 +843,8 @@ const ProjectDetail: React.FC = () => {
     message.success(t('ai_modify_applied'));
   };
 
-  // 列定义
-  const columnsColumns = [
+  // 列定义（useMemo 缓存，handler 经 ref 调用，避免每次渲染生成新数组导致 Table 整表重渲）
+  const columnsColumns = useMemo(() => [
     {
       title: t('col_order'),
       dataIndex: 'order',
@@ -758,7 +859,7 @@ const ProjectDetail: React.FC = () => {
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
-          onChange={(e) => handleSaveColumn(record.id, 'name', e.target.value)}
+          onChange={(e) => handleSaveColumnRef.current(record.id, 'name', e.target.value)}
           placeholder={t('col_name_placeholder')}
           size="small"
         />
@@ -771,7 +872,7 @@ const ProjectDetail: React.FC = () => {
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
-          onChange={(e) => handleSaveColumn(record.id, 'displayName', e.target.value)}
+          onChange={(e) => handleSaveColumnRef.current(record.id, 'displayName', e.target.value)}
           placeholder={t('col_display_name_placeholder')}
           size="small"
         />
@@ -789,7 +890,7 @@ const ProjectDetail: React.FC = () => {
         <Space>
           <Select
             value={type}
-            onChange={(value) => handleSaveColumn(record.id, 'type', value)}
+            onChange={(value) => handleSaveColumnRef.current(record.id, 'type', value)}
             size="small"
             style={{ width: 130 }}
             showSearch
@@ -804,7 +905,7 @@ const ProjectDetail: React.FC = () => {
           {showLength && !showScale && (
             <Input
               value={record.length}
-              onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
+              onChange={(e) => handleSaveColumnRef.current(record.id, 'length', parseInt(e.target.value) || undefined)}
               placeholder={t('col_length')}
               size="small"
               style={{ width: 80 }}
@@ -815,7 +916,7 @@ const ProjectDetail: React.FC = () => {
             <>
               <Input
                 value={record.length}
-                onChange={(e) => handleSaveColumn(record.id, 'length', parseInt(e.target.value) || undefined)}
+                onChange={(e) => handleSaveColumnRef.current(record.id, 'length', parseInt(e.target.value) || undefined)}
                 placeholder={t('col_precision')}
                 size="small"
                 style={{ width: 70 }}
@@ -823,7 +924,7 @@ const ProjectDetail: React.FC = () => {
               />
               <Input
                 value={record.scale}
-                onChange={(e) => handleSaveColumn(record.id, 'scale', parseInt(e.target.value) || undefined)}
+                onChange={(e) => handleSaveColumnRef.current(record.id, 'scale', parseInt(e.target.value) || undefined)}
                 placeholder={t('col_scale')}
                 size="small"
                 style={{ width: 70 }}
@@ -843,7 +944,7 @@ const ProjectDetail: React.FC = () => {
           <Checkbox
             checked={record.primaryKey}
             onChange={(e) => {
-              handleSaveColumn(record.id, 'primaryKey', e.target.checked);
+              handleSaveColumnRef.current(record.id, 'primaryKey', e.target.checked);
             }}
           >
             {t('col_primary_key')}
@@ -855,7 +956,7 @@ const ProjectDetail: React.FC = () => {
                 showNotification('warning', t('col_primary_key_cannot_nullable'));
                 return;
               }
-              handleSaveColumn(record.id, 'nullable', !e.target.checked);
+              handleSaveColumnRef.current(record.id, 'nullable', !e.target.checked);
             }}
             disabled={record.primaryKey}
           >
@@ -863,7 +964,7 @@ const ProjectDetail: React.FC = () => {
           </Checkbox>
           <Checkbox
             checked={record.autoIncrement}
-            onChange={(e) => handleSaveColumn(record.id, 'autoIncrement', e.target.checked)}
+            onChange={(e) => handleSaveColumnRef.current(record.id, 'autoIncrement', e.target.checked)}
           >
             {t('col_auto_increment')}
           </Checkbox>
@@ -878,12 +979,12 @@ const ProjectDetail: React.FC = () => {
         <Space size={4}>
           <Checkbox
             checked={record.defaultNull}
-            onChange={(e) => handleSaveColumn(record.id, 'defaultNull', e.target.checked)}
+            onChange={(e) => handleSaveColumnRef.current(record.id, 'defaultNull', e.target.checked)}
             disabled={!record.nullable}
           >NULL</Checkbox>
           <Input
             value={text}
-            onChange={(e) => handleSaveColumn(record.id, 'defaultValue', e.target.value)}
+            onChange={(e) => handleSaveColumnRef.current(record.id, 'defaultValue', e.target.value)}
             placeholder={t('col_default_value_placeholder')}
             size="small"
             disabled={record.defaultNull}
@@ -898,7 +999,7 @@ const ProjectDetail: React.FC = () => {
       render: (text: string, record: ColumnDef) => (
         <Input
           value={text}
-          onChange={(e) => handleSaveColumn(record.id, 'comment', e.target.value)}
+          onChange={(e) => handleSaveColumnRef.current(record.id, 'comment', e.target.value)}
           placeholder={t('col_comment_placeholder')}
           size="small"
         />
@@ -916,14 +1017,21 @@ const ProjectDetail: React.FC = () => {
                 danger
                 size="small"
                 icon={<DeleteOutlined />}
-                onClick={() => handleDeleteColumn(record.id)}
+                onClick={() => handleDeleteColumnRef.current(record.id)}
               />
             </Tooltip>
           </Space>
         </span>
       ),
     },
-  ];
+  ], [t, dataTypes, showNotification]);
+
+  // 字段表格数据源：拷贝后再排序（原 .sort() 会在渲染期间原地修改 state）；
+  // useMemo 保持引用稳定，仅 selectedTable 变化时才重新排序
+  const sortedColumns = useMemo(
+    () => (selectedTable ? [...selectedTable.columns].sort((a, b) => a.order - b.order) : []),
+    [selectedTable]
+  );
 
   if (loading) {
     return (
@@ -1144,64 +1252,21 @@ const ProjectDetail: React.FC = () => {
 
               <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
               <List
-                dataSource={tables.filter(t => {
-                  if (!tableSearchKeyword) return true;
-                  const kw = tableSearchKeyword.toLowerCase();
-                  return t.name.toLowerCase().includes(kw) || t.displayName.toLowerCase().includes(kw);
-                })}
+                dataSource={filteredTables}
                 renderItem={(table) => (
-                  <List.Item
-                    className={styles.tableListItem}
-                    style={{
-                      cursor: 'pointer',
-                      background: selectedTable?.id === table.id ? token.colorPrimaryBg : 'transparent',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      border: selectedTable?.id === table.id ? `1px solid ${token.colorPrimaryBorder}` : '1px solid transparent'
-                    }}
-                    onClick={() => setSelectedTable(table)}
-                    actions={[
-                      <Button
-                        type="text"
-                        icon={<EditOutlined />}
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditTable(table);
-                        }}
-                      />,
-                      <Popconfirm
-                        title={t('table_confirm_delete')}
-                        okText={t('confirm')}
-                        cancelText={t('cancel')}
-                        onConfirm={(e) => {
-                          e?.stopPropagation();
-                          handleDeleteTable(table.id);
-                        }}
-                      >
-                        <Button
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          size="small"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </Popconfirm>
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={
-                        <div style={{ minWidth: 0 }}>
-                          <Text strong ellipsis={{ tooltip: table.name }} style={{ display: 'block' }}>{table.name}</Text>
-                          {table.displayName && (
-                            <Text type="secondary" ellipsis={{ tooltip: table.displayName }} style={{ display: 'block', fontSize: 12 }}>
-                              {table.displayName}
-                            </Text>
-                          )}
-                        </div>
-                      }
-                    />
-                  </List.Item>
+                  <TableListItem
+                    key={table.id}
+                    table={table}
+                    isSelected={selectedTable?.id === table.id}
+                    colorPrimaryBg={token.colorPrimaryBg}
+                    colorPrimaryBorder={token.colorPrimaryBorder}
+                    confirmTitle={t('table_confirm_delete')}
+                    okText={t('confirm')}
+                    cancelText={t('cancel')}
+                    onSelect={setSelectedTable}
+                    onEdit={handleEditTable}
+                    onDelete={handleDeleteTable}
+                  />
                 )}
                 locale={{
                   emptyText: (
@@ -1283,7 +1348,7 @@ const ProjectDetail: React.FC = () => {
                                 strategy={verticalListSortingStrategy}
                               >
                                 <Table
-                                  dataSource={selectedTable.columns.sort((a, b) => a.order - b.order)}
+                                  dataSource={sortedColumns}
                                   columns={columnsColumns}
                                   pagination={false}
                                   rowKey="id"
@@ -1327,7 +1392,7 @@ const ProjectDetail: React.FC = () => {
                             SQL
                           </span>
                         ),
-                        children: <DatabaseCodeTab selectedTable={selectedTable} />
+                        children: <DatabaseCodeTab selectedTable={selectedTable} isActive={activeTab === 'sql'} />
                       }
                     ]}
                   />
