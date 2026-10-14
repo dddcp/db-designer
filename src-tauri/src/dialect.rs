@@ -31,17 +31,23 @@ fn is_sql_function(v: &str) -> bool {
 
 /// 规范化 SQL 函数默认值：current_timestamp() → CURRENT_TIMESTAMP 等。
 /// 某些函数在特定方言中语法不同（如 PostgreSQL 不接受 current_timestamp()）。
+/// 兼容尾部 ::类型 转换（如 current_timestamp()::text），仅规范化函数部分。
 fn normalize_default_function(v: &str) -> String {
-    let lower = v.to_lowercase();
-    if lower == "current_timestamp()" || lower == "current_timestamp" {
+    let (base, cast) = match v.find("::") {
+        Some(pos) => (&v[..pos], &v[pos..]),
+        None => (v, ""),
+    };
+    let lower = base.to_lowercase();
+    let normalized = if lower == "current_timestamp()" || lower == "current_timestamp" {
         "CURRENT_TIMESTAMP".to_string()
     } else if lower == "current_date()" || lower == "current_date" {
         "CURRENT_DATE".to_string()
     } else if lower == "current_time()" || lower == "current_time" {
         "CURRENT_TIME".to_string()
     } else {
-        v.to_string()
-    }
+        base.to_string()
+    };
+    format!("{}{}", normalized, cast)
 }
 
 /// 标识符是否属于无需引用的安全字符集（字母/下划线开头，后续为字母/数字/下划线/$）。
@@ -198,9 +204,13 @@ pub trait DatabaseDialect {
             let inner = &v[1..v.len() - 1];
             format!(" DEFAULT '{}'", self.escape_string_literal(inner))
         } else if is_sql_function(v) {
-            // 仅白名单内的完整函数表达式不加引号；其余一律按字面量转义
-            if is_safe_default_function(v) {
-                format!(" DEFAULT {}", normalize_default_function(v))
+            // 仅白名单内的完整函数表达式不加引号；其余一律按字面量转义。
+            // 必须先规范化（current_timestamp() → CURRENT_TIMESTAMP）再校验：
+            // 带括号形式不在白名单中，若直接校验会被加引号输出成
+            // DEFAULT 'current_timestamp()'，导出的 DDL 无法执行
+            let normalized = normalize_default_function(v);
+            if is_safe_default_function(&normalized) {
+                format!(" DEFAULT {}", normalized)
             } else {
                 format!(" DEFAULT '{}'", self.escape_string_literal(v))
             }
@@ -1416,6 +1426,19 @@ pub fn normalize_routine_body(body: &str, db_type: &str) -> String {
         re.replace(body, "CREATE ").to_string()
     } else {
         body.to_string()
+    }
+}
+
+/// 导出用例程 body：MySQL 客户端按 `;` 分隔语句，函数/过程体内含 `;` 会被截断报错，
+/// 需用 DELIMITER 包裹（DELIMITER $$ ... END$$ DELIMITER ;）。
+/// 仅对 mysql 生效；body 中已包含 DELIMITER（用户自行编写）时原样返回避免重复包裹。
+/// PostgreSQL 使用 dollar-quoting、Oracle 由客户端工具处理，均原样返回。
+pub fn export_routine_body(body: &str, db_type: &str) -> String {
+    let trimmed = body.trim();
+    if db_type == "mysql" && !trimmed.to_uppercase().contains("DELIMITER") {
+        format!("DELIMITER $$\n\n{}$$\n\nDELIMITER ;", trimmed)
+    } else {
+        trimmed.to_string()
     }
 }
 

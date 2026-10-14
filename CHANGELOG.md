@@ -4,6 +4,15 @@
 
 ---
 
+## [1.0.1] - 2026-10-14
+
+### 修复
+
+- 修复导出 SQL 中时间戳默认值执行报错的问题：当列默认值为 `current_timestamp()`（常见于从 MySQL 8 远程同步回来）时，因白名单校验在函数形式规范化之前执行，带括号形式被误判为普通字符串字面量而加上引号，导出成 `DEFAULT 'current_timestamp()'`，执行时报非法默认值错误；现改为先规范化（`current_timestamp()` → `CURRENT_TIMESTAMP`）再校验白名单，导出为 `DEFAULT CURRENT_TIMESTAMP`，覆盖 SQL 导出、升级脚本、同步脚本全部生成链路
+- 修复导出的 MySQL 函数 / 存储过程无法在客户端直接执行的问题：函数体 `BEGIN...END` 内含 `;`，导出 SQL 未包裹 `DELIMITER`，客户端会在第一个 `;` 处截断语句报错；现导出时自动以 `DELIMITER $$ ... END$$ DELIMITER ;` 包裹（body 中已包含 DELIMITER 时不重复包裹；仅 MySQL 生效，PostgreSQL 使用 dollar-quoting、Oracle 由客户端工具处理，均原样输出），覆盖全项目导出、升级脚本、单独导出例程全部路径
+
+---
+
 ## [1.0.0] - 2026-09-20
 
 ### 优化

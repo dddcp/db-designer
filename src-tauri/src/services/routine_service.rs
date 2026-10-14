@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::dialect::{get_connector, normalize_routine_body};
+use crate::dialect::{export_routine_body, get_connector, normalize_routine_body};
 use crate::models::{RemoteRoutine, RoutineDef, RoutineDiff};
 use crate::services::database_connection_service::DatabaseConnectionService;
 use crate::storage::sqlite::routine_store::SqliteRoutineStore;
@@ -167,7 +167,10 @@ impl RoutineService {
             } else {
                 sql.push_str(&format!("-- {} : {}\n", type_label, routine.name));
             }
-            sql.push_str(normalize_routine_body(routine.body.trim(), &database_type).trim());
+            sql.push_str(&export_routine_body(
+                &normalize_routine_body(routine.body.trim(), &database_type),
+                &database_type,
+            ));
             sql.push_str("\n\n");
         }
 

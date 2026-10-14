@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::dialect::{comment_safe, get_dialect, normalize_routine_body, type_str_safe};
+use crate::dialect::{comment_safe, export_routine_body, get_dialect, normalize_routine_body, type_str_safe};
 use crate::models::{ColumnDef, IndexDef, RoutineDef, Snapshot, SnapshotTable, TableDef, Version};
 use crate::services::routine_service::RoutineService;
 use crate::services::setting_service::SettingsService;
@@ -75,7 +75,10 @@ impl VersionService {
                 } else {
                     sql.push_str(&format!("-- {} : {}\n", type_label, comment_safe(&r.name)));
                 }
-                sql.push_str(normalize_routine_body(r.body.trim(), &database_type).trim());
+                sql.push_str(&export_routine_body(
+                    &normalize_routine_body(r.body.trim(), &database_type),
+                    &database_type,
+                ));
                 sql.push_str("\n\n");
             }
         }
@@ -423,7 +426,10 @@ impl VersionService {
                         name
                     ));
                     sql.push_str(&dialect.drop_routine_sql(name, rtype));
-                    sql.push_str(normalize_routine_body(new_routine.body.trim(), &database_type).trim());
+                    sql.push_str(&export_routine_body(
+                        &normalize_routine_body(new_routine.body.trim(), &database_type),
+                        &database_type,
+                    ));
                     sql.push_str("\n\n");
                 }
 
@@ -433,7 +439,10 @@ impl VersionService {
                         self.get_routine_type_label(rtype),
                         name
                     ));
-                    sql.push_str(normalize_routine_body(routine.body.trim(), &database_type).trim());
+                    sql.push_str(&export_routine_body(
+                        &normalize_routine_body(routine.body.trim(), &database_type),
+                        &database_type,
+                    ));
                     sql.push_str("\n\n");
                 }
             }
