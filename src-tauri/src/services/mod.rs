@@ -1,3 +1,4 @@
+pub mod agent_cli_service;
 pub mod database_connection_service;
 pub mod project_service;
 pub mod routine_service;

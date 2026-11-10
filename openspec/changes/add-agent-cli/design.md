@@ -47,15 +47,15 @@ clap derive 风格，v1 子命令：`projects list`、`tables list|get --project
 
 CLI 连接统一 `busy_timeout(5s)`；超时返回退出码 2 + "数据库正忙，请稍后重试"。v1 不切 WAL：WAL 是库级持久设置，会改变桌面端运行时行为，收益（读写并发）对只读 CLI 有限，列为后续可选项。
 
-### D5: skill 注册表——共享模块 + 两类目标
+### D5: skill 注册表——共享模块，预设全部为 SKILL.md 目录型
 
-新增 `src-tauri/src/skill_targets.rs`（被 CLI bin 与 agent_cli_service 共用）：目标 = `{ id, 名称, kind, 路径解析(OS 相关), 模板变体 }`。
+新增 `src-tauri/src/skill_targets.rs`（被 CLI bin 与 agent_cli_service 共用）：目标 = `{ id, 名称, 用户级 skills 根目录(OS 相关) }`，安装动作统一为写 `<skills 根>/db-designer/SKILL.md`。
 
-- `SkillsDir` 型：写 `<skills 根>/db-designer/SKILL.md`（Claude Code：`~/.claude/skills`；pi：`~/.pi/agent/skills`）
-- `InstructionFile` 型：在目标指令文件中维护 `<!-- db-designer:skill v<版本> begin -->` / `end` 标记块，替换时只动自己的块，不碰用户内容
+经调研（核对表见文末附录），8 家预设目标全部原生支持 Agent Skills（SKILL.md）标准目录，原设计的“指令文件追加型”无预设目标使用，经用户确认修订 spec 移除该机制（避免投机代码）；未来若新增指令文件型目标再扩展。
 
-模板内嵌：`include_str!` + 运行时 `replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))`，保证 skill 与 CLI 版本严格一致。桌面端"安装 Skill"直接调 `skill_targets` 共用代码（与 CLI 子命令同一实现），不 spawn 子进程。
-v1 预设：claude-code、pi、opencode、cursor、codex、trae、zcode、kimi；自定义文件夹（`--dir`）始终可用；workbuddy 不在 OpenSpec 注册表，不进 v1。**进入预设前逐目标核实路径与格式**（tasks 专项任务；zcode/kimi 公开资料少，核实不过则从预设剔除，注册表数据驱动，修正不需要改架构）。
+模板内嵌：`include_str!` + 运行时 `replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))`，保证 skill 与 CLI 版本严格一致。桌面端“安装 Skill”直接调 `skill_targets` 共用代码（与 CLI 子命令同一实现），不 spawn 子进程。
+
+v1 预设：claude-code、pi、opencode、cursor、codex、trae、zcode、kimi；自定义文件夹（`--dir`）始终可用；workbuddy 不在 OpenSpec 注册表，不进 v1。
 
 ### D6: 安装目录、分发与校验
 
@@ -85,7 +85,18 @@ v1 预设：claude-code、pi、opencode、cursor、codex、trae、zcode、kimi�
 3. `src/components/setting/setting.tsx`（含 setting-sidebar）：追加 import/case/侧边栏项
 4. `src/i18n/locales/zh-CN.json`、`en-US.json`、`backend-messages.ts`：追加键
 
-备选方案已评估并否决：bin 内用 `#[path]` 重建模块树可消除 lib.rs 可见性改动，但同一批源文件双倍编译且模块声明需手工同步（漂移风险）；`generate_handler` 与 `setting.tsx` 注册在任何方案下均不可省（应用内托管安装依赖 IPC 与设置页挂载）。新增设置键（`cli_proxy_url` 等）走 `setting_service` 既有通用 KV 接口，不需改服务代码。实现收尾（tasks 8.1）时对既有文件 diff 按本清单逐项审查，超出清单的改动必须回退。
+备选方案已评估并否决：bin 内用 `#[path]` 重建模块树可消除 lib.rs 可见性改动，但同一批源文件双倍编译且模块声明需手工同步（漂移风险）；`generate_handler` 与 `setting.tsx` 注册在任何方案下均不可省（应用内托管安装依赖 IPC 与设置页挂载）。新增设置键（`cli_proxy_url` 等）走 `setting_service` 既有通用 KV 接口，不需改服务代码。
+
+**实现后审计（实际触碰清单，超出清单的改动已回退）**：
+
+1. `src-tauri/Cargo.toml`：追加 `[[bin]] dbd` 与依赖（clap/sha2/semver/winreg/windows-sys）
+2. `src-tauri/src/lib.rs`：既有 17 行 `mod`→`pub mod`；追加 `pub mod agent_cli;`、`pub mod skill_targets;`；`generate_handler![]` 追加 6 条命令
+3. `src-tauri/src/services/mod.rs`：追加 1 行 `pub mod agent_cli_service;`（服务注册必要）
+4. `src/components/setting/setting.tsx` + `setting-sidebar.tsx`：追加 import/case/菜单项（含 union type 追加 `'agent'`）
+5. `src/i18n/locales/zh-CN.json`、`en-US.json`：纯追加 34 键（文本插入保序，diff +34/-0）
+6. `.github/workflows/release.yml`：CI 配置追加 dbd 构建与上传步骤（非应用代码）
+
+其余全部为新文件；未修改任何既有函数体。
 
 ### D11: 前端与 i18n
 
@@ -98,9 +109,8 @@ v1 预设：claude-code、pi、opencode、cursor、codex、trae、zcode、kimi�
 - [R3 预设目标路径规范不可靠/已变更（zcode、kimi 资料少）] → 注册表数据驱动；预设准入以逐项核实为前置任务，核不出则剔除，只保留自定义文件夹兜底
 - [R4 WM_SETTINGCHANGE 在部分环境（非 Explorer shell、RDP）不生效] → UI 提示重开终端 + 可复制 PATH 文案，属已知平台限制
 - [R5 长事务下 5s busy_timeout 不够] → 只读命令重试一次；错误信息含"关闭桌面端弹窗或稍后重试"建议
-- [R6 指令文件型目标误伤用户内容] → 标记块只替换自身写入块（D5），首次写入前若发现无标记的既有内容仅追加不修改
-- [R7 lockstep 版本策略下 CLI 无法独立修 bug] → 可临时发补丁 release，app 端 semver 比较允许 CLI 先行小版本；如常出现独立修复诉求再改为独立版本号
-- [R8 reqwest 下载的文件无 quarantine 标记] → macOS Gatekeeper 默认不拦未隔离文件，作为设计依据记录；若未来引入浏览器下载路径需复查签名/公证
+- [R6 lockstep 版本策略下 CLI 无法独立修 bug] → 可临时发补丁 release，app 端 semver 比较允许 CLI 先行小版本；如常出现独立修复诉求再改为独立版本号
+- [R7 reqwest 下载的文件无 quarantine 标记] → macOS Gatekeeper 默认不拦未隔离文件，作为设计依据记录；若未来引入浏览器下载路径需复查签名/公证
 
 ## Migration Plan
 
@@ -110,3 +120,19 @@ v1 预设：claude-code、pi、opencode、cursor、codex、trae、zcode、kimi�
 
 - opencode/zcode/kimi/trae 各自 skills（或等价机制）的准确路径与格式：由 tasks 中的专项调研任务回答，结果只影响 `skill_targets.rs` 的注册表数据，不影响架构与验收标准
 - CLI 实际体积（R1）在首个 CI 构建后确认，超预期再议 core crate 抽取
+
+## 附录：预设目标核对表（任务 1.1 产出）
+
+| 目标 | 类型 | 用户级 skills 根目录 | 依据与备注 |
+|------|------|---------------------|-----------|
+| claude-code | SKILL.md 目录型 | `~/.claude/skills` | Anthropic Agent Skills 规范 |
+| pi | SKILL.md 目录型 | `~/.pi/agent/skills` | 本机实证 |
+| opencode | SKILL.md 目录型 | `~/.config/opencode/skills` | 官方文档；必须用复数 `skills/`（单数目录发现有 bug） |
+| cursor | SKILL.md 目录型 | `~/.cursor/skills` | 官方文档；兼容读取 `~/.agents/skills` |
+| codex | SKILL.md 目录型 | `~/.codex/skills` | openai/codex 官方 docs/skills.md（v1 递归扫描） |
+| zcode | SKILL.md 目录型 | `~/.zcode/skills` | 智谱 ZCode 官方文档；兼容 `~/.agents/skills` |
+| kimi | SKILL.md 目录型 | `~/.kimi-code/skills` | Kimi Code 官方文档；随 `KIMI_CODE_HOME` 迁移 |
+| trae | SKILL.md 目录型 | `~/.trae-cn/skills` | 国内版路径（官方社区多来源一致）；国际版 `~/.trae/skills`、TRAE CLI `~/.traecli/skills`，如需可作未来变体 |
+| custom（兑底） | SKILL.md 目录型 | `--dir` 指定 | 任意文件夹 |
+
+排除：workbuddy（OpenSpec 工具注册表无此项，公开资料无 skills 规范）。8 家 SKILL.md frontmatter 均要求 `name` + `description`。

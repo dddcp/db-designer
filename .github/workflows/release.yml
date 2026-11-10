@@ -15,12 +15,16 @@ jobs:
         include:
           - platform: windows-latest
             args: ''
+            triple: x86_64-pc-windows-msvc
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
+            triple: aarch64-apple-darwin
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
+            triple: x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ''
+            triple: x86_64-unknown-linux-gnu
 
     runs-on: ${{ matrix.platform }}
 
@@ -63,8 +67,34 @@ jobs:
             ### 🚀 自动发布
             查看完整更新说明：[CHANGELOG.md](https://github.com/dddcp/db-designer/blob/main/CHANGELOG.md)
             ---
+            > ℹ️ `dbd-*` 为命令行工具（通常由应用内「设置 → Agent CLI」一键安装），普通用户无需手动下载。
+            ---
             *此版本由 GitHub Actions 自动构建并发布*
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+      # dbd CLI 独立分发：不进安装包，附加到同一 Release（应用内“安装/更新 CLI”从此下载）
+      - name: Build dbd CLI
+        shell: bash
+        run: |
+          cargo build --release --bin dbd --target ${{ matrix.triple }}
+          EXT=""
+          if [[ "${{ matrix.platform }}" == windows* ]]; then EXT=".exe"; fi
+          ASSET="dbd-${{ matrix.triple }}${EXT}"
+          cp "target/${{ matrix.triple }}/release/dbd${EXT}" "$ASSET"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ASSET" > "$ASSET.sha256"
+          else
+            shasum -a 256 "$ASSET" > "$ASSET.sha256"
+          fi
+          ls -la dbd-*
+
+      - name: Upload dbd CLI assets
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dbd-*

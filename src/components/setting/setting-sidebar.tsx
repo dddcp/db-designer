@@ -6,6 +6,7 @@ import {
   DatabaseOutlined,
   RobotOutlined,
   TagsOutlined,
+  ApiOutlined,
 } from '@ant-design/icons';
 import { useTheme } from '../../store/theme-context';
 import styles from './setting.module.css';
@@ -13,7 +14,7 @@ import styles from './setting.module.css';
 /**
  * 设置页 Section 标识
  */
-export type SettingSection = 'basic' | 'git' | 'database' | 'ai' | 'datatype';
+export type SettingSection = 'basic' | 'git' | 'database' | 'ai' | 'datatype' | 'agent';
 
 interface SettingSidebarProps {
   selectedKey: SettingSection;
@@ -57,6 +58,12 @@ const MENU_ITEMS: MenuItemConfig[] = [
     icon: <TagsOutlined />,
     labelKey: 'setting_data_type',
     descKey: 'setting_section_datatype_desc',
+  },
+  {
+    key: 'agent',
+    icon: <ApiOutlined />,
+    labelKey: 'setting_agent',
+    descKey: 'setting_section_agent_desc',
   },
 ];
 

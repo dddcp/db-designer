@@ -10,6 +10,7 @@ import GitTab from './git-tab';
 import DatabaseTab from './database-tab';
 import AiTab from './ai-tab';
 import DataTypeTab from './data-type-tab';
+import AgentCliTab from './agent-cli-tab';
 import BackButton from '../common/BackButton';
 
 const { Header, Content } = Layout;
@@ -52,6 +53,7 @@ const Setting: React.FC = () => {
       case 'database': return <DatabaseTab />;
       case 'ai': return <AiTab />;
       case 'datatype': return <DataTypeTab />;
+      case 'agent': return <AgentCliTab />;
       case 'basic':
       default: return <BasicTab />;
     }

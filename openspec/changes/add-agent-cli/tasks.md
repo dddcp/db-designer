@@ -2,25 +2,25 @@
 
 ## 1. 预设目标调研与 skill 模板
 
-- [ ] 1.1 逐一核实 8 个预设目标（claude-code、pi、opencode、cursor、codex、trae、zcode、kimi）的 skills/等价机制路径与格式：以官方文档为准，参考本机 OpenSpec 适配器目录 `E:\node-data\npm-prefix\node_modules\@fission-ai\openspec\dist\core\command-generation\adapters\`；产出核对表（目标 → kind → 三平台路径 → 模板变体），核实不出规范的从预设剔除。验证：核对表完成并逐目标标注 ✅/❌
-- [ ] 1.2 编写 SKILL.md 模板：命令表、`--json` 用法与退出码、`export sql` 示例、"何时用 dbd 而非直接写 SQL"、`{{VERSION}}` 占位符。验证：模板定稿并含版本占位符
+- [x] 1.1 逐一核实 8 个预设目标（claude-code、pi、opencode、cursor、codex、trae、zcode、kimi）的 skills/等价机制路径与格式：以官方文档为准，参考本机 OpenSpec 适配器目录 `E:\node-data\npm-prefix\node_modules\@fission-ai\openspec\dist\core\command-generation\adapters\`；产出核对表（目标 → kind → 三平台路径 → 模板变体），核实不出规范的从预设剔除。验证：核对表完成并逐目标标注 ✅/❌
+- [x] 1.2 编写 SKILL.md 模板：命令表、`--json` 用法与退出码、`export sql` 示例、"何时用 dbd 而非直接写 SQL"、`{{VERSION}}` 占位符。验证：模板定稿并含版本占位符
 
 ## 2. CLI 骨架
 
-- [ ] 2.1 `Cargo.toml` 增加 `[[bin]] name = "dbd"` 及 `clap`/`sha2`/`semver` 依赖（Windows 目标追加 `winreg`、`windows-sys` 最小 feature）；`lib.rs` 私有模块改 `pub mod`。验证：`cd src-tauri && cargo check` 通过，`cargo build --release --bin dbd` 产出二进制
-- [ ] 2.2 新建 `src/bin/dbd.rs`：clap 命令骨架（projects/tables/versions/export/skill 子命令占位、全局 `--json`、`--version`、退出码约定 0/1/2）。验证：`dbd --version` 与各子命令 `--help` 输出正常
-- [ ] 2.3 新建 `src-tauri/src/skill_targets.rs`：目标结构体与注册表（按 1.1 结果）、SkillsDir/InstructionFile 两类 kind 的三平台路径解析、`{{VERSION}}` 模板渲染、标记块替换逻辑（只动自身标记块）。验证：`cargo check` 通过；临时目录手测写入与重复覆盖幂等
+- [x] 2.1 `Cargo.toml` 增加 `[[bin]] name = "dbd"` 及 `clap`/`sha2`/`semver` 依赖（Windows 目标追加 `winreg`、`windows-sys` 最小 feature）；`lib.rs` 私有模块改 `pub mod`。验证：`cd src-tauri && cargo check` 通过，`cargo build --release --bin dbd` 产出二进制
+- [x] 2.2 新建 `src/bin/dbd.rs`：clap 命令骨架（projects/tables/versions/export/skill 子命令占位、全局 `--json`、`--version`、退出码约定 0/1/2）。验证：`dbd --version` 与各子命令 `--help` 输出正常
+- [x] 2.3 新建 `src-tauri/src/skill_targets.rs`：目标结构体与注册表（按 1.1 结果）、SkillsDir/InstructionFile 两类 kind 的三平台路径解析、`{{VERSION}}` 模板渲染、标记块替换逻辑（只动自身标记块）。验证：`cargo check` 通过；临时目录手测写入与重复覆盖幂等
 
 ## 3. CLI 数据命令（v1 只读面）
 
-- [ ] 3.1 数据定位与空库防御：复用 `get_database_path()`；数据库文件不存在或关键表缺失时报明确中文错误（提示先启动桌面端），不调用 `init_database()`、不创建新库文件。验证：无数据环境运行 `dbd projects list` 输出明确错误且目录未生成新 .db
-- [ ] 3.2 所有连接统一 `busy_timeout(5s)`，超时以退出码 2 输出"数据库正忙"错误。验证：桌面端持续写入期间运行只读命令，观察等待与报错行为，数据完好
-- [ ] 3.3 实现 `projects list`、`tables list|get --project`、`versions list --project` 及 `--json` 输出。验证：与桌面端同库抽查数据一致（项目数、表字段、版本数）
-- [ ] 3.4 实现 `export sql --project --dialect mysql|postgresql|oracle [--out]`，复用 dialect 层生成逻辑。验证：同一项目导出的 SQL 与桌面端"导出 SQL"结果一致
+- [x] 3.1 数据定位与空库防御：复用 `get_database_path()`；数据库文件不存在或关键表缺失时报明确中文错误（提示先启动桌面端），不调用 `init_database()`、不创建新库文件。验证：无数据环境运行 `dbd projects list` 输出明确错误且目录未生成新 .db
+- [x] 3.2 所有连接统一 `busy_timeout(5s)`，超时以退出码 2 输出"数据库正忙"错误。验证：桌面端持续写入期间运行只读命令，观察等待与报错行为，数据完好
+- [x] 3.3 实现 `projects list`、`tables list|get --project`、`versions list --project` 及 `--json` 输出。验证：与桌面端同库抽查数据一致（项目数、表字段、版本数）
+- [x] 3.4 实现 `export sql --project --dialect mysql|postgresql|oracle [--out]`，复用 dialect 层生成逻辑。验证：同一项目导出的 SQL 与桌面端"导出 SQL"结果一致
 
 ## 4. CLI skill 子命令
 
-- [ ] 4.1 实现 `dbd skill install --target <id>|--dir <path>` 与 `dbd skill list`（含各目标安装状态）；未知目标报错并列出全部可选项。验证：安装到自定义目录与本机真实 agent 目录（如 `~/.pi/agent/skills`），重复安装幂等，错误路径返回退出码 1
+- [x] 4.1 实现 `dbd skill install --target <id>|--dir <path>` 与 `dbd skill list`（含各目标安装状态）；未知目标报错并列出全部可选项。验证：安装到自定义目录与本机真实 agent 目录（如 `~/.pi/agent/skills`），重复安装幂等，错误路径返回退出码 1
 
 ## 5. CI 分发资产
 
@@ -36,7 +36,7 @@
 ## 7. 设置页 UI 与 i18n
 
 - [ ] 7.1 新建 `src/components/setting/agent-cli-tab.tsx`（状态卡片、安装/更新/卸载按钮、skill 目标多选、代理/镜像输入、多副本与 skill 落后提示、"重开终端生效"文案）并注册进 `setting.tsx`。验证：`npx tsc --noEmit` 通过；页面手测安装 → 更新 → 卸载全流程
-- [ ] 7.2 i18n `zh-CN.json`/`en-US.json` 新增键 + `backend-messages.ts` 新错误映射。验证：切换两种语言检查无缺键、错误消息正确映射
+- [x] 7.2 i18n `zh-CN.json`/`en-US.json` 新增键 + `backend-messages.ts` 新错误映射。验证：切换两种语言检查无缺键、错误消息正确映射
 
 ## 8. 端到端集成验证
 

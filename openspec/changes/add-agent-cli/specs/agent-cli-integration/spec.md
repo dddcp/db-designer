@@ -55,15 +55,15 @@ CLI 访问与桌面端共享的 SQLite 数据库时，连接 SHALL 设置等待�
 - **THEN** skill 文档被覆盖为当前版本内容，不产生重复或残留文件
 
 ### Requirement: 预设 skill 目标注册表
-CLI SHALL 内置主流 agent 的预设安装目标（至少覆盖 Claude Code、pi、OpenCode、Cursor、Codex、Trae、Zcode、Kimi），每个目标定义类型（skill 目录型 / 指令文件追加型）、路径解析规则与文档模板变体。无法核实规范的目标 MUST NOT 进入预设注册表（可经调研后补充）。目标路径解析 SHALL 支持 Windows/macOS/Linux。
+CLI SHALL 内置主流 agent 的预设安装目标（至少覆盖 Claude Code、pi、OpenCode、Cursor、Codex、Trae、Zcode、Kimi），预设目标均为 skill 目录型（安装 `<skills 根>/db-designer/SKILL.md`），按调研核实的各厂商目录规范解析路径；无法核实规范的目标 MUST NOT 进入预设注册表。目标路径解析 SHALL 支持 Windows/macOS/Linux。
 
 #### Scenario: 安装到 Claude Code 用户级 skills 目录
 - **WHEN** 执行 `dbd skill install --target claude-code`
-- **THEN** skill 文档写入该工具规范的用户级 skills 目录下，目录结构符合其规范
+- **THEN** skill 文档写入 `~/.claude/skills/db-designer/SKILL.md`，frontmatter 符合 Agent Skills 规范（name + description）
 
-#### Scenario: 指令文件型目标的追加与更新
-- **WHEN** 对指令文件追加型目标执行安装，且该文件已有本 CLI 写入的带版本标记的片段
-- **THEN** 旧片段被替换为新版本内容，文件其余部分保持不变
+#### Scenario: 各目标使用各自核实的目录
+- **WHEN** 对 opencode、codex、kimi、trae 等目标执行安装
+- **THEN** skill 分别写入各厂商核实的用户级 skills 目录（如 `~/.config/opencode/skills`、`~/.codex/skills`、`~/.kimi-code/skills`、`~/.trae-cn/skills`）
 
 #### Scenario: 未知目标报错并列出可选项
 - **WHEN** `--target` 指定注册表中不存在的目标

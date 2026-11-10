@@ -1,20 +1,22 @@
-mod db;
-mod models;
-mod project;
-mod table;
-mod setting;
-mod git;
-mod db_connection;
-mod version;
-mod sync;
-mod routine;
-mod ai;
-mod ai_review;
-mod ai_sql;
-mod services;
-mod storage;
+pub mod db;
+pub mod models;
+pub mod project;
+pub mod table;
+pub mod setting;
+pub mod git;
+pub mod db_connection;
+pub mod version;
+pub mod sync;
+pub mod routine;
+pub mod ai;
+pub mod ai_review;
+pub mod ai_sql;
+pub mod agent_cli;
+pub mod services;
+pub mod storage;
 pub mod dialect;
-mod window;
+pub mod window;
+pub mod skill_targets;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -95,6 +97,12 @@ pub fn run() {
             ai::ai_chat_stream,
             ai::ai_fetch_models,
             ai::ai_test_connection,
+            agent_cli::cli_get_status,
+            agent_cli::cli_install,
+            agent_cli::cli_update,
+            agent_cli::cli_uninstall,
+            agent_cli::cli_install_skill,
+            agent_cli::cli_check_copies,
             window::apply_window_theme
         ])
         .run(tauri::generate_context!())
