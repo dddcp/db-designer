@@ -102,10 +102,12 @@ jobs:
           fi
           ls -la dbd-*
 
+      # 用 gh release upload 而非 softprops/action-gh-release：后者更新已存在 release 时会重发
+      # target_commitish，当其指向 commit 的 workflows 与默认分支不一致时被 GitHub 以 403 拒绝
+      # （GITHUB_TOKEN 无 workflow scope，见 softprops/action-gh-release#836）；gh 仅上传资产不碰元数据
       - name: Upload dbd CLI assets
-        uses: softprops/action-gh-release@v2
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: dbd-*
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" dbd-* --clobber --repo "${{ github.repository }}"
