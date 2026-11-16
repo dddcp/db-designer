@@ -4,6 +4,21 @@
 
 ---
 
+## [1.0.2] - 2026-11-16
+
+### 新增
+
+- 新增 `dbd` 命令行工具（Agent CLI）：db-designer 的核心能力（表结构数据、SQL 方言生成、版本快照）开放给 AI coding agent（Claude Code、Cursor、Codex 等）以标准化方式使用。CLI 与桌面端共享同一数据目录、仅提供本地只读命令，绝不创建或修改数据库：`dbd projects list` 列出设计项目、`dbd tables list/get` 查询表结构（含列、索引、外键、初始化数据）、`dbd versions list` 查看历史版本、`dbd export sql --dialect <mysql|postgresql|oracle>` 按方言生成建表 SQL；全局 `--json` 输出便于 agent 解析，退出码约定 0 成功 / 1 业务错误 / 2 数据库正忙（桌面端写入中，最长等待 5 秒）
+- CLI 内嵌 Agent Skill 文档并提供 `dbd skill install` 子命令：支持一键安装 / 更新到预设 agent 目标（Claude Code、pi、OpenCode、Cursor、Codex、ZCode 等，逐家按官方文档核实的用户级 skills 目录）及自定义文件夹；skill 内容内嵌于 CLI 二进制，版本与 CLI 严格一致（单一事实来源），已安装文件带版本标记可检测落后状态
+- 桌面端设置页新增「Agent CLI」区域：展示安装状态与版本、一键安装 / 更新 / 卸载、Windows 用户级 PATH 注册（写入注册表 `HKCU\Environment` 并广播，不使用 `setx`）、skill 安装目标管理；CLI 升级后 skill 落下时会提示更新。安装时自动检测多个 `dbd` 副本冲突，卸载清理 PATH 与 skill 但保留设计数据库
+- 分发机制：GitHub Release 附带多平台（Windows x64、macOS Intel/Apple Silicon、Linux x64）`dbd` 资产与 sha256 校验文件；应用内通过 GitHub Releases API 检测新版本、下载、校验后落盘，普通用户无需手动下载配置
+
+### 修复
+
+- 修复 Linux AppImage 启动报 `.DirIcon is missing` 的问题：Tauri bundler < 2.11.4 构建的 AppImage 中 `.DirIcon` 是指向 CI 构建机绝对路径的符号链接，导致运行时解析失败；升级 `@tauri-apps/cli` 至 2.12.3（包含上游修复 tauri-apps/tauri#15596）
+
+---
+
 ## [1.0.1] - 2026-10-14
 
 ### 修复
