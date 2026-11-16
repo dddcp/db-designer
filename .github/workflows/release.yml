@@ -77,13 +77,24 @@ jobs:
 
       # dbd CLI 独立分发：不进安装包，附加到同一 Release（应用内“安装/更新 CLI”从此下载）
       - name: Build dbd CLI
+        working-directory: src-tauri
         shell: bash
         run: |
-          cargo build --release --bin dbd --target ${{ matrix.triple }}
+          # macOS 交叉编译需显式 --target（与 tauri-action 的 target 目录一致，复用缓存）；
+          # Windows/Linux 与 tauri-action 一样用默认 host triple，直接复用已编译的 target/release，避免全量重编
+          if [[ "${{ matrix.platform }}" == macos* ]]; then
+            cargo build --release --bin dbd --target ${{ matrix.triple }}
+            REL="target/${{ matrix.triple }}/release"
+          else
+            cargo build --release --bin dbd
+            REL="target/release"
+          fi
           EXT=""
           if [[ "${{ matrix.platform }}" == windows* ]]; then EXT=".exe"; fi
           ASSET="dbd-${{ matrix.triple }}${EXT}"
-          cp "target/${{ matrix.triple }}/release/dbd${EXT}" "$ASSET"
+          # 产物复制到仓库根，供下一步 Upload dbd CLI assets（files 相对仓库根）上传
+          cp "$REL/dbd$EXT" "../$ASSET"
+          cd ..
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$ASSET" > "$ASSET.sha256"
           else
