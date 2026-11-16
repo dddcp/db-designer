@@ -4,6 +4,8 @@ version = "1.0.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+# 包内存在多个 bin（桌面应用 + dbd CLI）时，必须显式指定主二进制供 tauri CLI 识别
+default-run = "db-designer"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
