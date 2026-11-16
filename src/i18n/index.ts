@@ -12,7 +12,8 @@ i18n
       'zh-CN': { translation: zhCN },
       'en-US': { translation: enUS },
     },
-    fallbackLng: 'zh-CN',
+    // 非中文环境回退到英文（AppImage 目录收录要求：非中文 locale 默认英文界面）
+    fallbackLng: 'en-US',
     supportedLngs: ['zh-CN', 'en-US'],
     detection: {
       order: ['localStorage', 'navigator'],
