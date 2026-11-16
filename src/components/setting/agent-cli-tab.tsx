@@ -20,7 +20,6 @@ import {
   CloudDownloadOutlined,
   DeleteOutlined,
   ReloadOutlined,
-  SaveOutlined,
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -48,7 +47,7 @@ interface CliStatus {
 }
 
 /**
- * Agent CLI 设置页：dbd 命令行的安装/更新/卸载、skill 部署、网络设置
+ * Agent CLI 设置页：dbd 命令行的安装/更新/卸载、skill 部署
  */
 const AgentCliTab: React.FC = () => {
   const { t } = useTranslation();
@@ -57,8 +56,6 @@ const AgentCliTab: React.FC = () => {
   const [appVersion, setAppVersion] = useState('');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [customDir, setCustomDir] = useState('');
-  const [proxyUrl, setProxyUrl] = useState('');
-  const [mirrorUrl, setMirrorUrl] = useState('');
 
   const loadStatus = useCallback(async () => {
     const s = await invoke<CliStatus>('cli_get_status');
@@ -72,12 +69,6 @@ const AgentCliTab: React.FC = () => {
   useEffect(() => {
     getVersion().then((v) => setAppVersion(v));
     loadStatus().catch((e) => message.error(String(e)));
-    invoke<Record<string, string>>('get_local_settings')
-      .then((s) => {
-        setProxyUrl(s['cli_proxy_url'] ?? '');
-        setMirrorUrl(s['cli_mirror_url'] ?? '');
-      })
-      .catch(() => {});
   }, [loadStatus]);
 
   /** 通用动作执行：统一 busy 状态与结果反馈 */
@@ -119,19 +110,6 @@ const AgentCliTab: React.FC = () => {
       });
       message.success(t('agent_cli_skills_success', { count: paths.length }));
       await loadStatus();
-    } catch (e) {
-      message.error(String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleSaveNetwork = async () => {
-    setBusy(true);
-    try {
-      await invoke('save_local_setting', { key: 'cli_proxy_url', value: proxyUrl.trim() });
-      await invoke('save_local_setting', { key: 'cli_mirror_url', value: mirrorUrl.trim() });
-      message.success(t('save_success'));
     } catch (e) {
       message.error(String(e));
     } finally {
@@ -280,24 +258,6 @@ const AgentCliTab: React.FC = () => {
           />
           <Button loading={busy} onClick={handleInstallSkills}>
             {t('agent_cli_install_skills')}
-          </Button>
-        </Space>
-      </Card>
-
-      <Card title={t('agent_cli_network_title')}>
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Input
-            placeholder={t('agent_cli_proxy')}
-            value={proxyUrl}
-            onChange={(e) => setProxyUrl(e.target.value)}
-          />
-          <Input
-            placeholder={t('agent_cli_mirror')}
-            value={mirrorUrl}
-            onChange={(e) => setMirrorUrl(e.target.value)}
-          />
-          <Button icon={<SaveOutlined />} loading={busy} onClick={handleSaveNetwork}>
-            {t('agent_cli_network_save')}
           </Button>
         </Space>
       </Card>

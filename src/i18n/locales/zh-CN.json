@@ -764,10 +764,6 @@
     "agent_cli_skills_success": "Skill 已写入 {{count}} 个位置",
     "agent_cli_latest_error": "无法获取最新版本：{{error}}",
     "agent_cli_copies_warning": "检测到 PATH 上存在其他 dbd 副本，实际执行的可能是旧版本：{{copies}}",
-    "agent_cli_network_title": "网络设置（下载 CLI 用）",
-    "agent_cli_proxy": "代理地址（可选，如 http://127.0.0.1:10808）",
-    "agent_cli_mirror": "镜像前缀（可选，如 https://ghproxy.cn）",
-    "agent_cli_network_save": "保存网络设置",
   "backend": {
     "save_success": "保存成功",
     "delete_success": "删除成功",

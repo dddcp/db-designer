@@ -11,17 +11,12 @@ use std::time::Duration;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::services::setting_service::SettingsService;
 use crate::skill_targets;
 
 /// GitHub 仓库（owner/repo），Release 资产由 CI 的 dbd 构建步骤附带
 const GITHUB_REPO: &str = "dddcp/db-designer";
 /// 网络超时（秒）
 const HTTP_TIMEOUT_SECS: u64 = 120;
-/// 代理设置键（settings.json，经 setting_service 通用 KV 存取）
-const SETTING_PROXY: &str = "cli_proxy_url";
-/// 镜像前缀设置键（如 ghproxy 类服务，拼接在 GitHub URL 之前）
-const SETTING_MIRROR: &str = "cli_mirror_url";
 
 /// 单个 skill 目标的状态
 #[derive(Serialize)]
@@ -112,34 +107,15 @@ fn asset_exe_name() -> String {
     format!("dbd-{}{}", current_triple(), if cfg!(windows) { ".exe" } else { "" })
 }
 
-// ============ 设置读取 ============
+// ============ HTTP 客户端 ============
 
-/// 读取本地设置键值（settings.json 通用 KV）
-fn local_setting(key: &str) -> Option<String> {
-    SettingsService::new()
-        .get_local_settings()
-        .ok()?
-        .get(key)
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-}
-
-/// 镜像前缀（去除尾斜杠；未配置返回空串）
-fn mirror_prefix() -> String {
-    local_setting(SETTING_MIRROR)
-        .map(|s| s.trim_end_matches('/').to_string())
-        .unwrap_or_default()
-}
-
-/// 构建 HTTP 客户端（应用层代理来自设置）
-async fn http_client() -> Result<reqwest::Client, String> {
+/// 构建 HTTP 客户端（follow_redirects=false 用于从跳转地址解析最新版本）
+async fn http_client(follow_redirects: bool) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
         .user_agent("db-designer-desktop");
-    if let Some(proxy) = local_setting(SETTING_PROXY) {
-        let proxy = reqwest::Proxy::all(&proxy)
-            .map_err(|e| format!("代理地址无效（{}）：{}", proxy, e))?;
-        builder = builder.proxy(proxy);
+    if !follow_redirects {
+        builder = builder.redirect(reqwest::redirect::Policy::none());
     }
     builder
         .build()
@@ -148,32 +124,62 @@ async fn http_client() -> Result<reqwest::Client, String> {
 
 // ============ 版本查询 ============
 
-/// 查询 GitHub 最新发布版本（tag 去 v 前缀，semver 校验）
-async fn query_latest_version(client: &reqwest::Client) -> Result<String, String> {
-    let url = format!(
-        "{}https://api.github.com/repos/{}/releases/latest",
-        mirror_prefix(),
-        GITHUB_REPO
-    );
+/// tag 归一化：去 v 前缀并做 semver 校验
+fn normalize_version_tag(tag: &str) -> Result<String, String> {
+    let version = tag.trim_start_matches('v').to_string();
+    semver::Version::parse(&version).map_err(|_| format!("版本号无法解析：{}", version))?;
+    Ok(version)
+}
+
+/// 经 github.com/releases/latest 的 302 跳转地址解析最新版本号
+/// （不消耗 api.github.com 每小时 60 次的匿名配额，避免 403 rate limit）
+async fn query_latest_version_via_redirect() -> Result<String, String> {
+    let client = http_client(false).await?;
+    let url = format!("https://github.com/{}/releases/latest", GITHUB_REPO);
     let resp = client
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("访问 GitHub 失败：{}（可在设置中配置代理或镜像）", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("GitHub 返回 {}", resp.status()));
-    }
-    let json: serde_json::Value = resp
+        .map_err(|e| format!("访问 GitHub 失败：{}", e))?;
+    let location = resp
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| format!("GitHub 未返回跳转地址（HTTP {}），镜像可能不支持 latest 页面", resp.status()))?;
+    let tag = location
+        .split('/')
+        .next_back()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("跳转地址缺少版本号：{}", location))?;
+    normalize_version_tag(tag)
+}
+
+/// GitHub API 查询最新版本（受匿名配额限制，作为重定向法的兜底）
+async fn query_latest_version_via_api() -> Result<String, String> {
+    let client = http_client(true).await?;
+    let url = format!("https://api.github.com/repos/{}/releases/latest", GITHUB_REPO);
+    let json: serde_json::Value = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("访问 GitHub 失败：{}", e))?
+        .error_for_status()
+        .map_err(|e| format!("GitHub 响应异常：{}", e))?
         .json()
         .await
         .map_err(|e| format!("解析发布数据失败：{}", e))?;
-    let tag = json["tag_name"]
-        .as_str()
-        .ok_or("发布数据缺少 tag_name")?
-        .trim_start_matches('v')
-        .to_string();
-    semver::Version::parse(&tag).map_err(|_| format!("版本号无法解析：{}", tag))?;
-    Ok(tag)
+    let tag = json["tag_name"].as_str().ok_or("发布数据缺少 tag_name")?;
+    normalize_version_tag(tag)
+}
+
+/// 查询最新发布版本号：优先重定向端点（无配额限制），失败回退 GitHub API
+async fn query_latest_version() -> Result<String, String> {
+    match query_latest_version_via_redirect().await {
+        Ok(v) => Ok(v),
+        Err(redirect_err) => query_latest_version_via_api()
+            .await
+            .map_err(|api_err| format!("{}；{}", redirect_err, api_err)),
+    }
 }
 
 /// 实测已安装 CLI 版本：spawn `dbd --version` 解析（不存在/无法执行返回 None）
@@ -395,47 +401,24 @@ mod win_path {
 
 /// 安装或更新（lockstep：下载最新 Release 的当前平台资产，sha256 校验后原子落盘并注册 PATH）
 pub async fn install_or_update() -> Result<String, String> {
-    let client = http_client().await?;
-    let prefix = mirror_prefix();
+    let client = http_client(true).await?;
 
-    // 1. 查询最新 Release 与本平台资产
-    let url = format!(
-        "{}https://api.github.com/repos/{}/releases/latest",
-        prefix, GITHUB_REPO
-    );
-    let json: serde_json::Value = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("访问 GitHub 失败：{}（可在设置中配置代理或镜像）", e))?
-        .error_for_status()
-        .map_err(|e| format!("GitHub 响应异常：{}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("解析发布数据失败：{}", e))?;
-    let tag = json["tag_name"]
-        .as_str()
-        .ok_or("发布数据缺少 tag_name")?
-        .to_string();
-    let assets = json["assets"]
-        .as_array()
-        .ok_or("发布数据缺少 assets")?;
+    // 1. 查询最新版本号，按资产命名规则直接构造下载地址（不经 API，避开匿名配额限制）
+    let tag = query_latest_version().await?;
     let exe_name = asset_exe_name();
     let sha_name = format!("{}.sha256", exe_name);
-    let find_asset = |name: &str| -> Result<String, String> {
-        assets
-            .iter()
-            .find(|a| a["name"].as_str() == Some(name))
-            .and_then(|a| a["browser_download_url"].as_str())
-            .map(|s| s.to_string())
-            .ok_or(format!("发布 {} 缺少资产 {}（CI 未上传或平台不符）", tag, name))
+    let download_url = |name: &str| {
+        format!(
+            "https://github.com/{}/releases/latest/download/{}",
+            GITHUB_REPO, name
+        )
     };
-    let exe_url = find_asset(&exe_name)?;
-    let sha_url = find_asset(&sha_name)?;
+    let exe_url = download_url(&exe_name);
+    let sha_url = download_url(&sha_name);
 
     // 2. 下载二进制与校验文件（镜像前缀拼接）
     let bytes = client
-        .get(format!("{}{}", prefix, exe_url))
+        .get(&exe_url)
         .send()
         .await
         .map_err(|e| format!("下载 {} 失败：{}", exe_name, e))?
@@ -446,7 +429,7 @@ pub async fn install_or_update() -> Result<String, String> {
         .map_err(|e| format!("读取 {} 失败：{}", exe_name, e))?
         .to_vec();
     let sha_text = client
-        .get(format!("{}{}", prefix, sha_url))
+        .get(&sha_url)
         .send()
         .await
         .map_err(|e| format!("下载 {} 失败：{}", sha_name, e))?
@@ -497,10 +480,9 @@ pub async fn install_or_update() -> Result<String, String> {
     // 5. 注册 PATH
     let path_msg = register_path()?;
 
-    let version = tag.trim_start_matches('v');
     Ok(format!(
         "已安装 dbd {} 至 {}。{}新启动的终端进程即可使用 dbd 命令。",
-        version,
+        tag,
         exe.display(),
         path_msg
     ))
@@ -581,8 +563,7 @@ pub async fn get_status() -> Result<CliStatus, String> {
     };
 
     // 最新版本查询失败不阻断状态展示
-    let client = http_client().await?;
-    let (latest_version, latest_error) = match query_latest_version(&client).await {
+    let (latest_version, latest_error) = match query_latest_version().await {
         Ok(v) => (Some(v), None),
         Err(e) => (None, Some(e)),
     };

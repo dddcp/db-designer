@@ -763,10 +763,6 @@
     "agent_cli_skills_success": "Skill written to {{count}} location(s)",
     "agent_cli_latest_error": "Failed to fetch latest version: {{error}}",
     "agent_cli_copies_warning": "Other dbd copies found on PATH; an older one may run instead: {{copies}}",
-    "agent_cli_network_title": "Network (for CLI download)",
-    "agent_cli_proxy": "Proxy URL (optional, e.g. http://127.0.0.1:10808)",
-    "agent_cli_mirror": "Mirror prefix (optional, e.g. https://ghproxy.cn)",
-    "agent_cli_network_save": "Save network settings",
   "backend": {
     "save_success": "Saved successfully",
     "delete_success": "Deleted successfully",
